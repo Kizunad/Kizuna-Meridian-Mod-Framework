@@ -12,7 +12,7 @@
 python3 scripts/wiki.py check
 ```
 
-检查必需页面、代码块闭合、相对链接、文件末尾与行尾空白。CI 执行相同检查；它不验证运行时玩法。
+检查必需页面、代码块闭合、相对链接、文件末尾与行尾空白；它不验证运行时玩法。当前 CI 尚未启用，候选工作流保存在主仓库 `docs/ci-workflow.example.yml`，拥有 GitHub workflow 写权限后再放入正式工作流目录。
 
 ## 发布
 

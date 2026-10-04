@@ -1,3 +1,4 @@
+# 示例：具备 workflow 权限后，可放入 .github/workflows/docs.yml 启用。
 name: Documentation
 
 on:
