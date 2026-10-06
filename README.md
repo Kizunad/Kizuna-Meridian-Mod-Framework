@@ -2,7 +2,7 @@
 
 面向 Minecraft 的通用身体与经脉模组框架。基础模组管理部位、肌肉、器官、经脉、真元、寿命及其存档；功法附属 JAR 通过公开接口提供配方、运行模板、学习来源与表现。
 
-**当前状态：仓库初始化与设计基线阶段。** 本仓库已整理架构、数据归属、扩展契约和实施路线；尚未实现运行核心、Fabric 模组或 JNI 桥接，没有可安装 JAR、稳定 API 或 Maven 发布。文档中的候选接口不是可直接调用的方法。
+**当前状态：基础数据定义首片已实现。** 提供与宿主无关的 Java 17 不可变身体模板、实例状态、真元明细、寿命与一致性校验；Fabric 模组、JNI 桥接、持久化适配和功法内容仍未实现。版本 0.x API 会继续通过契约测试和文档冻结。
 
 [Wiki 首页](https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework/wiki) · [本地文档](docs/wiki/Home.md) · [实施路线](docs/wiki/Roadmap.md) · [许可证](LICENSE)
 
@@ -24,8 +24,9 @@
 | 关注点 | 文档 |
 |---|---|
 | 核心、客户端、宿主和附属包的分工 | [架构与职责](docs/wiki/Architecture.md) |
+| 已实现数据类型、字段单位和校验范围 | [基础数据定义](docs/wiki/Data-Definitions.md) |
 | 寿命、年龄、身体状态与存档所有权 | [身体数据与持久化](docs/wiki/Body-and-Persistence.md) |
-| 经脉、真元、五境与成长设计 | [经脉与真元](docs/wiki/Meridian-and-Qi.md) |
+| 经脉、真元、六境与成长设计 | [经脉与真元](docs/wiki/Meridian-and-Qi.md) |
 | 为框架编写功法附属 JAR | [功法扩展](docs/wiki/Technique-Addons.md) |
 | 3D 工厂交互与器官配方 | [内景与编辑器](docs/wiki/Inner-World.md) |
 | Fabric 单机和 Bong 的接入边界 | [宿主接入](docs/wiki/Host-Integration.md) |
@@ -34,13 +35,15 @@
 
 ## 当前可运行的检查
 
-需要 Python 3.10 或更新版本，无第三方 Python 依赖。
+文档检查需要 Python 3.10 或更新版本，无第三方 Python 依赖；数据层测试需要本机安装 JDK 17。Gradle Wrapper 使用 8.8，首次运行会下载 Gradle 和测试依赖。
 
 ```bash
 python3 scripts/wiki.py check
+
+./gradlew test
 ```
 
-该命令检查文档结构与链接，不代表游戏功能通过测试。运行时构建命令将在真实 Gradle/Rust 工程加入后提供。
+前者检查文档结构与链接，后者检查无 Minecraft 依赖的基础数据层契约。Fabric 运行时构建命令将在接入工程加入后提供。
 
 Wiki 正文唯一编辑来源为 `docs/wiki/`，发布方式见[文档维护](docs/wiki/Documentation.md)。
 

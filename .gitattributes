@@ -1,0 +1,3 @@
+# 跨平台启动脚本采用各自需要的工作区换行，仓库统一存储为 LF。
+/gradlew text eol=lf
+/gradlew.bat text eol=crlf
