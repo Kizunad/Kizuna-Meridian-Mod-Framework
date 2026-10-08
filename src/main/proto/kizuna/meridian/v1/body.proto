@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "BodyMessages";
+
+// 字段编号与枚举值属于跨语言契约，不依赖 Java ordinal；删除时必须 reserved。
+// optional 数值/布尔字段必须显式提供，合法的 0/false 不等于缺失。
+// 单值消息必填，字符串非空；repeated 可为空，具体一致性由核心校验。
+// 此文件是数据格式，不授予客户端覆盖权威状态的权限。
+
+enum Realm {
+  REALM_UNSPECIFIED = 0;
+  AWAKENING = 1;
+  QI_GUIDANCE = 2;
+  MERIDIAN_CONDENSATION = 3;
+  ESSENCE_SOLIDIFICATION = 4;
+  SPIRITUAL_ATTUNEMENT = 5;
+  VOID_TRANSFORMATION = 6;
+}
+
+enum QiPhase {
+  QI_PHASE_UNSPECIFIED = 0;
+  FREE = 1;
+  GAS = 2;
+  LIQUID = 3;
+  SOLID = 4;
+  SPIRITUAL = 5;
+  VOID = 6;
+}
+
+enum PortDirection {
+  PORT_DIRECTION_UNSPECIFIED = 0;
+  INPUT = 1;
+  OUTPUT = 2;
+  BIDIRECTIONAL = 3;
+}
+
+enum MeridianCondition {
+  MERIDIAN_CONDITION_UNSPECIFIED = 0;
+  INTACT = 1;
+  LEAKING = 2;
+  SEVERED = 3;
+}
+
+message TemplateReference {
+  string id = 1; // namespace:path
+  int32 version = 2; // 正整数内容版本，独立于协议版本。
+}
+
+message BodyTemplate {
+  TemplateReference reference = 1;
+  BodyStructure structure = 2;
+}
+
+message BodyStructure {
+  repeated PartDefinition parts = 1;
+  repeated TissueDefinition tissues = 2;
+  repeated OrganDefinition organs = 3;
+  repeated MeridianDefinition meridians = 4;
+  repeated Connection connections = 5;
+}
+
+message PartDefinition {
+  string id = 1;
+  string display_name = 2;
+  double max_hp = 3;
+}
+
+message TissueDefinition {
+  string id = 1;
+  string display_name = 2;
+  string kind = 3; // namespace:path，不封闭第三方组织类型。
+  string part_id = 4;
+  double max_hp = 5;
+  double fatigue_capacity = 6;
+  repeated Port ports = 7;
+}
+
+message OrganDefinition {
+  string id = 1;
+  string display_name = 2;
+  string kind = 3;
+  string part_id = 4;
+  double max_hp = 5;
+  repeated Port ports = 6;
+}
+
+message MeridianDefinition {
+  string id = 1;
+  string display_name = 2;
+  repeated string part_ids = 3;
+  double lumen_capacity = 4; // 元：有效上限，不是当前余额。
+  optional double wall_capacity = 5;
+  double lumen_liquid_reference = 6;
+  optional double wall_liquid_reference = 7;
+  double throughput_per_second = 8; // 元/模拟秒
+  double resilience = 9;
+  double fatigue_capacity = 10;
+  repeated Port ports = 11;
+}
+
+message Port {
+  string id = 1; // 整具身体内唯一。
+  PortDirection direction = 2;
+}
+
+message Connection {
+  string id = 1;
+  string from = 2;
+  string to = 3;
+  optional double resistance = 4;
+  double distance = 5; // 米
+}
+
+message PartState {
+  string id = 1;
+  optional double hp = 2;
+}
+
+message TissueState {
+  string id = 1;
+  optional double hp = 2;
+  optional double fatigue = 3;
+}
+
+message OrganState {
+  string id = 1;
+  optional double hp = 2;
+}
+
+message Qi {
+  QiPhase phase = 1;
+  string attribute = 2; // namespace:path，五行与第三方属性使用同一表达。
+  double amount = 3; // 元：账户明细必须为正数，空账户用空列表。
+}
+
+message QiInventory {
+  repeated Qi entries = 1; // 同相态同属性只能有一条明细。
+}
+
+message MeridianState {
+  string id = 1;
+  QiInventory lumen_qi = 2;
+  QiInventory wall_qi = 3;
+  optional double fatigue = 4;
+  MeridianCondition condition = 5;
+}
+
+message QiTransit {
+  string id = 1;
+  string connection_id = 2;
+  QiInventory cargo = 3; // 已扣源且尚未入目标的独立账户。
+  optional int64 arrival_millis = 4;
+}
+
+message VitalityState {
+  optional double age_seconds = 1; // 生物秒
+  optional double lifespan_limit_seconds = 2;
+  optional double spent_lifespan_seconds = 3;
+  optional bool dead = 4;
+}
+
+message TimeCursor {
+  string domain = 1; // namespace:path
+  string epoch = 2;
+  optional int64 elapsed_millis = 3; // 非负模拟毫秒，不是系统时间戳。
+}
+
+message BodySnapshot {
+  int32 schema_version = 1; // 当前为 1，独立于线协议与模板版本。
+  string id = 2;
+  TemplateReference template = 3;
+  BodyStructure structure = 4;
+  Realm realm = 5;
+  repeated PartState part_states = 6;
+  repeated TissueState tissue_states = 7;
+  repeated OrganState organ_states = 8;
+  repeated MeridianState meridian_states = 9;
+  repeated QiTransit transits = 10;
+  VitalityState vitality = 11;
+  TimeCursor settled_at = 12;
+  optional int64 revision = 13;
+  // 全身真元和剩余寿命由明细派生，不传另一份可修改总账。
+}

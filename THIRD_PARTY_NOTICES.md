@@ -7,6 +7,8 @@ PolyForm Noncommercial 1.0.0 仅适用于本项目有权许可的原创部分，
 | 组件 | 版本 | 来源与许可 | 使用和分发方式 |
 |---|---|---|---|
 | Gradle Wrapper | 8.8 | [Gradle](https://github.com/gradle/gradle/tree/v8.8.0)，Apache License 2.0 | 仓库包含生成的启动脚本与 Wrapper JAR；保留脚本版权头与 JAR 内的 `META-INF/LICENSE`；发行包 SHA-256 固定于 Wrapper 配置 |
+| Protobuf Gradle Plugin | 0.9.6 | [protobuf-gradle-plugin](https://github.com/google/protobuf-gradle-plugin)，BSD 3-Clause | 仅构建插件，由 Gradle 下载，不包含在主 JAR 中 |
+| Protocol Buffers（protoc / protobuf-java） | 4.36.2 | [Protocol Buffers](https://github.com/protocolbuffers/protobuf)，BSD 3-Clause | protoc 在构建时生成 Java 消息与描述集；protobuf-java 为公开运行依赖，由 Gradle 解析，当前 Java 库不将其内嵌或重打包；第三方原始许可随其自身依赖产物保留 |
 | JUnit | 4.13.2 | [JUnit 4](https://github.com/junit-team/junit4/tree/r4.13.2)，Eclipse Public License 1.0 | 仅测试依赖，由 Gradle 下载，不包含在本项目主 JAR 中 |
 | Hamcrest Core | 1.3 | [Java Hamcrest](https://github.com/hamcrest/JavaHamcrest/tree/hamcrest-java-1.3)，BSD 3-Clause | JUnit 的传递测试依赖，由 Gradle 下载，不包含在本项目主 JAR 中 |
 

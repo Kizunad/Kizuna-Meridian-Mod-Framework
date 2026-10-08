@@ -32,7 +32,7 @@
 
 ## 保存职责
 
-已有 `BodySnapshot` 数据类型和结构校验；`BodyRepository`、编解码与保存操作仍是候选契约。保存目标为：
+已有 `BodySnapshot` 数据类型、结构校验及 `BodyProtobuf.encodeSnapshot/decodeSnapshot` 二进制编解码；格式由 `.proto` 与 protoc 生成类型定义。编解码不会写文件或推进时间，`BodyRepository` 与实际保存操作仍是候选契约。保存目标为：
 
 1. 核心产生完整、可校验的身体快照，包含身份、存档版本、模板/内容版本、revision、实例状态及时间游标。
 2. Fabric 适配写入该世界的服务器存储；Bong 适配使用自己的持久化系统。客户端文件不能覆盖服务器存档。

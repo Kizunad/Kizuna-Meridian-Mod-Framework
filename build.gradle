@@ -1,9 +1,14 @@
 plugins {
     id 'java-library'
+    id 'com.google.protobuf' version '0.9.6'
 }
 
 group = 'dev.kizuna.meridian'
 version = '0.1.0-SNAPSHOT'
+
+// 与其他 Kizuna 框架保持一致，编译器和运行库使用相同版本。
+def protobufVersion = '4.36.2'
+def protocolDescriptor = layout.buildDirectory.file('descriptors/meridian-v1.desc')
 
 java {
     toolchain {
@@ -16,7 +21,85 @@ repositories {
 }
 
 dependencies {
+    api "com.google.protobuf:protobuf-java:${protobufVersion}"
     testImplementation 'junit:junit:4.13.2'
+}
+
+protobuf {
+    protoc { artifact = "com.google.protobuf:protoc:${protobufVersion}" }
+    generateProtoTasks {
+        ofSourceSet('main').configureEach { task ->
+            // 描述集供非 Java 宿主读取；所有语言共享同一份字段定义。
+            task.generateDescriptorSet = true
+            task.descriptorSetOptions.path = protocolDescriptor.get().asFile.path
+            task.descriptorSetOptions.includeImports = true
+            task.descriptorSetOptions.includeSourceInfo = true
+        }
+    }
+}
+
+processResources {
+    dependsOn tasks.named('generateProto')
+    from(protocolDescriptor) { into 'META-INF/kizuna_meridian/protocol' }
+}
+
+tasks.register('protocolZip', Zip) {
+    // 独立契约包让 Rust 等接入方无需提取 Java 类或复制手写 DTO。
+    dependsOn tasks.named('generateProto')
+    archiveClassifier = 'proto'
+    from('src/main/proto')
+    from(protocolDescriptor) { into 'descriptors' }
+    from('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md')
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('protocolZip')
+}
+
+tasks.withType(Jar).configureEach {
+    // Java 库不内嵌 Protobuf 运行库，依赖由调用方的构建工具解析。
+    from('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md')
+}
+
+tasks.register('verifyProtocolArtifacts') {
+    dependsOn tasks.named('jar'), tasks.named('protocolZip')
+    def javaArtifact = tasks.named('jar').flatMap { it.archiveFile }
+    def contractArtifact = tasks.named('protocolZip').flatMap { it.archiveFile }
+    inputs.files(javaArtifact, contractArtifact, protocolDescriptor)
+    inputs.dir('src/main/proto')
+    doLast {
+        // 检查最终分发内容，防止只有本地生成目录齐全、实际 JAR 却遗漏契约。
+        [javaArtifact, contractArtifact].each { artifact ->
+            new java.util.zip.ZipFile(artifact.get().asFile).withCloseable { zip ->
+                def requireBytes = { String path, File source ->
+                    // 与源文件逐字节比对，避免分发旧描述集或旧字段定义。
+                    def entry = zip.getEntry(path)
+                    if (entry == null) {
+                        throw new GradleException('Missing protocol artifact: ' + path)
+                    }
+                    def bytes = zip.getInputStream(entry).withCloseable { it.readAllBytes() }
+                    if (!java.util.Arrays.equals(bytes, source.bytes)) {
+                        throw new GradleException('Stale protocol artifact: ' + path)
+                    }
+                }
+                fileTree('src/main/proto').files.each { source ->
+                    def relative = file('src/main/proto').toPath().relativize(source.toPath()).toString().replace('\\', '/')
+                    requireBytes(relative, source)
+                }
+                def isJavaArtifact = artifact == javaArtifact
+                def descriptorPath = isJavaArtifact ? 'META-INF/kizuna_meridian/protocol/meridian-v1.desc' : 'descriptors/meridian-v1.desc'
+                requireBytes(descriptorPath, protocolDescriptor.get().asFile)
+                ['LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md'].each { path -> requireBytes(path, file(path)) }
+                if (isJavaArtifact && zip.getEntry('dev/kizuna/meridian/protocol/pb/MeridianMessages$RequestEnvelope.class') == null) {
+                    throw new GradleException('Missing protoc generated Java class')
+                }
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyProtocolArtifacts')
 }
 
 tasks.withType(JavaCompile).configureEach {

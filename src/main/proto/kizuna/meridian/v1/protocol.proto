@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "MeridianMessages";
+
+// 传输单元为整个消息的原始 Protobuf bytes，无 JSON/额外长度前缀。
+// 请求和响应严格分开；快照没有客户端上传入口。
+// 当前只实现数据编解码，宿主路由、认证与权限检查另行接入。
+message RequestEnvelope {
+  int32 protocol_version = 1; // 必须为 1。
+  string request_id = 2; // 用于关联响应，不代表身份或权限。
+  oneof request {
+    GetBodySnapshot get_body_snapshot = 10;
+  }
+}
+
+message GetBodySnapshot {
+  string body_id = 1; // 目标身份不能代替宿主对操作者的认证。
+}
+
+message ResponseEnvelope {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  oneof result {
+    BodySnapshot body_snapshot = 10; // 仅向有权读取完整身体的调用方发送。
+    RequestFailure failure = 11;
+  }
+}
+
+message RequestFailure {
+  FailureCode code = 1; // 不发送异常堆栈或私有策略详情。
+}
+
+enum FailureCode {
+  FAILURE_CODE_UNSPECIFIED = 0;
+  INVALID_REQUEST = 1;
+  ACCESS_DENIED = 2;
+  BODY_NOT_FOUND = 3;
+  UNSUPPORTED_VERSION = 4;
+  INTERNAL_ERROR = 5;
+}
