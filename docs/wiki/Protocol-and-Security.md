@@ -1,6 +1,6 @@
 # 请求协议与安全扩展
 
-状态：**v1 Protobuf 数据契约、Java 编解码和契约测试已实现，尚未发布。** 宿主网络注册、请求处理器、会话、权限与私有安全策略调用仍未实现。
+状态：**v1 Protobuf 数据契约、Java 编解码、参考查询处理器和契约测试已实现，尚未发布。** 查询读取策略与快照来源由宿主注入；宿主网络注册、连接认证、编辑会话、身体变更及其私有安全策略调用仍未实现。
 
 ## 唯一协议来源与构建
 
@@ -13,6 +13,8 @@
 | `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
 | `BodyProtobuf` | 核心模板/快照与生成类型双向转换、独立二进制编解码 |
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
+| `server.BodyQueryHandler<C>` | 解码查询、调用宿主读取策略与快照来源、校验目标身份并返回响应 |
+| `server.BodyReadPolicy<C>` / `BodySnapshotReader` | Java 宿主提供的读取授权与权威快照入口，不属于另一套线协议 |
 
 Protobuf 插件固定 `0.9.6`，`protoc` 与 `protobuf-java` 固定 `4.36.2`，与 Inventory UI / Botany 当前工具链对齐。Java 目标为 17。Gradle 自动下载编译器，无需安装系统级 protoc：
 
@@ -24,7 +26,7 @@ python3 "scripts/wiki.py" check
 
 构建生成 Java 库 JAR，以及 `build/distributions/kizuna-meridian-mod-framework-0.1.0-SNAPSHOT-proto.zip` 契约包。JAR 包含生成消息类、原路径 `.proto` 和 `META-INF/kizuna_meridian/protocol/meridian-v1.desc`；ZIP 包含 `.proto` 与 `descriptors/meridian-v1.desc`。描述集包含导入与源码信息。`verifyProtocolArtifacts` 检查两份产物内的协议与当前源码一致，并纳入 `check`。
 
-当前产物仍是 Java 库，尚非可安装 Fabric 模组，也没有发布 Maven 坐标。`protobuf-java` 是公开依赖，不在此 JAR 中内嵌；未来 Fabric 打包需要另外验证依赖装载。Rust 接入方可从契约包生成自己的消息类型，共用字段号与二进制规则；Rust 适配和跨语言运行核心尚未实现。
+当前产物仍是 Java 库，尚非可安装 Fabric 模组，也没有发布 Maven 坐标。`protobuf-java` 是公开依赖，不在此 JAR 中内嵌；未来 Fabric 打包需要另外验证依赖装载。任何支持本契约的语言均可生成消息并实现服务端，共用字段号、二进制规则与行为契约；不限定 Rust，不要求 JNI。Protobuf 不自动提供传输、认证、请求处理或身体计算，这些仍需对应实现。
 
 ## 已实现的请求与事实
 
@@ -37,7 +39,7 @@ python3 "scripts/wiki.py" check
 
 `MeridianProtocol.encodeRequest/decodeRequest` 和 `encodeResponse/decodeResponse` 交换整个消息的原始 Protobuf 字节，不外包 JSON、字符串长度或 `writeDelimitedTo` 前缀。每次调用接收一个已经由宿主分帧的完整消息；网络通道和分片策略尚未注册。**1 MiB 是此编解码器的上限，不表示 Minecraft 的任何单包通道可以直接承载 1 MiB；宿主必须遵守实际传输层的更小限制。**
 
-查询 `request_id` 只关联结果，不证明操作者身份、权限或目标归属。宿主必须先认证并授权，再产生完整快照响应；本轮没有提供自动返回快照的处理器。完整快照包含内部结构与寿命，不可当作公开广播投影。请求类型没有上传快照、修改 HP、余额或寿命的入口。
+查询 `request_id` 只关联结果，不证明操作者身份、权限或目标归属。参考查询处理器先验证宿主注入的读取策略，再向快照来源读取目标；操作者身份仍须由宿主认证。完整快照包含内部结构与寿命，不可当作公开广播投影。请求类型没有上传快照、修改 HP、余额或寿命的入口。
 
 以下使用的是已经生成并可编译的 Java API：
 
@@ -80,6 +82,22 @@ EOF
 
 字段号与枚举数值固定在 `.proto`，不使用 Java `ordinal()`。移除字段或枚举值时保留 `reserved`；修改必填规则或语义必须调整相应版本，并增加固定样例与拒绝测试。当前 Protobuf 原生单值/oneof 重复字段按其标准合并规则解析，不承诺二进制载荷具有唯一表示；宿主不能用原始字节哈希代替请求 ID 与业务幂等控制。
 
+## 已实现的只读请求处理
+
+`BodyQueryHandler<C>.handle` 的顺序为：完整请求校验 → 可信上下文检查 → 读取权限策略 → 读取权威快照 → 检查快照身份与目标一致 → 完整响应校验与编码。它没有默认权限策略，也不持有或修改身体状态。
+
+| 条件 | 结果 |
+|---|---|
+| 合法请求、允许读取且身体存在 | 保留请求 ID，返回所请求身体的完整快照 |
+| 可信上下文为 null，或读取策略拒绝 | `ACCESS_DENIED`；不调用快照来源，不暴露身体是否存在 |
+| 允许读取，但来源返回 `Optional.empty()` | `BODY_NOT_FOUND`；不创建默认身体 |
+| 策略或来源抛出运行时异常、来源返回 null、返回另一具身体、快照不满足线协议上限 | `INTERNAL_ERROR`；不返回部分身体，内部详情只进服务端日志 |
+| 非法、超限、截断、未知字段、缺少意图或不支持版本的请求 | Java 入口抛出 `IllegalArgumentException`，不调用宿主策略或来源；由传输适配拒绝或丢弃 |
+
+最后一类请求没有通过完整信封校验，处理器不伪造关联 ID，也不自动发送 `INVALID_REQUEST` 或 `UNSUPPORTED_VERSION` 响应。枚举中保留这些类别，但当前查询入口不在解析失败后尝试从不可信字节提取关联信息。
+
+每次查询重新检查权限；查询不按请求 ID 缓存旧快照、不增加 revision、不推进年龄或真元。变更操作所需的幂等与原子提交尚未实现。其他语言接入方需复现以上处理语义，既有跨语言验证记录与当前回归边界见[宿主接入](Host-Integration.md)。
+
 ## 后续操作契约
 
 以下仍是语义草案，**尚未加入 `.proto` 或处理器**，会随对应运行功能一并实现：
@@ -96,7 +114,7 @@ EOF
 
 ## 后续宿主基础校验
 
-以下属于尚待接入的宿主/执行器职责，不等同于本轮已实现的有界解码与静态数据校验。
+以下属于尚待接入的变更操作宿主/执行器职责。已有查询处理器仅提供读取授权与快照边界，不等同于动作校验、事务提交或连接认证。
 
 服务端统一检查包大小/速率、有限数字、非负剂量、列表与图规模、身份/会话、实例引用、知识、武器、资源、寿命、实际经脉依赖及 revision。客户端预检只用于体验。
 

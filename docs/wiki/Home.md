@@ -2,7 +2,7 @@
 
 通用身体、经脉与功法扩展框架的设计和接入文档。基础模组负责身体运行与数据，功法附属 JAR 提供具体内容，宿主负责世界接入。
 
-> 当前已实现无宿主依赖的 Java 17 基础数据定义、校验与 [Protobuf 通信契约和编解码](Protocol-and-Security.md)，尚无可安装 Fabric 模组或正式版本。[基础数据定义](Data-Definitions.md)描述现有类型；玩法运行、权限与宿主接口仍为设计建议。
+> 当前已实现无宿主依赖的 Java 17 基础数据定义、校验、[Protobuf 通信契约与参考查询处理器](Protocol-and-Security.md)，尚无可安装 Fabric 模组或正式版本。查询权限与快照来源由宿主注入；玩法运行、实际连接认证、网络与存储接入仍未实现。
 
 ## 阅读入口
 
@@ -21,6 +21,6 @@
 | 了解非商业许可 | [许可与分发](Licensing.md) |
 | 维护和发布本文档 | [文档维护](Documentation.md) |
 
-框架面向 Minecraft 1.20.1 / Fabric / Java 17，计划使用 XML/owo 配方面板和专门的 3D 内景渲染。推荐共享 Rust 身体核心，供 Fabric 服务端桥接与 Bong 直接调用；桥接与发行平台仍需验证。
+客户端与单机首个适配目标为 Minecraft 1.20.1 / Fabric / Java 17，计划使用 XML/owo 配方面板和专门的 3D 内景渲染。服务端核心实现语言不限，以统一 Protobuf 契约与行为验收接入；Rust 或 JNI 均不是前置要求，每具身体只有一个权威执行方。
 
 项目主页：[Kizuna-Meridian-Mod-Framework](https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework)。
