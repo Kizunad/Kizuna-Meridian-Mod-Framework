@@ -214,6 +214,13 @@ public final class MeridianErrors {
         public static final String TIME_RECEIPT_MISMATCH = "时间结算记录必须与推进命令对应";
         public static final String INVALID_TIME_RESULT = "时间结算位置或死亡释放不符合计划";
         public static final String RECIPE_RECEIPT_MISMATCH = "配方事实必须与加工命令的 ID 和版本一致";
+        public static final String ENVIRONMENT_VERSION = "不支持的环境交换协议版本";
+        public static final String ENVIRONMENT_CLOCK = "环境供给与交换必须使用同一时钟域和世代";
+        public static final String ENVIRONMENT_INTERVAL = "环境供给或交换时间区间无效";
+        public static final String ENVIRONMENT_EMPTY_EXCHANGE = "环境交换至少需要吸收或释放一项真元";
+        public static final String ENVIRONMENT_ABSORPTION = "吸收明细超过环境供给额度或无法精确扣除";
+        public static final String ENVIRONMENT_RATE_LIMIT = "吸收总量超过该时间区间的供给速率上限";
+        public static final String ENVIRONMENT_RATE_OVERFLOW = "环境供给速率与时长的乘积超出数值范围";
 
         private Protocol() {
             // 协议文案集中存放，字段与请求校验仍留在调用现场。

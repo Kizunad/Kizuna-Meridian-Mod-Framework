@@ -12,6 +12,7 @@
 | 查看已实现类型、字段单位与校验边界 | [基础数据定义](Data-Definitions.md) |
 | 了解寿命和身体数据归谁保存 | [身体与持久化](Body-and-Persistence.md) |
 | 理解真元、经脉与成长 | [经脉与真元](Meridian-and-Qi.md) |
+| 对接环境来源、供给与吸收/释放明细 | [环境真元交换](Environment-Qi.md) |
 | 制作功法附属 JAR | [功法扩展](Technique-Addons.md) |
 | 理解内景建造与器官配方 | [内景与编辑器](Inner-World.md) |
 | 接入单机或 Bong | [宿主接入](Host-Integration.md) |

@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "EnvironmentMessages";
+
+// 宿主根据身体位置、环境库存和供给策略生成的可信事实，不是客户端请求。
+// offer 不预扣或预留资源；提交时仍须检查来源版本、库存和共享供给预算。
+message EnvironmentQiOffer {
+  int32 protocol_version = 1; // 必须为 1；独立于来源 revision 和身体 schema。
+  string source_id = 2; // 宿主管理的稳定账户标识，跨世界唯一且不得复用。
+  optional int64 source_revision = 3; // 该来源的非负权威版本。
+  string body_id = 4; // 供给仅对这具身体有效，不可移用给其他身体。
+  QiInventory available_qi = 5; // 该版本允许本次吸收的明细上限，单位元；不是新增库存。
+  optional double max_absorption_per_second = 6; // 本身体所有种类合计上限，元/模拟秒；允许 0。
+  TimeCursor valid_from = 7;
+  TimeCursor valid_until = 8; // 同域同世代，半开区间 [from, until)，必须有正时长。
+}
+
+// 权威身体计算产生的候选交换；通过校验不代表已经提交。
+// 一次只绑定一个来源。吸收与释放分别记毛额，不能先相抵再检查供给额度。
+message EnvironmentQiExchange {
+  string exchange_id = 1; // 权威端生成；同一身体内永久唯一，重试保留原 ID 和原内容。
+  EnvironmentQiOffer offer = 2;
+  optional int64 expected_body_revision = 3;
+  TimeCursor started_at = 4;
+  TimeCursor ended_at = 5; // [start, end) 在 offer 区间内；纯释放允许同一时刻。
+  QiInventory absorbed_qi = 6; // 环境扣除、进入身体处理链的原始真元，逐种类不得超过 available_qi。
+  QiInventory released_qi = 7; // 身体扣除、环境接收的真元；包括转换损耗，不可重复发放。
+}
+
+// 身体、环境和回执原子提交后的持久化事实；读取和重放回执都不能再次转账。
+// 去重键为 offer.body_id + exchange_id；相同键不同已解码内容必须拒绝。
+message EnvironmentQiReceipt {
+  EnvironmentQiExchange exchange = 1;
+  optional int64 body_revision = 2; // expected_body_revision + 1。
+  optional int64 source_revision = 3; // offer.source_revision + 1。
+}

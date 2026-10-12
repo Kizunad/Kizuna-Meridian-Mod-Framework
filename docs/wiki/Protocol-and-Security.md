@@ -10,10 +10,12 @@
 |---|---|
 | `shared/src/main/proto/kizuna/meridian/v1/body.proto` | 模板、实际构型、独立部位/组织/器官/经脉、端口与连接、六境、真元明细、寿命、时间游标和完整快照 |
 | `shared/src/main/proto/kizuna/meridian/v1/protocol.proto` | 查询、寿元支出/时间结算/运输意图、内部可信时间计划、成功结果、持久化回执和公开拒绝类别 |
-| `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
+| `shared/src/main/proto/kizuna/meridian/v1/environment.proto` | 可信环境供给、候选吸收/释放交换和双账户提交回执 |
+| `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` / `EnvironmentMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
 | `BodyProtobuf` | 核心模板/快照与生成类型双向转换、独立二进制编解码 |
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
 | `TimeProtobuf` / `server.BodyTimeSource<C>` | 可信时间计划的编解码、结果校验；宿主提供目标、倍率与模式 |
+| `EnvironmentProtobuf` | 环境供给、交换及回执的编解码；版本、区间、逐类额度和合计速率校验 |
 | `TransportProtobuf` / `core.QiTransport` | 运输请求映射、内腔扣源/在途创建及到达规则 |
 | `CapabilityProtobuf` / `OrganRecipeCatalog` | 组织能力与做功映射、器官配方编解码及可信目录注册 |
 | `server.BodyQueryHandler<C>` | 解码查询、调用宿主读取策略与快照来源、校验目标身份并返回响应 |
@@ -53,6 +55,7 @@ python3 "scripts/wiki.py" check
 | `get_tissue_capability` / `tissue_capability` | 查询/响应 | 实际身体和组织 ID；同一读取授权，返回当前能力及 revision |
 | 独立 `OrganRecipe` 字节 | 可信内容安装，不是客户端可上传的请求 | ID/版本、器官类型、最低境界、输入/输出守恒及正数时长 |
 | 独立 `TimeAdvancePlan` 字节 | 可信宿主内部事实，不是客户端请求分支 | 目标游标、显式有限非负倍率、推进模式 |
+| 独立 `EnvironmentQiOffer` / `EnvironmentQiExchange` / `EnvironmentQiReceipt` 字节 | 可信宿主与权威身体实现之间的环境事实；尚未接入交换执行 | 来源/身体身份、供给版本与有效期、吸收毛额/速率、两端提交版本；详见[环境契约](Environment-Qi.md) |
 | `ResponseEnvelope.body_snapshot` | 权威宿主 → 有权读取完整身体的调用方 | 完整身体与所有模块、账户、版本、时序的核心校验 |
 | `ResponseEnvelope.command_committed` | 权威宿主 → 已授权调用者 | 身体身份、前后 revision，恰好增加 1 |
 | `ResponseEnvelope.failure` | 权威宿主 → 调用方 | 固定公开错误类别，不包含堆栈或私有策略详情 |
