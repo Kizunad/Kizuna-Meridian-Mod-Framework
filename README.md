@@ -2,7 +2,7 @@
 
 面向 Minecraft 的通用身体与经脉模组框架。基础模组管理部位、肌肉、器官、经脉、真元、寿命及其存档；功法附属 JAR 通过公开接口提供配方、运行模板、学习来源与表现。
 
-**当前状态：基础数据定义、Protobuf 编解码与 Java 参考查询处理器已实现。** 提供与宿主无关的 Java 17 不可变身体数据和校验；查询入口由宿主注入可信身份、读取权限与快照来源，返回 Protobuf 响应。身体运行时、实际网络接入、Fabric 模组、持久化适配和功法内容仍未实现。版本 0.x API 会继续通过契约测试和文档冻结。
+**当前状态：基础数据、Protobuf 查询与变更、寿命推进、经脉/器官批次运输、组织能力与做功、器官单批次配方、内存原子事务参考已实现。** 运输支持共享吞吐、容量预留和阻塞恢复；加工输入、产物、损耗与死亡释放共用权威账本，具备授权、版本、去重及私有策略接口。连续流、肌肉真元增益/攻击、实际宿主调度/实体死亡、网络、Fabric 模组、磁盘持久化和具体功法内容仍未实现。实现与接入边界以 [Wiki](docs/wiki/Home.md) 为准，0.x API 将继续通过契约测试和文档冻结。
 
 [Wiki 首页](https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework/wiki) · [本地文档](docs/wiki/Home.md) · [实施路线](docs/wiki/Roadmap.md) · [许可证](LICENSE)
 
@@ -18,6 +18,8 @@
 首个客户端与单机适配目标为 **Minecraft 1.20.1 / Fabric / Java 17 / owo-lib**。服务端核心可用 Java、Rust 或其他支持该 Protobuf 契约的语言实现，不要求共享 Rust 库或使用 JNI。各实现遵守相同消息语义与行为验收；传输、身份认证及世界接入由宿主提供，Protobuf 本身不执行身体规则。
 
 窗口与通用交互参考 [Kizuna's Inventory UI Framework](https://github.com/Kizunad/Kizuna-Inventory-UI-Framework)，框架化边界参考 [Kizuna's Botany Framework](https://github.com/Kizunad/Kizuna-Botany-Framework)。本仓库未复制它们的运行时源码或资源。
+
+工程按 `client/`、`server/` 两个 Gradle 子项目组织，`shared/` 存放共用 Protobuf 定义。当前客户端产物只包含生成消息，身体计算和请求处理位于服务端；目录与接入状态见[架构与职责](docs/wiki/Architecture.md)。
 
 ## 文档入口
 
@@ -43,9 +45,9 @@ python3 scripts/wiki.py check
 ./gradlew test
 ```
 
-前者检查文档结构与链接，后者检查无 Minecraft 依赖的基础数据层契约。Fabric 运行时构建命令将在接入工程加入后提供。
+前者检查文档结构与链接，后者聚合两端测试，目前整体回归位于 `server/src/test/java/`。Fabric 运行时构建命令将在接入工程加入后提供。
 
-完整 Java 构建运行 `./gradlew build`，包括查询授权、失败语义与协议产物检查。跨语言查询已完成一次性验证，临时脚本已移除；验证范围与常驻回归边界见[宿主接入](docs/wiki/Host-Integration.md)。
+完整 Java 构建运行 `./gradlew build`，分别生成客户端和服务端库 JAR，并执行查询/变更授权、并发与重试、原子回滚、回执恢复及协议产物检查。构建路径和单端命令见[协议与构建](docs/wiki/Protocol-and-Security.md)。跨语言查询已完成一次性验证，临时脚本已移除；本次变更尚无其他语言宿主验证，范围见[宿主接入](docs/wiki/Host-Integration.md)。
 
 Wiki 正文唯一编辑来源为 `docs/wiki/`，发布方式见[文档维护](docs/wiki/Documentation.md)。
 

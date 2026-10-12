@@ -1,0 +1,10 @@
+description = '权威身体计算、协议处理与宿主接入接口。'
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}
+
+test {
+    // 现有整体回归随权威计算迁入服务端，保留相同的 JUnit 执行方式。
+    useJUnit()
+}

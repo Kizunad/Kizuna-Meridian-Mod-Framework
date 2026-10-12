@@ -1,0 +1,166 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "MeridianMessages";
+
+// 传输单元为整个消息的原始 Protobuf bytes，无 JSON/额外长度前缀。
+// 请求和响应严格分开；快照没有客户端上传入口。
+// Java 参考查询处理器已实现；身份由宿主认证，读取权限与快照来源由宿主注入。
+// 其他语言可实现相同契约；实际网络与持久化由宿主提供。
+message RequestEnvelope {
+  int32 protocol_version = 1; // 必须为 1。
+  string request_id = 2; // 用于关联响应，不代表身份或权限。
+  oneof request {
+    GetBodySnapshot get_body_snapshot = 10;
+    BodyCommand body_command = 11;
+    GetTissueCapability get_tissue_capability = 12;
+  }
+}
+
+message GetBodySnapshot {
+  string body_id = 1; // 目标身份不能代替宿主对操作者的认证。
+}
+
+message GetTissueCapability {
+  string body_id = 1;
+  string tissue_id = 2;
+}
+
+message TissueCapability {
+  string body_id = 1;
+  string tissue_id = 2;
+  optional int64 revision = 3;
+  TissueCapacity available = 4; // 当前力量、功率上限及可用做功预算。
+}
+
+// 调用者只能提交意图；身份、实际余额和许可不由请求声明。
+message BodyCommand {
+  string body_id = 1;
+  optional int64 expected_revision = 2;
+  oneof operation {
+    SpendLifespan spend_lifespan = 10;
+    AdvanceTime advance_time = 11;
+    TransportQi transport_qi = 12;
+    StartOrganRecipe start_organ_recipe = 13;
+    ExertTissue exert_tissue = 14;
+  }
+}
+
+// 首片只支持非致死支出；这是宿主授权的身体操作，不是任意玩家扣寿命的权限。
+message SpendLifespan {
+  double seconds = 1; // 正数生物秒；不得达到或超过剩余寿命。
+}
+
+// 只请求结算；客户端不能提交时间、离线时长或老化倍率。
+message AdvanceTime {}
+
+// 沿已存在连接在经脉内腔/器官缓存间发运；不允许指定抵达时间、覆盖余额或调用外壁储备。
+message TransportQi {
+  string connection_id = 1;
+  QiInventory cargo = 2;
+  double throughput_per_second = 3; // 申请占用的两端共享吞吐，必须为正数。
+}
+
+message StartOrganRecipe {
+  string organ_id = 1;
+  string recipe_id = 2;
+  int32 recipe_version = 3;
+}
+
+// 宿主授权的单次组织做功；不自动生成攻击伤害或世界位移。
+message ExertTissue {
+  string tissue_id = 1;
+  double force_newtons = 2;
+  double power_watts = 3;
+  double duration_seconds = 4;
+}
+
+// 宿主内部可信事实，不是 RequestEnvelope 的可上传字段。
+// 一段结算区间内倍率和模式必须固定；切换策略前先按旧策略结算。
+message TimeAdvancePlan {
+  TimeCursor target = 1;
+  optional double biological_seconds_per_simulation_second = 2;
+  TimeAdvanceMode mode = 3;
+}
+
+enum TimeAdvanceMode {
+  TIME_ADVANCE_MODE_UNSPECIFIED = 0;
+  ACTIVE = 1; // 结算经脉/器官到达与加工；组织端口运输仍未实现。
+  LIFESPAN_ONLY = 2; // 其他变化冻结，在途剩余时间保持不变。
+}
+
+// 与身体及回执一起保存；死亡释放与加工损耗由宿主事务入环境账，不能在审计回调中发放。
+message TimeAdvanceResult {
+  TimeAdvancePlan plan = 1;
+  TimeCursor settled_at = 2; // 寿命耗尽时停在死亡边界，可能早于 target。
+  optional bool died = 3;
+  QiInventory released_qi = 4; // 死亡释放保留类型，加工损耗为无属性游离态；后续环境退化另行处理。
+}
+
+message CommandCommitted {
+  string body_id = 1;
+  optional int64 previous_revision = 2;
+  optional int64 revision = 3; // 一次成功变更恰好增加 1。
+}
+
+// 宿主内部持久化记录，不是客户端上传入口。与新身体快照一起原子保存。
+// 去重键为可信 caller_id + body_id + request_id；按已解码命令比较，不比较原始字节。
+message CommandReceipt {
+  string caller_id = 1;
+  string request_id = 2;
+  BodyCommand command = 3;
+  CommandCommitted committed = 4;
+  TimeAdvanceResult time_advance = 5; // 仅 advance_time 回执必填，其他操作必须缺省。
+  OrganRecipe organ_recipe = 6; // 仅 start_organ_recipe 必填，记录宿主解析的配方。
+}
+
+message ResponseEnvelope {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  oneof result {
+    BodySnapshot body_snapshot = 10; // 仅向有权读取完整身体的调用方发送。
+    RequestFailure failure = 11;
+    CommandCommitted command_committed = 12;
+    TissueCapability tissue_capability = 13;
+  }
+}
+
+message RequestFailure {
+  FailureCode code = 1; // 不发送异常堆栈或私有策略详情。
+}
+
+enum FailureCode {
+  FAILURE_CODE_UNSPECIFIED = 0;
+  INVALID_REQUEST = 1;
+  ACCESS_DENIED = 2;
+  BODY_NOT_FOUND = 3;
+  UNSUPPORTED_VERSION = 4;
+  INTERNAL_ERROR = 5;
+  REVISION_CONFLICT = 6;
+  REQUEST_ID_CONFLICT = 7;
+  BODY_DEAD = 8;
+  INSUFFICIENT_LIFESPAN = 9;
+  REVISION_EXHAUSTED = 10;
+  NUMERIC_LIMIT = 11;
+  CLOCK_MISMATCH = 12;
+  TIME_NOT_ADVANCED = 13;
+  PENDING_TIME_EVENT = 14;
+  ROUTE_NOT_FOUND = 15;
+  ROUTE_UNSUPPORTED = 16;
+  ROUTE_UNAVAILABLE = 17;
+  INSUFFICIENT_QI = 18;
+  CAPACITY_EXCEEDED = 19;
+  THROUGHPUT_EXCEEDED = 20;
+  TIME_REQUIRES_SETTLEMENT = 21;
+  TRANSPORT_FROZEN = 22;
+  MODULE_NOT_FOUND = 23;
+  MODULE_UNAVAILABLE = 24;
+  RECIPE_NOT_FOUND = 25;
+  RECIPE_INCOMPATIBLE = 26;
+  ORGAN_BUSY = 27;
+  TISSUE_LOAD_EXCEEDED = 28;
+}

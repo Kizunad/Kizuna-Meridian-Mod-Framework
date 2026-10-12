@@ -6,3 +6,4 @@ pluginManagement {
 }
 
 rootProject.name = 'kizuna-meridian-mod-framework'
+include 'client', 'server'
