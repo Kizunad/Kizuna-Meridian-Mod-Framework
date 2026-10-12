@@ -1,0 +1,116 @@
+# 环境真元配置 v1。部分覆盖文件可以省略其他字段；完整默认值由此文件提供。
+config_version = 1
+
+[region]
+# 横向 N×N chunk；一个 chunk 为 16×16 格，高度采用宿主世界的有效高度。
+size_chunks = 1
+
+[absorption]
+# 元/格 × 格/秒 = 元/秒。实际吸收还受身体能力、共享预算和库存约束。
+volume_blocks_per_second = 1.0
+
+[diffusion]
+# 基准透过速度，单位方块边长/秒；方块系数为无量纲倍率。
+speed_blocks_per_second = 1.0
+# 未列出的原版或附属方块采用这个保守默认值。
+default_block_transmission = 0.10
+
+[diffusion.blocks]
+# 无介质空间：void 使用 void_air 表示；未加载区块不等于 void。
+"minecraft:air" = 1.0
+"minecraft:cave_air" = 1.0
+"minecraft:void_air" = 1.0
+# 植被和疏松材料。
+"minecraft:grass" = 0.95
+"minecraft:tall_grass" = 0.95
+"minecraft:fern" = 0.95
+"minecraft:large_fern" = 0.95
+"minecraft:vine" = 0.95
+"minecraft:moss_carpet" = 0.90
+"minecraft:oak_leaves" = 0.85
+"minecraft:spruce_leaves" = 0.85
+"minecraft:birch_leaves" = 0.85
+"minecraft:jungle_leaves" = 0.85
+"minecraft:acacia_leaves" = 0.85
+"minecraft:dark_oak_leaves" = 0.85
+"minecraft:mangrove_leaves" = 0.85
+"minecraft:cherry_leaves" = 0.85
+"minecraft:azalea_leaves" = 0.85
+"minecraft:flowering_azalea_leaves" = 0.85
+"minecraft:snow" = 0.80
+"minecraft:powder_snow" = 0.80
+"minecraft:snow_block" = 0.65
+"minecraft:moss_block" = 0.65
+"minecraft:sponge" = 0.65
+"minecraft:wet_sponge" = 0.50
+"minecraft:hay_block" = 0.60
+# 液体、土壤和颗粒材料。
+"minecraft:water" = 0.60
+"minecraft:lava" = 0.25
+"minecraft:gravel" = 0.45
+"minecraft:sand" = 0.40
+"minecraft:red_sand" = 0.40
+"minecraft:soul_sand" = 0.40
+"minecraft:dirt" = 0.30
+"minecraft:coarse_dirt" = 0.35
+"minecraft:rooted_dirt" = 0.35
+"minecraft:grass_block" = 0.30
+"minecraft:podzol" = 0.30
+"minecraft:mycelium" = 0.30
+"minecraft:farmland" = 0.35
+"minecraft:dirt_path" = 0.25
+"minecraft:mud" = 0.25
+"minecraft:clay" = 0.20
+# 木材、冰与石材；未枚举的变体仍使用 default_block_transmission。
+"minecraft:oak_log" = 0.25
+"minecraft:spruce_log" = 0.25
+"minecraft:birch_log" = 0.25
+"minecraft:jungle_log" = 0.25
+"minecraft:acacia_log" = 0.25
+"minecraft:dark_oak_log" = 0.25
+"minecraft:mangrove_log" = 0.25
+"minecraft:cherry_log" = 0.25
+"minecraft:oak_planks" = 0.30
+"minecraft:spruce_planks" = 0.30
+"minecraft:birch_planks" = 0.30
+"minecraft:jungle_planks" = 0.30
+"minecraft:acacia_planks" = 0.30
+"minecraft:dark_oak_planks" = 0.30
+"minecraft:mangrove_planks" = 0.30
+"minecraft:cherry_planks" = 0.30
+"minecraft:ice" = 0.20
+"minecraft:packed_ice" = 0.12
+"minecraft:blue_ice" = 0.08
+"minecraft:netherrack" = 0.25
+"minecraft:end_stone" = 0.10
+"minecraft:stone" = 0.10
+"minecraft:granite" = 0.10
+"minecraft:diorite" = 0.10
+"minecraft:andesite" = 0.10
+"minecraft:cobblestone" = 0.15
+"minecraft:sandstone" = 0.20
+"minecraft:red_sandstone" = 0.20
+"minecraft:deepslate" = 0.06
+"minecraft:tuff" = 0.15
+"minecraft:calcite" = 0.10
+"minecraft:basalt" = 0.08
+"minecraft:blackstone" = 0.08
+"minecraft:bricks" = 0.10
+"minecraft:stone_bricks" = 0.10
+"minecraft:terracotta" = 0.08
+"minecraft:glass" = 0.05
+"minecraft:glass_pane" = 0.05
+# 致密材料与人工屏障。
+"minecraft:iron_block" = 0.02
+"minecraft:copper_block" = 0.03
+"minecraft:gold_block" = 0.03
+"minecraft:diamond_block" = 0.02
+"minecraft:emerald_block" = 0.02
+"minecraft:netherite_block" = 0.01
+"minecraft:obsidian" = 0.01
+"minecraft:crying_obsidian" = 0.01
+"minecraft:bedrock" = 0.0
+"minecraft:barrier" = 0.0
+# structure_void 是实际方块 ID，与无介质 void_air 区分。
+"minecraft:structure_void" = 0.95
+# 未来特殊方块可覆盖为 1 以上，例如 "addon:qi_conduit" = 2.5。

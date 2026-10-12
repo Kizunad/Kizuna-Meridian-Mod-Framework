@@ -1,10 +1,10 @@
 # 环境真元交换契约
 
-状态：**Protobuf 数据定义、有界编解码和消息内约束校验已实现。** 环境库存、并发额度分配、吸收执行和交换事务尚未接入；当前 `InMemoryBodyStore` 仍只把死亡释放与加工损耗记入单一环境账户。这里定义后续聚灵和宿主环境接入共用的边界。
+状态：**Protobuf 数据定义、有界编解码和消息内约束校验已实现；[环境配置](Environment-Configuration.md)另提供 TOML、chunk 区域及浓度/传播计算。** 环境库存、并发额度分配、吸收执行和交换事务尚未接入；当前 `InMemoryBodyStore` 仍只把死亡释放与加工损耗记入单一环境账户。这里定义后续聚灵和宿主环境接入共用的边界。
 
 ## 职责与入口
 
-框架负责描述供给、交换及成功回执。宿主根据身体所在世界和位置选择来源，管理区域库存、浓度、扩散、共享供给预算和原子提交。Fabric 单机由内置服务端提供这些事实，Bong 或其他语言宿主使用同一契约。框架没有固定区块大小、坐标格式或某种生物的吸收器官。
+框架负责描述供给、交换及成功回执。宿主根据身体所在世界和位置选择来源，管理区域库存、浓度、扩散、共享供给预算和原子提交。Fabric 单机由内置服务端提供这些事实，Bong 或其他语言宿主使用同一契约。交换消息不绑定坐标格式或某种生物的吸收器官；Java 环境参考规则使用可配置的 chunk 分区。
 
 协议源是 `shared/src/main/proto/kizuna/meridian/v1/environment.proto`；两端由 protoc 生成 `EnvironmentMessages`，与其他协议一起进入 JAR、描述集和协议 ZIP。Java 校验入口是 `EnvironmentProtobuf.encodeOffer/decodeOffer`、`encodeExchange/decodeExchange`、`encodeReceipt/decodeReceipt`，另外提供对应的 `validateOffer/validateExchange/validateReceipt`。交换原始 Protobuf 字节，沿用[协议规模与存在性限制](Protocol-and-Security.md)。
 

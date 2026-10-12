@@ -1,6 +1,7 @@
 description = '权威身体计算、协议处理与宿主接入接口。'
 
 dependencies {
+    implementation 'org.tomlj:tomlj:1.1.1'
     testImplementation 'junit:junit:4.13.2'
 }
 

@@ -48,6 +48,44 @@ public final class MeridianErrors {
         return new CapabilityRejected(reason);
     }
 
+    /** 环境配置与派生速率的诊断；配置读取和计算仍在各自入口执行。 */
+    public static final class Environment {
+        public static final String CONFIG_VERSION = "不支持的环境配置版本";
+        public static final String REGION_SIZE = "区域边长必须为正 int32 整数，单位 chunk";
+        public static final String DEFAULT_TRANSMISSION = "默认方块传播系数必须在 [0, 1) 范围内";
+        public static final String DUPLICATE_BLOCK = "方块传播配置存在重复 ID";
+        public static final String AIR_TRANSMISSION = "air、cave_air、void_air 必须显式配置且传播系数为 1";
+        public static final String DEFAULT_RESOURCE = "缺少内置环境 TOML 配置资源";
+        public static final String CONFIG_TOO_LARGE = "环境 TOML 文件超过 256 KiB 上限";
+        public static final String CONFIG_TEXT_REQUIRED = "环境 TOML 文本不能为空引用";
+        public static final String CONFIG_PATH_REQUIRED = "环境配置路径不能为空";
+        public static final String INVENTORY_REQUIRED = "环境库存不能为空";
+
+        private Environment() {
+            // 集中诊断信息，避免配置层与运行层各自定义异常类型。
+        }
+
+        public static String readFailed(Object path) {
+            // 路径帮助宿主定位配置，原始 I/O 原因另存于异常链。
+            return "无法读取环境配置：" + path;
+        }
+
+        public static String parseFailed(Object detail) {
+            // TOML 解析器提供行列位置，保留它以便用户直接修正文件。
+            return "环境 TOML 格式错误：" + detail;
+        }
+
+        public static String unknownKey(String path) {
+            // 拒绝拼写错误，防止配置看似生效却实际沿用默认值。
+            return "未知环境配置项：" + path;
+        }
+
+        public static String wrongType(String path, String expected) {
+            // 字段类型与业务范围分开报告，避免把字符串误转为数字。
+            return "环境配置项 " + path + " 必须为" + expected;
+        }
+    }
+
     /** 核心数据与构型校验文案。 */
     public static final class Data {
         public static final String LOCAL_ID_FORMAT = "局部标识必须使用非空小写字母、数字、点、横线或下划线";

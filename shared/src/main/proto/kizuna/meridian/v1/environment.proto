@@ -7,6 +7,21 @@ import "kizuna/meridian/v1/body.proto";
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "EnvironmentMessages";
 
+// 宿主加载 TOML 后交换的完整有效配置；省略默认值的文件不能直接作为线协议消息。
+message EnvironmentQiConfig {
+  int32 config_version = 1; // 当前为 1，独立于环境来源和身体版本。
+  optional int32 region_size_chunks = 2; // 横向正方形区域的边长，正整数；高度由宿主世界提供。
+  optional double absorption_volume_blocks_per_second = 3; // 格/模拟秒；一格指一个方块体积。
+  optional double diffusion_speed_blocks_per_second = 4; // 方块边长/模拟秒；乘面积与浓度差得到元/秒。
+  optional double default_block_transmission = 5; // 未列出方块的无量纲系数，范围 [0, 1)。
+  repeated BlockQiTransmission block_transmissions = 6; // 方块 ID 唯一；允许第三方系数超过 1。
+}
+
+message BlockQiTransmission {
+  string block_id = 1; // namespace:path；air/cave_air/void_air 必须显式配置为 1。
+  optional double transmission = 2; // 有限非负；0 阻断，1 为空气基准，大于 1 为增强传播。
+}
+
 // 宿主根据身体位置、环境库存和供给策略生成的可信事实，不是客户端请求。
 // offer 不预扣或预留资源；提交时仍须检查来源版本、库存和共享供给预算。
 message EnvironmentQiOffer {

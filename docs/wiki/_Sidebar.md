@@ -5,6 +5,7 @@
 - [身体数据、寿命与存档](Body-and-Persistence.md)
 - [经脉与真元](Meridian-and-Qi.md)
 - [环境真元交换](Environment-Qi.md)
+- [环境区域与配置](Environment-Configuration.md)
 - [功法附属 JAR](Technique-Addons.md)
 - [内景与编辑器](Inner-World.md)
 - [单机与 Bong 接入](Host-Integration.md)

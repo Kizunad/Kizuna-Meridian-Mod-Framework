@@ -130,13 +130,17 @@ tasks.register('verifyProtocolArtifacts') {
 
                 // 目录拆分必须落实到产物：客户端没有权威身体，服务端保留可调用的处理器。
                 if (artifact == clientArtifact) {
-                    def serverPackages = ['dev/kizuna/meridian/core/', 'dev/kizuna/meridian/server/', 'dev/kizuna/meridian/error/']
+                    def serverPackages = ['dev/kizuna/meridian/core/', 'dev/kizuna/meridian/server/', 'dev/kizuna/meridian/error/', 'dev/kizuna/meridian/environment/']
                     if (zip.entries().any { entry -> serverPackages.any { prefix -> entry.name.startsWith(prefix) } }) {
                         throw new GradleException('Client artifact contains server implementation')
                     }
                 }
                 if (artifact == serverArtifact && zip.getEntry('dev/kizuna/meridian/server/BodyCommandHandler.class') == null) {
                     throw new GradleException('Missing server command handler')
+                }
+                if (artifact == serverArtifact) {
+                    // 默认环境参数随服务端分发，并与仓库唯一配置源逐字节一致。
+                    requireBytes('meridian-environment.toml', file('server/src/main/resources/meridian-environment.toml'))
                 }
             }
         }
