@@ -62,11 +62,11 @@ final class QiAccounts {
     }
 
     void replace(Endpoint endpoint, QiInventory inventory) {
-        // 只改变指定可用账户，局部损伤、外壁和加工事实保持原值。
+        // 只改变指定可用账户，开拓、局部损伤、外壁和加工事实保持原值。
         if (endpoint.id() instanceof Anatomy.MeridianId id) {
             MeridianState meridianState = meridians.get(id);
             var updatedMeridian = new MeridianState(id, inventory, meridianState.wallQi(),
-                    meridianState.fatigue(), meridianState.condition());
+                    meridianState.fatigue(), meridianState.condition(), meridianState.opening());
             meridians.put(id, updatedMeridian);
         } else {
             Anatomy.OrganId id = (Anatomy.OrganId) endpoint.id();

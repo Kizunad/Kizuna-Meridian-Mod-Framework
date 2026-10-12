@@ -8,6 +8,7 @@ import dev.kizuna.meridian.core.BodyStructure;
 import dev.kizuna.meridian.core.BodyTemplate;
 import dev.kizuna.meridian.core.BodyTimeAdvancement;
 import dev.kizuna.meridian.core.DefinitionId;
+import dev.kizuna.meridian.core.MeridianOpening;
 import dev.kizuna.meridian.core.MeridianState;
 import dev.kizuna.meridian.core.Qi;
 import dev.kizuna.meridian.core.QiInventory;
@@ -41,7 +42,13 @@ public class QiTransportTest {
     @Test
     public void dispatchRestoreAndArrivalPreserveKindsAndNeverDuplicate() {
         // 正式请求先扣源，在途保存后重建宿主；重试与到达都不能再次扣源或重复入账。
-        var initial = body();
+        var message = BodyProtobuf.toMessage(body());
+        // 未参与本次线路的第三条经脉保留未完成进度，防止账户重建误改整具身体的开拓状态。
+        var partialOpening = BodyMessages.MeridianOpening.newBuilder()
+                .setStage(BodyMessages.MeridianOpeningStage.IN_PROGRESS).setProgress(0.375);
+        var initial = BodyProtobuf.fromMessage(message.toBuilder().setMeridianStates(2,
+                message.getMeridianStates(2).toBuilder().setOpening(partialOpening)).build());
+        List<MeridianOpening> expectedOpenings = initial.meridianStates().stream().map(MeridianState::opening).toList();
         var clock = new AtomicLong(1000);
         var store = new InMemoryBodyStore(List.of(initial), List.of());
         var handler = handler(store, clock);
@@ -52,6 +59,7 @@ public class QiTransportTest {
         committed(response);
         assertArrayEquals(response, handler.handle("host", payload));
         var moving = store.find(initial.id()).orElseThrow();
+        assertEquals(expectedOpenings, moving.meridianStates().stream().map(MeridianState::opening).toList());
         assertEquals(18, moving.meridianStates().get(0).lumenQi().totalQi(), 0);
         assertEquals(initial.meridianStates().get(1), moving.meridianStates().get(1));
         assertEquals(cargo, moving.transits().get(0).cargo());
@@ -73,6 +81,7 @@ public class QiTransportTest {
         committed(arrivedResponse);
         assertArrayEquals(arrivedResponse, resumed.handle("host", arrival));
         var arrived = restored.find(initial.id()).orElseThrow();
+        assertEquals(expectedOpenings, arrived.meridianStates().stream().map(MeridianState::opening).toList());
         assertTrue(arrived.transits().isEmpty());
         assertEquals(4, arrived.meridianStates().get(1).lumenQi().totalQi(), 0);
         assertEquals(2, arrived.meridianStates().get(1).lumenQi().entries().size());
@@ -305,7 +314,7 @@ public class QiTransportTest {
                 List.of(connection("a", "b"), connection("c", "b"), connection("b", "a"), connection("a", "c")));
         var mixed = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 10),
                 new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("addon:lava"), 10)));
-        return new BodySnapshot(1, new BodyId("transport-body"),
+        return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("transport-body"),
                 new BodyTemplate.Reference(new DefinitionId("sample:transport"), 1), structure, Realm.AWAKENING,
                 List.of(new AnatomyState.Part(part, 100)), List.of(), List.of(),
                 List.of(state("a", mixed), state("b", free(2)), state("c", mixed)), List.of(),
@@ -327,7 +336,8 @@ public class QiTransportTest {
 
     private static MeridianState state(String id, QiInventory lumen) {
         // 外壁余额显式非零，用于证明内腔不足时不能借用储备。
-        return new MeridianState(new Anatomy.MeridianId(id), lumen, free(9), 0, MeridianState.Condition.INTACT);
+        return new MeridianState(new Anatomy.MeridianId(id), lumen, free(9), 0, MeridianState.Condition.INTACT,
+                new MeridianOpening(MeridianOpening.Stage.OPENED, 1));
     }
 
     private static QiInventory free(double amount) {

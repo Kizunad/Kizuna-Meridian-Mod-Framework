@@ -89,6 +89,8 @@ public class BodyTimeAdvancementTest {
         assertEquals(0, dead.vitality().remainingSeconds(), 0);
         assertEquals(2000, dead.settledAt().elapsedMillis());
         assertEquals(0, dead.totalQi(), 0);
+        // 死亡释放余额，已保存的经脉开拓事实继续保留在身体快照中。
+        assertEquals(initial.meridianStates().get(0).opening(), dead.meridianStates().get(0).opening());
         assertTrue(dead.transits().isEmpty());
         assertEquals(initial.totalQi(), store.environmentQi().totalQi(), 0);
         assertEquals(6, store.environmentQi().entries().size());

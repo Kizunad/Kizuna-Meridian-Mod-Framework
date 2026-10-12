@@ -44,6 +44,13 @@ enum MeridianCondition {
   SEVERED = 3;
 }
 
+enum MeridianOpeningStage {
+  MERIDIAN_OPENING_STAGE_UNSPECIFIED = 0;
+  UNOPENED = 1;
+  IN_PROGRESS = 2; // 已开始但尚未完成；可以保存暂停后的进度，不表示任务正在执行。
+  OPENED = 3;
+}
+
 message TemplateReference {
   string id = 1; // namespace:path
   int32 version = 2; // 正整数内容版本，独立于协议版本。
@@ -174,6 +181,12 @@ message MeridianState {
   QiInventory wall_qi = 3;
   optional double fatigue = 4;
   MeridianCondition condition = 5;
+  MeridianOpening opening = 6; // 必填，独立于损伤和两类真元账户。
+}
+
+message MeridianOpening {
+  MeridianOpeningStage stage = 1;
+  optional double progress = 2; // 无量纲比例：未开拓为 0，未完成为 [0, 1)，已开拓为 1。
 }
 
 message QiTransit {
@@ -206,7 +219,7 @@ message TimeCursor {
 }
 
 message BodySnapshot {
-  int32 schema_version = 1; // 当前为 1，独立于线协议与模板版本。
+  int32 schema_version = 1; // 当前为 2，独立于线协议与模板版本。
   string id = 2;
   TemplateReference template = 3;
   BodyStructure structure = 4;

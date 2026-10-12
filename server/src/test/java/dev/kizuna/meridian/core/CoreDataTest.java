@@ -41,7 +41,8 @@ public class CoreDataTest {
     public void sameStateCountDoesNotHideAnUnknownMeridian() {
         // 数量相同但 ID 不同也必须拒绝，缺失和重复同样不能蒙混过关。
         MeridianState impostor = new MeridianState(new Anatomy.MeridianId("missing"),
-                QiInventory.empty(), QiInventory.empty(), 0, MeridianState.Condition.INTACT);
+                QiInventory.empty(), QiInventory.empty(), 0, MeridianState.Condition.INTACT,
+                new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0));
 
         assertThrows(IllegalArgumentException.class, () -> body(structure(), List.of(impostor), List.of()));
         assertThrows(IllegalArgumentException.class, () -> body(structure(), List.of(), List.of()));
@@ -86,7 +87,7 @@ public class CoreDataTest {
         // 基础生命不依赖真元，空经脉列表不能导致非法身体或除零。
         BodyStructure structure = new BodyStructure(List.of(new Anatomy.PartDefinition(PART, "躯体", 100)),
                 List.of(), List.of(), List.of(), List.of());
-        BodySnapshot body = new BodySnapshot(1, new BodyId("creature-1"), TEMPLATE, structure, Realm.AWAKENING,
+        BodySnapshot body = new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"), TEMPLATE, structure, Realm.AWAKENING,
                 List.of(new AnatomyState.Part(PART, 100)), List.of(), List.of(), List.of(), List.of(),
                 new VitalityState(10, 100, 0, false), NOW, 0);
 
@@ -139,7 +140,8 @@ public class CoreDataTest {
         // 内腔、外壁与疲劳各用自己的上限，不能互相借用剩余额度。
         assertThrows(IllegalArgumentException.class, () -> body(structure(), List.of(state(21, 0)), List.of()));
         assertThrows(IllegalArgumentException.class, () -> body(structure(), List.of(state(0, 21)), List.of()));
-        var fatigued = new MeridianState(MERIDIAN, QiInventory.empty(), QiInventory.empty(), 11, MeridianState.Condition.LEAKING);
+        var fatigued = new MeridianState(MERIDIAN, QiInventory.empty(), QiInventory.empty(), 11, MeridianState.Condition.LEAKING,
+                new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0));
         assertThrows(IllegalArgumentException.class, () -> body(structure(), List.of(fatigued), List.of()));
     }
 
@@ -151,7 +153,7 @@ public class CoreDataTest {
         QiInventory mixed = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 0.1),
                 new Qi(Qi.QiPhase.GAS, Qi.QiAttribute.FIRE, 0.2)));
         BodySnapshot body = body(small, List.of(new MeridianState(MERIDIAN, mixed, QiInventory.empty(),
-                0, MeridianState.Condition.INTACT)), List.of());
+                0, MeridianState.Condition.INTACT, new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0))), List.of());
 
         assertEquals(0.3, body.totalQi(), 0.000000000000001);
         assertThrows(IllegalArgumentException.class, () -> body(small, List.of(state(0.30001, 0)), List.of()));
@@ -196,9 +198,9 @@ public class CoreDataTest {
         assertThrows(IllegalArgumentException.class, () -> new TimeCursor(NOW.domain(), NOW.epoch(), -1));
         assertThrows(NullPointerException.class, () -> new Anatomy.PartDefinition(null, "坏部位", 10));
         var b = body(structure(), List.of(state(0, 0)), List.of());
-        assertThrows(IllegalArgumentException.class, () -> new BodySnapshot(2, b.id(), b.template(), b.structure(), b.realm(),
+        assertThrows(IllegalArgumentException.class, () -> new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION + 1, b.id(), b.template(), b.structure(), b.realm(),
                 b.partStates(), b.tissueStates(), b.organStates(), b.meridianStates(), b.transits(), b.vitality(), NOW, 0));
-        assertThrows(IllegalArgumentException.class, () -> new BodySnapshot(1, b.id(), b.template(), b.structure(), b.realm(),
+        assertThrows(IllegalArgumentException.class, () -> new BodySnapshot(b.schemaVersion(), b.id(), b.template(), b.structure(), b.realm(),
                 b.partStates(), b.tissueStates(), b.organStates(), b.meridianStates(), b.transits(), b.vitality(), NOW, -1));
     }
 
@@ -235,8 +237,9 @@ public class CoreDataTest {
     }
 
     private static MeridianState state(double lumen, double wall) {
-        // 两类余额显式分开，方便定位具体账户的校验错误。
-        return new MeridianState(MERIDIAN, inventory(lumen), inventory(wall), 0, MeridianState.Condition.INTACT);
+        // 尚未开拓的经脉也可存元，两类余额与开拓事实分别提供。
+        return new MeridianState(MERIDIAN, inventory(lumen), inventory(wall), 0, MeridianState.Condition.INTACT,
+                new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0));
     }
 
     private static QiInventory inventory(double amount) {
@@ -251,7 +254,7 @@ public class CoreDataTest {
 
     private static BodySnapshot body(BodyStructure structure, List<MeridianState> states, List<QiTransit> transits) {
         // 用固定局部伤势与寿命隔离测试变量，余额及构型由每个案例提供。
-        return new BodySnapshot(1, new BodyId("creature-1"), TEMPLATE, structure, Realm.AWAKENING,
+        return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"), TEMPLATE, structure, Realm.AWAKENING,
                 List.of(new AnatomyState.Part(PART, 50)), List.of(new AnatomyState.Tissue(TISSUE, 60, 0)),
                 List.of(new AnatomyState.Organ(ORGAN, 40, QiInventory.empty(), null)), states, transits,
                 new VitalityState(10, 100, 5, false), NOW, 0);
@@ -260,7 +263,7 @@ public class CoreDataTest {
     private static BodySnapshot copyStates(BodySnapshot b, List<AnatomyState.Part> parts,
                                            List<AnatomyState.Tissue> tissues, List<AnatomyState.Organ> organs) {
         // 只替换受测模块状态，保留其他合法数据，避免错误原因互相掩盖。
-        return new BodySnapshot(1, b.id(), b.template(), b.structure(), b.realm(), parts, tissues, organs,
+        return new BodySnapshot(b.schemaVersion(), b.id(), b.template(), b.structure(), b.realm(), parts, tissues, organs,
                 b.meridianStates(), b.transits(), b.vitality(), b.settledAt(), b.revision());
     }
 

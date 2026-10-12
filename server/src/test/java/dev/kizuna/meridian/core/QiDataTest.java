@@ -71,6 +71,7 @@ public class QiDataTest {
         assertThrows(IllegalArgumentException.class, () -> new QiInventory(List.of(large,
                 new Qi(Qi.QiPhase.LIQUID, Qi.QiAttribute.FIRE, Double.MAX_VALUE))));
         assertThrows(IllegalArgumentException.class, () -> new MeridianState(new Anatomy.MeridianId("channel"),
-                new QiInventory(List.of(large)), new QiInventory(List.of(large)), 0, MeridianState.Condition.INTACT));
+                new QiInventory(List.of(large)), new QiInventory(List.of(large)), 0, MeridianState.Condition.INTACT,
+                new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0)));
     }
 }

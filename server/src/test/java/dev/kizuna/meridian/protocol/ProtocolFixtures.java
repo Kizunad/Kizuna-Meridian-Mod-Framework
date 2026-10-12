@@ -7,6 +7,7 @@ import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.BodyStructure;
 import dev.kizuna.meridian.core.BodyTemplate;
 import dev.kizuna.meridian.core.DefinitionId;
+import dev.kizuna.meridian.core.MeridianOpening;
 import dev.kizuna.meridian.core.MeridianState;
 import dev.kizuna.meridian.core.Qi;
 import dev.kizuna.meridian.core.QiInventory;
@@ -49,11 +50,12 @@ final class ProtocolFixtures {
         // 所有相态共存，并保留内腔、外壁、在途三份独立货量。
         var qi = new QiInventory(Arrays.stream(Qi.QiPhase.values())
                 .map(phase -> new Qi(phase, Qi.QiAttribute.of("addon:lava"), 0.5)).toList());
-        return new BodySnapshot(1, new BodyId("creature-1"),
+        return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"),
                 new BodyTemplate.Reference(new DefinitionId("sample:tendril"), 7), structure, realm,
                 List.of(new AnatomyState.Part(part, 80)), List.of(new AnatomyState.Tissue(tissue, 40, 2)),
                 List.of(new AnatomyState.Organ(organ, 20, QiInventory.empty(), null)),
-                List.of(new MeridianState(meridian, qi, qi, 3, MeridianState.Condition.LEAKING)),
+                List.of(new MeridianState(meridian, qi, qi, 3, MeridianState.Condition.LEAKING,
+                        new MeridianOpening(MeridianOpening.Stage.OPENED, 1))),
                 List.of(new QiTransit("transport-1", connection, qi, Long.MAX_VALUE, 1, QiTransit.Status.MOVING)),
                 new VitalityState(10, 1000, 5, false),
                 new TimeCursor(new DefinitionId("sample:world"), "epoch-1", Long.MAX_VALUE - 1), Long.MAX_VALUE);

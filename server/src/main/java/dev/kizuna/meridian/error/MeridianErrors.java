@@ -93,6 +93,10 @@ public final class MeridianErrors {
         public static final String LUMEN_QI_REQUIRED = "内腔真元不能为空";
         public static final String WALL_QI_REQUIRED = "外壁真元不能为空";
         public static final String MERIDIAN_CONDITION_REQUIRED = "经脉损伤状态不能为空";
+        public static final String MERIDIAN_OPENING_REQUIRED = "经脉开拓数据不能为空";
+        public static final String OPENING_STAGE_REQUIRED = "经脉开拓阶段不能为空";
+        public static final String OPENING_PROGRESS_OUT_OF_RANGE = "经脉开拓进度必须是 0 到 1 之间的有限数";
+        public static final String OPENING_STAGE_PROGRESS_MISMATCH = "经脉开拓进度与阶段不符：未开拓为 0，开拓未完成小于 1，已开拓为 1";
         public static final String TRANSIT_CONNECTION_REQUIRED = "在途连接不能为空";
         public static final String TRANSIT_QI_REQUIRED = "在途真元不能为空";
         public static final String BODY_REQUIRED = "身体不能为空";

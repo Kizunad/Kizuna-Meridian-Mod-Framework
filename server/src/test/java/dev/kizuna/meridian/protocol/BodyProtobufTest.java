@@ -8,6 +8,8 @@ import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.BodyStructure;
 import dev.kizuna.meridian.core.BodyTemplate;
 import dev.kizuna.meridian.core.DefinitionId;
+import dev.kizuna.meridian.core.MeridianOpening;
+import dev.kizuna.meridian.core.MeridianState;
 import dev.kizuna.meridian.core.Realm;
 import dev.kizuna.meridian.core.TimeCursor;
 import dev.kizuna.meridian.core.VitalityState;
@@ -16,13 +18,78 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HexFormat;
 import java.util.List;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class BodyProtobufTest {
+    @Test
+    public void openingRoundTripKeepsEachMeridianIndependentOfDamageAndQi() {
+        // 同一身体同时保存三种开拓阶段，完整或断裂都不能覆盖开拓事实及当地余额。
+        var source = message();
+        var definition = source.getStructure().getMeridians(0);
+        var existingState = source.getMeridianStates(0);
+        var unopened = BodyMessages.MeridianOpening.newBuilder()
+                .setStage(BodyMessages.MeridianOpeningStage.UNOPENED).setProgress(0).build();
+        var partial = BodyMessages.MeridianOpening.newBuilder()
+                .setStage(BodyMessages.MeridianOpeningStage.IN_PROGRESS).setProgress(0.375).build();
+
+        // 固定字节保护外层字段 6、内部字段号与三种阶段值，跨语言实现据此核对协议。
+        assertArrayEquals(HexFormat.of().parseHex("320b0801110000000000000000"),
+                BodyMessages.MeridianState.newBuilder().setOpening(unopened).build().toByteArray());
+        assertArrayEquals(HexFormat.of().parseHex("080211000000000000d83f"), partial.toByteArray());
+        assertArrayEquals(HexFormat.of().parseHex("080311000000000000f03f"), existingState.getOpening().toByteArray());
+
+        var structure = source.getStructure().toBuilder()
+                .addMeridians(definition.toBuilder().setId("unopened").clearPorts())
+                .addMeridians(definition.toBuilder().setId("partial").clearPorts());
+        var message = source.toBuilder().setStructure(structure)
+                .addMeridianStates(existingState.toBuilder().setId("unopened")
+                        .setCondition(BodyMessages.MeridianCondition.INTACT).setOpening(unopened))
+                .addMeridianStates(existingState.toBuilder().setId("partial")
+                        .setCondition(BodyMessages.MeridianCondition.SEVERED).setOpening(partial))
+                .build();
+
+        BodySnapshot restored = BodyProtobuf.decodeSnapshot(message.toByteArray());
+        assertEquals(message, BodyProtobuf.toMessage(restored));
+        assertEquals(List.of(new MeridianOpening(MeridianOpening.Stage.OPENED, 1),
+                        new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0),
+                        new MeridianOpening(MeridianOpening.Stage.IN_PROGRESS, 0.375)),
+                restored.meridianStates().stream().map(MeridianState::opening).toList());
+        assertEquals(21, restored.totalQi(), 0);
+        assertEquals(Realm.VOID_TRANSFORMATION, restored.realm());
+    }
+
+    @Test
+    public void openingRejectsMissingDataAndInconsistentStagesAtTheProtocolBoundary() {
+        // 零进度也必须显式写入；缺失记录或字段应拒绝，旧快照不能被猜测为已开拓。
+        var body = message();
+        var state = body.getMeridianStates(0);
+        var opening = state.getOpening();
+        rejects(body.toBuilder().setMeridianStates(0, state.toBuilder().clearOpening()).build());
+        for (var invalid : List.of(opening.toBuilder().clearProgress().build(),
+                opening.toBuilder().clearStage().build(),
+                opening.toBuilder().setStageValue(999).build(),
+                opening.toBuilder().setStage(BodyMessages.MeridianOpeningStage.UNOPENED).setProgress(0.1).build(),
+                opening.toBuilder().setStage(BodyMessages.MeridianOpeningStage.IN_PROGRESS).setProgress(1).build(),
+                opening.toBuilder().setProgress(Math.nextDown(1.0)).build())) {
+            rejects(body.toBuilder().setMeridianStates(0, state.toBuilder().setOpening(invalid)).build());
+        }
+
+        // 百分比使用严格边界，不使用真元账本的 ULP 容差；刚开始的零进度可以保存。
+        for (double invalid : new double[] {Double.NaN, Double.POSITIVE_INFINITY, -Double.MIN_VALUE, Math.nextUp(1.0)}) {
+            rejects(body.toBuilder().setMeridianStates(0,
+                    state.toBuilder().setOpening(opening.toBuilder().setProgress(invalid))).build());
+        }
+        var justStarted = body.toBuilder().setMeridianStates(0, state.toBuilder().setOpening(opening.toBuilder()
+                .setStage(BodyMessages.MeridianOpeningStage.IN_PROGRESS).setProgress(0))).build();
+        assertEquals(justStarted, BodyProtobuf.toMessage(BodyProtobuf.decodeSnapshot(justStarted.toByteArray())));
+    }
+
     @Test
     public void roundTripPreservesSixRealmsMixedQiAndAllIndependentModules() {
         // 比较整个值对象，保护每个模块字段、跨语言整数精度及三类余额。
@@ -50,7 +117,7 @@ public class BodyProtobufTest {
         var part = new Anatomy.PartId("shell");
         var structure = new BodyStructure(List.of(new Anatomy.PartDefinition(part, "躯体", 10)),
                 List.of(), List.of(), List.of(), List.of());
-        var body = new BodySnapshot(1, new BodyId("body-1"),
+        var body = new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("body-1"),
                 new BodyTemplate.Reference(new DefinitionId("sample:shell"), 1), structure, Realm.AWAKENING,
                 List.of(new AnatomyState.Part(part, 0)), List.of(), List.of(), List.of(), List.of(),
                 new VitalityState(0, 100, 0, false), new TimeCursor(new DefinitionId("sample:world"), "first", 0), 0);
@@ -75,7 +142,8 @@ public class BodyProtobufTest {
     public void unknownVersionsEnumsAndFieldsCannotBecomeDefaultState() {
         // 当前精确版本遇到未知数据必须拒绝，不能在映射时静默丢弃。
         var body = message();
-        rejects(body.toBuilder().setSchemaVersion(2).build());
+        rejects(body.toBuilder().setSchemaVersion(1).build());
+        rejects(body.toBuilder().setSchemaVersion(BodySnapshot.CURRENT_SCHEMA_VERSION + 1).build());
         rejects(body.toBuilder().setRealmValue(999).build());
         rejects(body.toBuilder().clearRealm().build());
         var qi = body.getMeridianStates(0).getLumenQi().getEntries(0).toBuilder().setPhaseValue(999);

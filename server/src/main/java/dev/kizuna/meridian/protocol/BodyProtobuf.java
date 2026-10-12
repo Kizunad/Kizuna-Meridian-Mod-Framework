@@ -7,6 +7,7 @@ import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.BodyStructure;
 import dev.kizuna.meridian.core.BodyTemplate;
 import dev.kizuna.meridian.core.DefinitionId;
+import dev.kizuna.meridian.core.MeridianOpening;
 import dev.kizuna.meridian.core.MeridianState;
 import dev.kizuna.meridian.core.OrganProcess;
 import dev.kizuna.meridian.core.Qi;
@@ -270,17 +271,31 @@ public final class BodyProtobuf {
     }
 
     private static BodyMessages.MeridianState toMeridianState(MeridianState value) {
-        // 内腔与外壁账户分别编码，不能把储备误当成可立即支出的内腔真元。
+        // 账户、损伤和开拓事实分别编码，恢复时不从储量反推意念控制能力。
         return BodyMessages.MeridianState.newBuilder().setId(value.id().value())
                 .setLumenQi(toInventory(value.lumenQi())).setWallQi(toInventory(value.wallQi()))
                 .setFatigue(value.fatigue())
-                .setCondition(BodyMessages.MeridianCondition.valueOf(value.condition().name())).build();
+                .setCondition(BodyMessages.MeridianCondition.valueOf(value.condition().name()))
+                .setOpening(toOpening(value.opening())).build();
     }
 
     private static MeridianState fromMeridianState(BodyMessages.MeridianState value) {
         // 结构上限在完整快照内校验，不允许两个账户互借额度。
         return new MeridianState(new Anatomy.MeridianId(value.getId()), fromInventory(value.getLumenQi()),
-                fromInventory(value.getWallQi()), value.getFatigue(), MeridianState.Condition.valueOf(value.getCondition().name()));
+                fromInventory(value.getWallQi()), value.getFatigue(), MeridianState.Condition.valueOf(value.getCondition().name()),
+                fromOpening(value.getOpening()));
+    }
+
+    private static BodyMessages.MeridianOpening toOpening(MeridianOpening value) {
+        // 零进度也显式写出，使接收方能够区分未开拓与缺失数据。
+        return BodyMessages.MeridianOpening.newBuilder()
+                .setStage(BodyMessages.MeridianOpeningStage.valueOf(value.stage().name()))
+                .setProgress(value.progress()).build();
+    }
+
+    private static MeridianOpening fromOpening(BodyMessages.MeridianOpening value) {
+        // 核心构造器再次验证阶段与进度的对应关系，不能只依赖消息解析成功。
+        return new MeridianOpening(MeridianOpening.Stage.valueOf(value.getStage().name()), value.getProgress());
     }
 
     private static BodyMessages.QiTransit toTransit(QiTransit value) {

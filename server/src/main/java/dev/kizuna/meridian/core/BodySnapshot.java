@@ -16,7 +16,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
                            List<MeridianState> meridianStates,
                            List<QiTransit> transits,
                            VitalityState vitality, TimeCursor settledAt, long revision) {
-    public static final int CURRENT_SCHEMA_VERSION = 1;
+    public static final int CURRENT_SCHEMA_VERSION = 2;
 
     public BodySnapshot {
         // 先拒绝未知 schema，避免把不同字段语义的数据误当作当前快照。

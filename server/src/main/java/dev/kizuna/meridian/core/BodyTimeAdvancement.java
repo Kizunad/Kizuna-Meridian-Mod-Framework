@@ -115,12 +115,13 @@ public final class BodyTimeAdvancement {
             // 所有账户来源各取一次；已完成加工的损耗和死亡释放共同进入环境。
             var inventoriesToRelease = new ArrayList<QiInventory>();
             inventoriesToRelease.add(releasedQi);
+            // 清账只释放真元，保留死亡身体原有的开拓与损伤事实。
             var clearedMeridians = new ArrayList<MeridianState>();
             for (var meridian : meridians) {
                 inventoriesToRelease.add(meridian.lumenQi());
                 inventoriesToRelease.add(meridian.wallQi());
                 clearedMeridians.add(new MeridianState(meridian.id(), QiInventory.empty(), QiInventory.empty(),
-                        meridian.fatigue(), meridian.condition()));
+                        meridian.fatigue(), meridian.condition(), meridian.opening()));
             }
             for (var transit : transits) {
                 inventoriesToRelease.add(transit.cargo());
