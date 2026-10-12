@@ -7,7 +7,7 @@
 - [环境真元交换](Environment-Qi.md)
 - [环境区域与配置](Environment-Configuration.md)
 - [功法附属 JAR](Technique-Addons.md)
-- [内景与编辑器](Inner-World.md)
+- [经脉操作与 3D Addon](Inner-World.md)
 - [单机与 Bong 接入](Host-Integration.md)
 - [协议与安全扩展](Protocol-and-Security.md)
 - [版本与兼容性](Compatibility.md)

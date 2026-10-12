@@ -60,6 +60,20 @@ public final class MeridianErrors {
         public static final String CONFIG_TEXT_REQUIRED = "环境 TOML 文本不能为空引用";
         public static final String CONFIG_PATH_REQUIRED = "环境配置路径不能为空";
         public static final String INVENTORY_REQUIRED = "环境库存不能为空";
+        public static final String SPACE_VERSION = "不支持的环境空间或边界缓存协议版本";
+        public static final String SPACE_VOLUME = "独立环境空间的体积必须为正有限数";
+        public static final String SAME_BOUNDARY_SOURCE = "环境边界必须连接两个不同来源";
+        public static final String DUPLICATE_BOUNDARY_PATCH = "环境边界分片 ID 重复";
+        public static final String PATCH_AREA = "环境边界分片面积必须为正有限数";
+        public static final String BOUNDARY_NUMERIC_LIMIT = "环境边界传播能力超出可计算范围";
+        public static final String BOUNDARY_NOT_READY = "环境边界缓存尚未就绪，须先完成重建";
+        public static final String BOUNDARY_REVISION = "环境边界缓存版本不匹配或无法继续递增";
+        public static final String BOUNDARY_RULES_REVISION = "环境边界缓存与当前传播规则世代不匹配";
+        public static final String BOUNDARY_ID = "环境边界更新的目标标识不匹配";
+        public static final String BOUNDARY_SOURCE = "指定来源不是此环境边界的端点";
+        public static final String BOUNDARY_PATCH_MISSING = "无法删除不存在的环境边界分片";
+        public static final String BOUNDARY_PATCH_LIMIT = "环境边界分片数超过协议上限";
+        public static final String BOUNDARY_RULES_REQUIRED = "环境边界传播规则不能为空";
 
         private Environment() {
             // 集中诊断信息，避免配置层与运行层各自定义异常类型。

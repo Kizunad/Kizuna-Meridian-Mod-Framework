@@ -12,7 +12,7 @@
 - **功法独立扩展**：基础模组负责运行机制，具体流派、配方和传承内容属于附属 JAR；官方基础功法也走相同接口。
 - **单机与服务端**：目标支持 Fabric 单机、Bong 及其他服务端；实现语言不限，通过统一 Protobuf 契约接入，每具身体只有一个权威执行方。
 - **模块化生物**：人体是构型之一，其他生物通过部位、组织、器官、经脉与连接模板组合。
-- **3D 内景操作**：玩家在内景铺设精力传送带、调运属性真元、配置器官配方；外界实体仍可受伤，受伤退出编辑。
+- **简易操作与可选 3D Addon**：基础入口选择来源、目标与配方来引导真元；独立 3D 经脉世界 Addon 提供内景铺带与多方块交互，两者共用同一运行规则。
 - **权威存档与校验**：寿命、伤势、局部真元和成长不由客户端或功法包另建账本；额外反作弊只提供服务端扩展接口。
 
 首个客户端与单机适配目标为 **Minecraft 1.20.1 / Fabric / Java 17 / owo-lib**。服务端核心可用 Java、Rust 或其他支持该 Protobuf 契约的语言实现，不要求共享 Rust 库或使用 JNI。各实现遵守相同消息语义与行为验收；传输、身份认证及世界接入由宿主提供，Protobuf 本身不执行身体规则。
@@ -30,7 +30,7 @@
 | 寿命、年龄、身体状态与存档所有权 | [身体数据与持久化](docs/wiki/Body-and-Persistence.md) |
 | 经脉、真元、六境与成长设计 | [经脉与真元](docs/wiki/Meridian-and-Qi.md) |
 | 为框架编写功法附属 JAR | [功法扩展](docs/wiki/Technique-Addons.md) |
-| 3D 工厂交互与器官配方 | [内景与编辑器](docs/wiki/Inner-World.md) |
+| 简易经脉操作与可选 3D 工厂交互 | [经脉操作与 3D Addon](docs/wiki/Inner-World.md) |
 | Fabric 单机和 Bong 的接入边界 | [宿主接入](docs/wiki/Host-Integration.md) |
 | 请求、校验和私有反作弊接口 | [协议与安全扩展](docs/wiki/Protocol-and-Security.md) |
 | 版本、缺包、升级和发布 | [兼容性](docs/wiki/Compatibility.md) |

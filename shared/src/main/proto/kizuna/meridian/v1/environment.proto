@@ -22,6 +22,51 @@ message BlockQiTransmission {
   optional double transmission = 2; // 有限非负；0 阻断，1 为空气基准，大于 1 为增强传播。
 }
 
+// 宿主根据生成结果或内容定义登记的独立混合空间；source_id 对应唯一环境账户。
+message EnvironmentSpace {
+  int32 protocol_version = 1; // 当前为 1。
+  string source_id = 2;
+  EnvironmentSpaceKind kind = 3;
+  optional double volume_blocks = 4; // 正数，方块体积；从背景区域划出房间时同步扣减背景体积。
+}
+
+enum EnvironmentSpaceKind {
+  ENVIRONMENT_SPACE_KIND_UNSPECIFIED = 0;
+  REGION_BACKGROUND = 1; // chunk 区域中未被局部空间占用的背景。
+  LOCAL_ROOM = 2; // 特殊结构登记的局部房间，可跨 chunk。
+  LOCAL_CHANNEL = 3; // 通道的一段独立混合空间，通过端口连接相邻空间。
+}
+
+// 两个空间共享的边界缓存。普通生成边界可用一个分片，多端口定义可用多个。
+// 宿主负责分片互不重叠、边界唯一及范围正确；缓存不持有真元。
+message EnvironmentBoundarySnapshot {
+  int32 protocol_version = 1;
+  string boundary_id = 2;
+  string first_source_id = 3;
+  string second_source_id = 4;
+  optional int64 revision = 5; // 缓存更新版本，与来源账户版本分开。
+  optional int64 rules_revision = 6; // 宿主安装传播规则的世代，不是 config_version。
+  optional bool ready = 7; // false 表示边界定义尚未就绪或已失效，禁止据此计算传播。
+  repeated EnvironmentBoundaryPatch patches = 8;
+}
+
+message EnvironmentBoundaryPatch {
+  string patch_id = 1; // 在所属边界内唯一，增量更新沿用同一 ID。
+  optional double area_blocks = 2; // 正数，接触方块面数。
+  optional double transmission = 3; // 已生成或显式配置的传播倍率；允许 0 和大于 1。
+}
+
+// 可信宿主发送的完整单分片替换或删除。不是客户端修改环境的入口。
+message EnvironmentBoundaryPatchUpdate {
+  string boundary_id = 1;
+  optional int64 expected_revision = 2;
+  optional int64 rules_revision = 3;
+  oneof operation {
+    EnvironmentBoundaryPatch upsert = 4;
+    string remove_patch_id = 5;
+  }
+}
+
 // 宿主根据身体位置、环境库存和供给策略生成的可信事实，不是客户端请求。
 // offer 不预扣或预留资源；提交时仍须检查来源版本、库存和共享供给预算。
 message EnvironmentQiOffer {

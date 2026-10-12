@@ -47,6 +47,8 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 [环境交换契约](Environment-Qi.md)已提供独立 `environment.proto` 和 `EnvironmentProtobuf` 校验：宿主声明来源、适用身体、可用明细、供给速率、有效区间和版本，权威计算返回吸收/释放毛额，成功回执关联两端提交版本。[环境配置](Environment-Configuration.md)中的 `EnvironmentConfigLoader` 读取 TOML 并生成 `EnvironmentQiConfig`；`EnvironmentQiRules` 提供 chunk 区域、元/格浓度、浓度挂钩供给和方块传播系数查询。来源选择、区域库存、扩散及并发供给预算归宿主。当前 `BodyTransactionStore` / `InMemoryBodyStore` 尚未接入这些消息；后续必须把真实环境扣账、身体入账、预算及回执统一到原子事务，不能把有界编解码当成转账执行。
 
+环境空间与缓存使用 `EnvironmentTopologyProtobuf`：宿主按生成结果或内容定义声明 `EnvironmentSpace`，普通背景、房间和通道各持有唯一来源身份。已确认采用随机区域及边界传播倍率，不接入世界扫描、方块变化监听和修炼室自动识别。`EnvironmentBoundaryCache` 汇总共享边界的分片贡献，显式参数变更通过 Protobuf 更新。宿主保存生成结果、位置归属及当前账本；定义失效时先停用相关缓存，确认后原子发布新空间与连接，详见[空间与边界接入约定](Environment-Configuration.md)。
+
 这些 Java 回调仅用于进程内装配，不是第二套跨语言协议。持久化回执由 protoc 生成的 `CommandReceipt` 表达；其他语言自行实现相同事务语义，不要求加载 Java 类。时间回执中的释放账户必须纳入环境事务，实体死亡动作的可靠记录也由宿主一起保存；审计回调只是提交后的尽力通知。
 
 ## 可信时间与离线策略接入

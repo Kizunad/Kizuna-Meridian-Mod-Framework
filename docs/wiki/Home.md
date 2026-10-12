@@ -1,6 +1,6 @@
 # Kizuna's Meridian Mod Framework Wiki
 
-通用身体、经脉与功法扩展框架的设计和接入文档。基础模组负责身体运行与数据，功法附属 JAR 提供具体内容，宿主负责世界接入。
+通用身体、经脉与功法扩展框架的设计和接入文档。基础模组负责身体运行、数据与简易操作入口，功法附属 JAR 提供具体内容，可选 3D 经脉世界 Addon 提供工厂式建造交互，宿主负责世界接入。
 
 > 当前已实现 Java 17 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。尚无可安装 Fabric 模组或正式版本；肌肉真元增益/攻击、连续流、实际宿主调度/实体死亡、认证/网络与磁盘存储仍待实现。
 
@@ -15,7 +15,7 @@
 | 对接环境来源、供给与吸收/释放明细 | [环境真元交换](Environment-Qi.md) |
 | 配置 chunk 区域、浓度供给和方块传播 | [环境区域与配置](Environment-Configuration.md) |
 | 制作功法附属 JAR | [功法扩展](Technique-Addons.md) |
-| 理解内景建造与器官配方 | [内景与编辑器](Inner-World.md) |
+| 理解简易操作与可选 3D 建造 | [经脉操作与 3D Addon](Inner-World.md) |
 | 接入单机或 Bong | [宿主接入](Host-Integration.md) |
 | 对接请求、校验与反作弊接口 | [协议与安全扩展](Protocol-and-Security.md) |
 | 了解版本、缺包与升级处理 | [兼容性](Compatibility.md) |
@@ -23,6 +23,6 @@
 | 了解非商业许可 | [许可与分发](Licensing.md) |
 | 维护和发布本文档 | [文档维护](Documentation.md) |
 
-客户端与单机首个适配目标为 Minecraft 1.20.1 / Fabric / Java 17，计划使用 XML/owo 配方面板和专门的 3D 内景渲染。服务端核心实现语言不限，以统一 Protobuf 契约与行为验收接入；Rust 或 JNI 均不是前置要求，每具身体只有一个权威执行方。
+客户端与单机首个适配目标为 Minecraft 1.20.1 / Fabric / Java 17，计划使用 XML/owo 实现基础操作面板；专门的 3D 内景渲染与铺带属于可选 Addon。两种入口共用真元引导与执行规则。服务端核心实现语言不限，以统一 Protobuf 契约与行为验收接入；Rust 或 JNI 均不是前置要求，每具身体只有一个权威执行方。
 
 项目主页：[Kizuna-Meridian-Mod-Framework](https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework)。
