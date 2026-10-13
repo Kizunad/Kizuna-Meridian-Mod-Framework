@@ -1,6 +1,6 @@
 # 服务端实现与宿主接入
 
-状态：Java 查询、寿元支出/推进、经脉与器官运输、组织能力/做功、器官配方、宿主事务/策略与环境释放的内存事务参考已实现。跨语言查询已完成一次性验证；本次变更的跨语言宿主接入、实际调度/实体死亡、网络与磁盘持久化尚未实现。
+状态：Java 查询、寿元支出/推进、经脉与器官运输、组织能力/做功、器官配方、通用环境摄入与原子交换、宿主事务/策略的内存参考已实现。跨语言查询已完成一次性验证；本次变更的跨语言宿主接入、实际调度/实体死亡、网络与磁盘持久化尚未实现。
 
 目前已提供宿主无关的 [Protobuf v1 数据、查询与变更契约](Protocol-and-Security.md)。Java 消息由 protoc 生成；其他语言使用同一 `.proto` 或构建描述集生成类型，并遵守相同授权、版本、原子性和重试语义。
 
@@ -37,15 +37,17 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 ## 已实现的变更与事务入口
 
-`BodyCommandHandler<C>.handle(trustedContext, payload)` 接收完整 Protobuf 请求，执行寿元支出、时间结算、运输、器官加工启动或组织做功。前五个构造参数为 `BodyCommandAccess<C>`、`BodySecurityPolicy<C>`、`BodyTimeSource<C>`、`BodyTransactionStore` 与 `BodyAuditSink<C>`；安装内容时提供第六个参数 `OrganRecipeCatalog`，省略则为空目录。具体语义见[协议与安全](Protocol-and-Security.md)和[配方接入](Technique-Addons.md)。查询与变更分别路由；送错入口会在宿主回调前拒绝。
+`BodyCommandHandler<C>.handle(trustedContext, payload)` 接收完整 Protobuf 请求，执行寿元支出、时间结算、运输、器官加工启动、组织做功或环境摄入。前五个构造参数为 `BodyCommandAccess<C>`、`BodySecurityPolicy<C>`、`BodyTimeSource<C>`、`BodyTransactionStore` 与 `BodyAuditSink<C>`；第六个参数 `OrganRecipeCatalog` 省略则为空目录。摄入另需第七个参数 `BodyEnvironmentSource<C>`，未安装则返回 `ENVIRONMENT_UNAVAILABLE`。具体语义见[协议与安全](Protocol-and-Security.md)、[配方接入](Technique-Addons.md)和[环境摄入](Environment-Qi.md)。查询与变更分别路由；送错入口会在宿主回调前拒绝。
 
 `BodyCommandAccess.authorize` 既决定该操作和剂量是否允许，也返回稳定可信调用者 ID。不能只检查“是否拥有该身体”就把所有未来操作开放给客户端；宿主应仅开放实际需要的命令。认证上下文由宿主生成，客户端不能声明 caller_id。
 
-`BodyTransactionStore.transact(bodyId, work)` 在隔离同一身体所有写入的事务内恰好调用一次 `work`，不能通过自动重跑回调解决冲突。事务提供只读快照、成功回执查找与 `stage(next, receipt)`；stage 是暂存，正常返回后才能把身体、回执及死亡环境入账一起发布。任何提交前故障必须一起回滚；成功返回必须意味着提交完成。权限/会话撤销由宿主与提交边界协调，数据库类型不进入框架接口。
+`BodyTransactionStore.transact(bodyId, work)` 在隔离同一身体所有写入的事务内恰好调用一次 `work`，不能通过自动重跑回调解决冲突。事务提供只读快照、成功回执查找、`environmentSource(sourceId)` 与 `stage(next, receipt)`。环境读取还须隔离其他身体对同一来源的写入；只锁身体不足以防止共享预算透支。stage 是暂存，正常返回后才能把身体、来源库存、预算与回执一起发布。任何提交前故障必须一起回滚；成功返回必须意味着提交完成。权限/会话撤销及环境位置历史由宿主与提交边界协调，数据库类型不进入框架接口。
 
-`InMemoryBodyStore` 是可运行的参考适配，也实现 `BodySnapshotReader`。无环境历史时用快照与回执初始化；已有死亡释放时须通过三参数构造器一起恢复已保存的 `QiInventory` 环境余额，不重放回执。`environmentQi()` 返回参考实现的单一环境账户，真实宿主按身体所在世界和位置选择账户。它用一个监视器串行化操作，生成不可变暂存结果后一起发布，拒绝嵌套写事务、跨线程及回调结束后使用事务。它不写磁盘，没有 TTL；正式宿主需实现原子持久化、恢复及实际并发策略。
+`InMemoryBodyStore` 是可运行的参考适配，也实现 `BodySnapshotReader`。无环境历史时用快照与回执初始化；已有普通时间命令的环境释放时，通过三参数构造器恢复 `QiInventory` 默认释放账户。区域摄入使用四参数构造器，同时传入完整 `List<EnvironmentQiSource>`；有摄入回执却缺少对应来源时拒绝恢复，不重放回执扣账。`environmentSource(id)` 读取已提交来源，`renewEnvironmentWindow` 用预期版本续窗，保留库存。`environmentQi()` 仍只表示普通时间命令的默认释放账户，摄入区间加工损耗直接回选定区域，不重复进入该账户。它用一个监视器隔离所有身体与来源，拒绝嵌套写事务、跨线程及回调结束后使用事务。它不写磁盘，没有 TTL；正式宿主需实现原子持久化、恢复及实际并发策略。
 
-[环境交换契约](Environment-Qi.md)已提供独立 `environment.proto` 和 `EnvironmentProtobuf` 校验：宿主声明来源、适用身体、可用明细、供给速率、有效区间和版本，权威计算返回吸收/释放毛额，成功回执关联两端提交版本。[环境配置](Environment-Configuration.md)中的 `EnvironmentConfigLoader` 读取 TOML 并生成 `EnvironmentQiConfig`；`EnvironmentQiRules` 提供 chunk 区域、元/格浓度、浓度挂钩供给和方块传播系数查询。来源选择、区域库存、扩散及并发供给预算归宿主。当前 `BodyTransactionStore` / `InMemoryBodyStore` 尚未接入这些消息；后续必须把真实环境扣账、身体入账、预算及回执统一到原子事务，不能把有界编解码当成转账执行。
+[环境交换契约](Environment-Qi.md)通过 `environment.proto` 表达来源库存、供给、交换及成功回执。`EnvironmentAbsorption.initialize/renewWindow` 在窗口开始时利用 `EnvironmentQiRules` 按浓度计算速率；交换期间从真实库存扣账，按重叠子区间检查多人共享供给。`EnvironmentConfigLoader` 从 TOML 提供配置。`BodyEnvironmentSource.resolve(context, body, plan)` 必须确认 `[body.settledAt, plan.target)` 全程可从返回的来源摄入，而不是只看最后位置。移动、环境条件或离线模式改变时由宿主先拆段；这个只读接口不预扣款，也不接收客户端提供的 offer。
+
+摄入命令自身推进身体时间，不要求像发运命令那样先结算到 target。它在成功时同时保存可信计划和环境回执，且只增加一次身体 revision。处理器已完成重试时直接返回旧提交；不会再询问当前时间、位置或来源，因此过期窗口也不会使已成功的重试再次扣账。Java 回调用于进程内装配，跨语言服务使用同一 `.proto` 和上述事务行为；无需加载 Java 实现。
 
 环境空间与缓存使用 `EnvironmentTopologyProtobuf`：宿主按生成结果或内容定义声明 `EnvironmentSpace`，普通背景、房间和通道各持有唯一来源身份。已确认采用随机区域及边界传播倍率，不接入世界扫描、方块变化监听和修炼室自动识别。`EnvironmentBoundaryCache` 汇总共享边界的分片贡献，显式参数变更通过 Protobuf 更新。宿主保存生成结果、位置归属及当前账本；定义失效时先停用相关缓存，确认后原子发布新空间与连接，详见[空间与边界接入约定](Environment-Configuration.md)。
 

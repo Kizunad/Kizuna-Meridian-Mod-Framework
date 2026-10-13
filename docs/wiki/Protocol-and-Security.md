@@ -1,6 +1,6 @@
 # 请求协议与安全扩展
 
-状态：**v1 Protobuf 数据契约、Java 查询与变更处理器、寿元支出/推进、经脉与器官运输、组织能力/做功、器官配方加工及环境释放的内存事务参考已实现，尚未发布。** 授权、可信时间、事务与私有安全策略由宿主注入；网络注册、连接认证、磁盘持久化、编辑会话和实际宿主调度尚未实现。
+状态：**v1 Protobuf 数据契约、Java 查询与变更处理器、寿元支出/推进、经脉与器官运输、组织能力/做功、器官配方、环境摄入及原子交换的内存事务参考已实现，尚未发布。** 授权、可信时间、事务与私有安全策略由宿主注入；网络注册、连接认证、磁盘持久化、编辑会话和实际宿主调度尚未实现。
 
 ## 唯一协议来源与构建
 
@@ -16,6 +16,7 @@
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
 | `TimeProtobuf` / `server.BodyTimeSource<C>` | 可信时间计划的编解码、结果校验；宿主提供目标、倍率与模式 |
 | `EnvironmentProtobuf` | 环境供给、交换及回执的编解码；版本、区间、逐类额度和合计速率校验 |
+| `IntakeProtobuf` / `core.OrganIntake` / `environment.EnvironmentAbsorption` | 通用器官摄入、环境真实扣账与共享区间预算；可信来源由 `BodyEnvironmentSource` 提供 |
 | `TransportProtobuf` / `core.QiTransport` | 运输请求映射、内腔扣源/在途创建及到达规则 |
 | `CapabilityProtobuf` / `OrganRecipeCatalog` | 组织能力与做功映射、器官配方编解码及可信目录注册 |
 | `server.BodyQueryHandler<C>` | 解码查询、调用宿主读取策略与快照来源、校验目标身份并返回响应 |
@@ -55,7 +56,8 @@ python3 "scripts/wiki.py" check
 | `get_tissue_capability` / `tissue_capability` | 查询/响应 | 实际身体和组织 ID；同一读取授权，返回当前能力及 revision |
 | 独立 `OrganRecipe` 字节 | 可信内容安装，不是客户端可上传的请求 | ID/版本、器官类型、最低境界、输入/输出守恒及正数时长 |
 | 独立 `TimeAdvancePlan` 字节 | 可信宿主内部事实，不是客户端请求分支 | 目标游标、显式有限非负倍率、推进模式 |
-| 独立 `EnvironmentQiOffer` / `EnvironmentQiExchange` / `EnvironmentQiReceipt` 字节 | 可信宿主与权威身体实现之间的环境事实；尚未接入交换执行 | 来源/身体身份、供给版本与有效期、吸收毛额/速率、两端提交版本；详见[环境契约](Environment-Qi.md) |
+| `BodyCommand.intake_qi` / `CommandReceipt.organ_intake` | 摄入意图 / 可信计划与环境提交事实 | 器官 ID、正数原始明细；成功推进年龄与游标，并与环境原子交换 |
+| 独立 `EnvironmentQiOffer` / `EnvironmentQiExchange` / `EnvironmentQiReceipt` / `EnvironmentQiSource` 字节 | 可信宿主与权威身体实现之间的环境事实及来源存档 | 来源/身体身份、版本、有效期、毛额/速率、共享预算及提交版本；详见[环境契约](Environment-Qi.md) |
 | `ResponseEnvelope.body_snapshot` | 权威宿主 → 有权读取完整身体的调用方 | 完整身体与所有模块、账户、版本、时序的核心校验 |
 | `ResponseEnvelope.command_committed` | 权威宿主 → 已授权调用者 | 身体身份、前后 revision，恰好增加 1 |
 | `ResponseEnvelope.failure` | 权威宿主 → 调用方 | 固定公开错误类别，不包含堆栈或私有策略详情 |
@@ -98,7 +100,7 @@ EOF
 
 - 协议版本、快照 schema、模板内容版本分别记录，当前线协议只接受 `1`，身体快照 schema 只接受 `2`。
 - 时间与 revision 使用非负 `int64`，精确保留至 `Long.MAX_VALUE`；真元与其他连续量使用有限 `double`，沿用[基础数据定义](Data-Definitions.md)的单位与机器舍入规则。
-- 合法为零的数值与布尔值声明为 `optional`，**v1 业务语义仍要求显式提供**。`0`、`false` 与缺失不同；单值嵌套消息通常必填，空账户须显式提供空 `QiInventory`。条件字段为：`CommandReceipt.time_advance` 仅在时间命令必填，`organ_recipe` 仅在启动加工命令必填，其他命令须缺省；`OrganState.process` 在空闲时缺省。
+- 合法为零的数值与布尔值声明为 `optional`，**v1 业务语义仍要求显式提供**。`0`、`false` 与缺失不同；单值嵌套消息通常必填，空账户须显式提供空 `QiInventory`。条件字段为：`CommandReceipt.time_advance` 仅在时间命令必填，`organ_recipe` 仅在启动加工命令必填，`organ_intake` 仅在摄入命令必填，其他命令须缺省；`OrganState.process` 在空闲时缺省，`OrganDefinition.intake` 缺省表示无摄入能力。
 - 字符串非空白；所有单字符串最多 1024 个 UTF-8 字节，单列表最多 4096 项，全消息已知字段值最多 65536 个，整个载荷最多 1,048,576 字节，解析深度最多 32。
 - 未设置或未知枚举、未选择 oneof、未知字段、超限、截断、非法 UTF-8 和非有限数字全部拒绝。当前精确版本不会默默丢弃未知身体字段；不是任意新版消息都能由旧版读取。
 - `parseFrom` 只证明 Protobuf 格式可解码。`BodyProtobuf` 还执行核心构造校验，检查重复 ID、端口引用、状态对应、容量与 HP 上限、重复真元明细和在途时序。禁止把生成 Builder 当成已校验权威对象。
@@ -107,6 +109,8 @@ EOF
 字段号与枚举数值固定在 `.proto`，不使用 Java `ordinal()`。移除字段或枚举值时保留 `reserved`；修改必填规则或语义必须调整相应版本，并增加固定样例与拒绝测试。当前 Protobuf 原生单值/oneof 重复字段按其标准合并规则解析，不承诺二进制载荷具有唯一表示；宿主不能用原始字节哈希代替请求 ID 与业务幂等控制。
 
 身体 schema 2 新增必填 `MeridianState.opening = 6`，其消息为 `MeridianOpening { stage = 1; progress = 2; }`。阶段编号是 `UNOPENED = 1`、`IN_PROGRESS = 2`、`OPENED = 3`；进度声明为 `optional double`，合法的零也须显式提供。缺失或未知阶段、非有限进度及阶段与进度不符均拒绝，具体规则见[开拓数据](Data-Definitions.md)。固定字节与快照整体回归保护字段编号、零值存在性及逐脉状态；协议没有直接设置开拓进度的客户端请求。
+
+摄入新增 `OrganDefinition.intake = 9`、`BodyCommand.intake_qi = 15`、`CommandReceipt.organ_intake = 7`，失败码 `29–33` 分别为 `INTAKE_UNSUPPORTED`、`ENVIRONMENT_UNAVAILABLE`、`ENVIRONMENT_REVISION_CONFLICT`、`ENVIRONMENT_INTERVAL_INVALID`、`ENVIRONMENT_BUDGET_EXCEEDED`。身体 schema 仍为 2，线协议仍为开发中的 v1；旧消息未声明摄入能力时含义明确，携带新字段的消息需要同步契约包，旧严格解码器会拒绝。既有死亡、模块失能、容量、吞吐、时钟和数值边界复用原失败码。
 
 ## 已实现的只读请求处理
 

@@ -3,6 +3,7 @@ syntax = "proto3";
 package kizuna.meridian.v1;
 
 import "kizuna/meridian/v1/body.proto";
+import "kizuna/meridian/v1/environment.proto";
 
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "MeridianMessages";
@@ -47,7 +48,19 @@ message BodyCommand {
     TransportQi transport_qi = 12;
     StartOrganRecipe start_organ_recipe = 13;
     ExertTissue exert_tissue = 14;
+    IntakeQi intake_qi = 15;
   }
+}
+
+// 摄入目标器官与原始明细；时间、位置、来源和效率不能由客户端声明。
+message IntakeQi {
+  string organ_id = 1;
+  QiInventory qi = 2; // 正数总量，整笔成功或拒绝；保留相态与属性。
+}
+
+message OrganIntakeResult {
+  TimeAdvancePlan plan = 1; // 从身体旧游标到可信目标时刻，成功同时推进年龄与游标。
+  EnvironmentQiReceipt environment = 2;
 }
 
 // 首片只支持非致死支出；这是宿主授权的身体操作，不是任意玩家扣寿命的权限。
@@ -116,6 +129,7 @@ message CommandReceipt {
   CommandCommitted committed = 4;
   TimeAdvanceResult time_advance = 5; // 仅 advance_time 回执必填，其他操作必须缺省。
   OrganRecipe organ_recipe = 6; // 仅 start_organ_recipe 必填，记录宿主解析的配方。
+  OrganIntakeResult organ_intake = 7; // 仅 intake_qi 必填，包含同一次身体提交的环境回执。
 }
 
 message ResponseEnvelope {
@@ -163,4 +177,9 @@ enum FailureCode {
   RECIPE_INCOMPATIBLE = 26;
   ORGAN_BUSY = 27;
   TISSUE_LOAD_EXCEEDED = 28;
+  INTAKE_UNSUPPORTED = 29;
+  ENVIRONMENT_UNAVAILABLE = 30;
+  ENVIRONMENT_REVISION_CONFLICT = 31;
+  ENVIRONMENT_INTERVAL_INVALID = 32;
+  ENVIRONMENT_BUDGET_EXCEEDED = 33;
 }

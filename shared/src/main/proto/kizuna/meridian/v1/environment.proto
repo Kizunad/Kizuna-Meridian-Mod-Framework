@@ -160,3 +160,20 @@ message EnvironmentQiReceipt {
   optional int64 body_revision = 2; // expected_body_revision + 1。
   optional int64 source_revision = 3; // offer.source_revision + 1。
 }
+
+// 唯一环境库存及共享供给账；窗口速率由窗口开启时的浓度计算，提交不能重置预算。
+message EnvironmentQiSource {
+  EnvironmentSpace space = 1;
+  optional int64 revision = 2;
+  QiInventory inventory = 3;
+  TimeCursor valid_from = 4;
+  TimeCursor valid_until = 5;
+  optional double max_absorption_per_second = 6;
+  repeated EnvironmentQiUsage usage = 7; // 已提交的合计速率分段，按时间排序且互不重叠。
+}
+
+message EnvironmentQiUsage {
+  optional int64 started_millis = 1;
+  optional int64 ended_millis = 2;
+  optional double qi_per_second = 3; // 正数；包括所有身体、所有属性的摄入。
+}

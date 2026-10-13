@@ -25,6 +25,7 @@ import dev.kizuna.meridian.protocol.TimeProtobuf;
 import dev.kizuna.meridian.protocol.TransportProtobuf;
 import dev.kizuna.meridian.protocol.CapabilityProtobuf;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
+import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages;
 
 import java.nio.charset.StandardCharsets;
@@ -44,6 +45,7 @@ public final class BodyCommandHandler<C> {
     private final BodyTransactionStore store;
     private final BodyAuditSink<C> audit;
     private final OrganRecipeCatalog recipes;
+    private final BodyEnvironmentSource<C> environmentSource;
 
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit) {
@@ -54,6 +56,13 @@ public final class BodyCommandHandler<C> {
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit,
                               OrganRecipeCatalog recipes) {
+        // 既有宿主没有环境选择器时拒绝摄入，不推断某个默认世界或来源。
+        this(access, security, timeSource, store, audit, recipes, (context, body, plan) -> Optional.empty());
+    }
+
+    public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
+                              BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit,
+                              OrganRecipeCatalog recipes, BodyEnvironmentSource<C> environmentSource) {
         // 所有依赖都显式装配；公共宿主可选择放行的私有策略，但不能省略基础授权。
         this.access = MeridianErrors.required(access, Host.ACCESS_REQUIRED);
         this.security = MeridianErrors.required(security, Host.SECURITY_REQUIRED);
@@ -61,6 +70,7 @@ public final class BodyCommandHandler<C> {
         this.store = MeridianErrors.required(store, Host.STORE_REQUIRED);
         this.audit = MeridianErrors.required(audit, Host.AUDIT_REQUIRED);
         this.recipes = MeridianErrors.required(recipes, Host.RECIPES_REQUIRED);
+        this.environmentSource = MeridianErrors.required(environmentSource, Host.ENVIRONMENT_SOURCE_REQUIRED);
     }
 
     public byte[] handle(C trustedContext, byte[] payload) {
@@ -148,8 +158,9 @@ public final class BodyCommandHandler<C> {
         BodySnapshot after;
         MeridianMessages.TimeAdvanceResult timeResult = null;
         BodyMessages.OrganRecipe recipeFact = null;
+        MeridianMessages.OrganIntakeResult intakeFact = null;
         try {
-            // 资源操作一律基于宿主当前已结算时刻，不能用陈旧状态跳过到达、加工或寿尽。
+            // 瞬时发运、加工启动和做功使用已结算时刻；摄入自身消费可信活动区间。
             if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue()) {
                 requireActiveSettledTime(trustedContext, body);
             }
@@ -184,8 +195,26 @@ public final class BodyCommandHandler<C> {
                     TissueCapabilities.Exertion exertion = CapabilityProtobuf.fromExertion(command.getExertTissue());
                     yield TissueCapabilities.exert(body, exertion);
                 }
+                case INTAKE_QI -> {
+                    // 时间和整个区间的来源均来自可信宿主；账户必须在同一事务内读取和锁定。
+                    MeridianMessages.TimeAdvancePlan plan = MeridianErrors.required(
+                            timeSource.resolve(trustedContext, body), Host.TIME_PLAN_REQUIRED);
+                    String sourceId = environmentSource.resolve(trustedContext, body, plan)
+                            .orElseThrow(() -> MeridianErrors.rejectIntake(MeridianMessages.FailureCode.ENVIRONMENT_UNAVAILABLE));
+                    EnvironmentQiSource source = transaction.environmentSource(sourceId)
+                            .orElseThrow(() -> MeridianErrors.rejectIntake(MeridianMessages.FailureCode.ENVIRONMENT_UNAVAILABLE));
+                    if (!source.getSpace().getSourceId().equals(sourceId)) {
+                        throw MeridianErrors.inconsistent(Host.INTAKE_STAGE_MISMATCH);
+                    }
+                    OrganIntakeExecution.Result result = OrganIntakeExecution.calculate(body, command.getIntakeQi(), plan, source);
+                    intakeFact = result.fact();
+                    yield result.body();
+                }
                 case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
             };
+        } catch (MeridianErrors.IntakeRejected rejected) {
+            // 环境供给和摄入失败不写任何状态，直接返回 protoc 定义的原因。
+            return Execution.conflict(rejected.code());
         } catch (LifespanRejected rejected) {
             // 只有核心业务拒绝映射为业务错误，宿主回调异常仍按内部故障处理。
             return Execution.conflict(lifespanFailureCode(rejected.reason()));
@@ -219,6 +248,10 @@ public final class BodyCommandHandler<C> {
         if (recipeFact != null) {
             // 持久化发起时采用的定义，恢复和重复请求不读取可能已卸载的目录。
             receiptBuilder.setOrganRecipe(recipeFact);
+        }
+        if (intakeFact != null) {
+            // 保存原环境事实以支持幂等重试；不从当前窗口重建历史成功结果。
+            receiptBuilder.setOrganIntake(intakeFact);
         }
         var receipt = receiptBuilder.build();
 

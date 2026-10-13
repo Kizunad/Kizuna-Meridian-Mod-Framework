@@ -7,7 +7,8 @@ option java_outer_classname = "BodyMessages";
 
 // 字段编号与枚举值属于跨语言契约，不依赖 Java ordinal；删除时必须 reserved。
 // optional 数值/布尔字段必须显式提供，合法的 0/false 不等于缺失。
-// 单值消息默认必填；OrganState.process 在空闲时缺省。字符串非空，repeated 可为空。
+// 单值消息默认必填；OrganState.process 空闲时缺省，OrganDefinition.intake 无摄入能力时缺省。
+// 字符串非空，repeated 可为空。
 // 此文件是数据格式，不授予客户端覆盖权威状态的权限。
 
 enum Realm {
@@ -101,6 +102,11 @@ message OrganDefinition {
   repeated Port ports = 6;
   double qi_capacity = 7; // 缓存与加工中输入共同占用，元。
   double throughput_per_second = 8; // 端口收发共享吞吐，元/秒。
+  OrganIntakeCapability intake = 9; // 可缺省：没有环境摄入能力。实际改造参数随构型保存。
+}
+
+message OrganIntakeCapability {
+  optional double max_qi_per_second = 1; // 正数，独立于器官端口搬运吞吐；原始真元不在此转换。
 }
 
 message MeridianDefinition {

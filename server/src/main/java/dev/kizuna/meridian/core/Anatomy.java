@@ -89,9 +89,16 @@ public final class Anatomy {
         }
     }
 
-    /** 器官只声明自身类型与接口；转换效率和五行产物属于后续配方定义。 */
+    /** 器官声明自身接口与可选摄入能力；转换产物由配方定义。 */
     public record OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
-                                  double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond) {
+                                  double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond,
+                                  OrganIntakeCapability intake) {
+        public OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
+                               double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond) {
+            // 未声明能力的器官只能使用已有缓存，不隐式获得从环境补元的能力。
+            this(id, displayName, kind, partId, maxHp, ports, qiCapacity, throughputPerSecond, null);
+        }
+
         public OrganDefinition {
             // 这里只声明器官本体与接口，不把具体加工配方写死在结构里。
             MeridianErrors.required(id, Data.ORGAN_ID_REQUIRED);
@@ -102,6 +109,13 @@ public final class Anatomy {
             DataChecks.positive(qiCapacity, "器官真元容量");
             DataChecks.positive(throughputPerSecond, "器官端口吞吐");
             ports = List.copyOf(ports);
+        }
+    }
+
+    public record OrganIntakeCapability(double maxQiPerSecond) {
+        public OrganIntakeCapability {
+            // 摄入与端口搬运是不同能力，附属包必须明确给出可运行的摄入速率。
+            DataChecks.positive(maxQiPerSecond, "器官摄入速率");
         }
     }
 

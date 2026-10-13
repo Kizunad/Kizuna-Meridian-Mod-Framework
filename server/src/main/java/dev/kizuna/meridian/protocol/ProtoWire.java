@@ -63,8 +63,10 @@ final class ProtoWire {
             }
             if ((field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.time_advance")
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_recipe")
+                    || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_intake")
+                    || field.getFullName().equals("kizuna.meridian.v1.OrganDefinition.intake")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganState.process")) && !message.hasField(field)) {
-                // 回执事实随命令类型出现；空闲器官没有加工记录，其他单值消息仍必须存在。
+                // 回执随操作出现；器官可以没有加工任务或摄入能力，其他单值消息仍须存在。
                 continue;
             }
             if (field.isRepeated()) {

@@ -147,10 +147,15 @@ public final class BodyProtobuf {
 
     private static BodyMessages.OrganDefinition toOrgan(Anatomy.OrganDefinition value) {
         // 缓存容量和搬运吞吐属于器官本体，具体转换内容由独立配方声明。
-        return BodyMessages.OrganDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
+        var builder = BodyMessages.OrganDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
                 .setKind(value.kind().value()).setPartId(value.partId().value()).setMaxHp(value.maxHp())
                 .setQiCapacity(value.qiCapacity()).setThroughputPerSecond(value.throughputPerSecond())
-                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList()).build();
+                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList());
+        if (value.intake() != null) {
+            builder.setIntake(BodyMessages.OrganIntakeCapability.newBuilder()
+                    .setMaxQiPerSecond(value.intake().maxQiPerSecond()));
+        }
+        return builder.build();
     }
 
     private static Anatomy.OrganDefinition fromOrgan(BodyMessages.OrganDefinition value) {
@@ -158,7 +163,8 @@ public final class BodyProtobuf {
         return new Anatomy.OrganDefinition(new Anatomy.OrganId(value.getId()), value.getDisplayName(),
                 new DefinitionId(value.getKind()), new Anatomy.PartId(value.getPartId()), value.getMaxHp(),
                 value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
-                value.getQiCapacity(), value.getThroughputPerSecond());
+                value.getQiCapacity(), value.getThroughputPerSecond(), value.hasIntake()
+                        ? new Anatomy.OrganIntakeCapability(value.getIntake().getMaxQiPerSecond()) : null);
     }
 
     private static BodyMessages.MeridianDefinition toMeridian(Anatomy.MeridianDefinition value) {
@@ -248,13 +254,13 @@ public final class BodyProtobuf {
         return new AnatomyState.Organ(organId, value.getHp(), buffer, process);
     }
 
-    static BodyMessages.QiInventory toInventory(QiInventory value) {
+    public static BodyMessages.QiInventory toInventory(QiInventory value) {
         // 保留所有混相和自定义属性明细，空账户仍显式编码消息存在性。
         return BodyMessages.QiInventory.newBuilder()
                 .addAllEntries(value.entries().stream().map(BodyProtobuf::toQi).toList()).build();
     }
 
-    static QiInventory fromInventory(BodyMessages.QiInventory value) {
+    public static QiInventory fromInventory(BodyMessages.QiInventory value) {
         // 账户构造器拒绝重复同类明细、零数量和求和溢出。
         return new QiInventory(value.getEntriesList().stream().map(BodyProtobuf::fromQi).toList());
     }
@@ -325,13 +331,13 @@ public final class BodyProtobuf {
         return new VitalityState(value.getAgeSeconds(), value.getLifespanLimitSeconds(), value.getSpentLifespanSeconds(), value.getDead());
     }
 
-    static BodyMessages.TimeCursor toTime(TimeCursor value) {
+    public static BodyMessages.TimeCursor toTime(TimeCursor value) {
         // 时钟域和世代必须随位置交换，避免重连后错误比较不同时间基准。
         return BodyMessages.TimeCursor.newBuilder().setDomain(value.domain().value()).setEpoch(value.epoch())
                 .setElapsedMillis(value.elapsedMillis()).build();
     }
 
-    static TimeCursor fromTime(BodyMessages.TimeCursor value) {
+    public static TimeCursor fromTime(BodyMessages.TimeCursor value) {
         // 使用 int64 精确保留时间；不经过 JSON 数字或浮点转换。
         return new TimeCursor(new DefinitionId(value.getDomain()), value.getEpoch(), value.getElapsedMillis());
     }

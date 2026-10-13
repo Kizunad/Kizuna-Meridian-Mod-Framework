@@ -5,15 +5,51 @@ import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.TimeCursor;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.error.MeridianErrors.Protocol;
+import dev.kizuna.meridian.error.MeridianErrors.Environment;
 import dev.kizuna.meridian.error.MeridianErrors.TransportRejected;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiExchange;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiOffer;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiReceipt;
+import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
 
 /** 环境交换的有界编解码与事实校验，供权威身体实现和宿主交换 Protobuf 消息。 */
 public final class EnvironmentProtobuf {
     private EnvironmentProtobuf() {
         // 校验只读取消息；来源授权、账本锁定和原子提交由宿主执行。
+    }
+
+    public static byte[] encodeSource(EnvironmentQiSource source) {
+        // 库存与已消耗的共享带宽必须一起保存，恢复不能重新发放额度。
+        validateSource(source);
+        return ProtoWire.write(source);
+    }
+
+    public static EnvironmentQiSource decodeSource(byte[] payload) {
+        // 恢复只还原状态，不重算初始库存或清空用量。
+        EnvironmentQiSource source = ProtoWire.read(payload, EnvironmentQiSource.parser());
+        validateSource(source);
+        return source;
+    }
+
+    public static void validateSource(EnvironmentQiSource source) {
+        // 窗口有共同时间基准，库存只有这一份；分段表示带宽占用而非真元余额。
+        ProtoWire.validate(source);
+        EnvironmentTopologyProtobuf.validateSpace(source.getSpace());
+        BodyProtobuf.fromInventory(source.getInventory());
+        TimeCursor start = BodyProtobuf.fromTime(source.getValidFrom());
+        TimeCursor end = BodyProtobuf.fromTime(source.getValidUntil());
+        requireSameClock(start, end);
+        ProtoWire.require(start.elapsedMillis() < end.elapsedMillis(), Environment.SOURCE_STATE);
+        long previousEnd = start.elapsedMillis();
+        for (var usage : source.getUsageList()) {
+            // 排序且不重叠，允许中间空闲；合计速率不能超过该窗口固定的供给能力。
+            ProtoWire.require(usage.getStartedMillis() >= previousEnd
+                    && usage.getEndedMillis() > usage.getStartedMillis()
+                    && usage.getEndedMillis() <= end.elapsedMillis()
+                    && usage.getQiPerSecond() > 0
+                    && usage.getQiPerSecond() <= source.getMaxAbsorptionPerSecond(), Environment.SOURCE_STATE);
+            previousEnd = usage.getEndedMillis();
+        }
     }
 
     public static byte[] encodeOffer(EnvironmentQiOffer offer) {

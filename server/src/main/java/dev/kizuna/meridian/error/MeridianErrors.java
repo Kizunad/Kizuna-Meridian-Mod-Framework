@@ -1,5 +1,7 @@
 package dev.kizuna.meridian.error;
 
+import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
+
 import java.util.Objects;
 
 /** Java 参考实现的异常类型与文案；公开线协议失败码仍由 Protobuf 定义。 */
@@ -48,8 +50,31 @@ public final class MeridianErrors {
         return new CapabilityRejected(reason);
     }
 
+    public static IntakeRejected rejectIntake(FailureCode code) {
+        // 环境摄入直接携带 protoc 的公开失败码，避免再维护一套平行枚举。
+        return new IntakeRejected(code);
+    }
+
+    public static final class IntakeRejected extends RuntimeException {
+        private final FailureCode code;
+
+        private IntakeRejected(FailureCode code) {
+            // 异常只传递稳定类别，不携带环境位置或宿主私有信息。
+            super(required(code, "摄入失败码不能为空").name());
+            this.code = code;
+        }
+
+        public FailureCode code() {
+            // 处理器可直接生成标准失败响应。
+            return code;
+        }
+    }
+
     /** 环境配置与派生速率的诊断；配置读取和计算仍在各自入口执行。 */
     public static final class Environment {
+        public static final String SOURCE_STATE = "环境来源窗口、库存或共享供给分段不合法";
+        public static final String INTAKE_FACT = "摄入命令、时间计划与环境交换事实不一致";
+        public static final String INTAKE_POSITIVE = "摄入明细必须包含正数真元";
         public static final String CONFIG_VERSION = "不支持的环境配置版本";
         public static final String REGION_SIZE = "区域边长必须为正 int32 整数，单位 chunk";
         public static final String DEFAULT_TRANSMISSION = "默认方块传播系数必须在 [0, 1) 范围内";
@@ -345,6 +370,9 @@ public final class MeridianErrors {
 
     /** 宿主读取、变更与事务参考实现的诊断文案。 */
     public static final class Host {
+        public static final String ENVIRONMENT_SOURCE_REQUIRED = "必须提供可信环境来源选择器";
+        public static final String INTAKE_STAGE_MISMATCH = "摄入候选身体或环境交换与原始状态不一致";
+        public static final String DUPLICATE_SOURCE = "环境来源身份重复";
         public static final String COMMAND_ONLY = "变更入口只接受身体命令";
         public static final String QUERY_ONLY = "查询入口只接受快照查询";
         public static final String COMMAND_TO_QUERY = "变更请求不能交给查询入口";

@@ -87,7 +87,7 @@ default_block_transmission = 0.10
 
 `concentration(inventory, volumeBlocks)` 与 `absorptionLimitPerSecond(inventory, volumeBlocks)` 从库存直接派生，没有单独可写的浓度字段。默认采集速度为 1 格/秒：浓度 0.2 元/格时上限是 0.2 元/秒，浓度 2 时上限是 2 元/秒。不会给每个区域或生物固定发放 2 元/秒。
 
-宿主还需要按可吸收种类、器官吞吐、身体接收空间、剩余库存及多人共享预算限制本身体额度，再填写 `EnvironmentQiOffer.max_absorption_per_second`。浓度改变时结束旧稳定区间，重新计算供给；不能把起点浓度无限积分，也不能给每个生物重复使用全部共享预算。库存和体积都必须有效，零库存的供给为 0。
+宿主还需要按器官能力、身体接收空间、剩余库存及多人共享预算限制本身体额度。`EnvironmentAbsorption` 已提供短固定窗口的离散参考：开启窗口时按此公式计算速率，窗口内持续扣真实库存并登记共享速率占用；窗口结束后按剩余浓度重新计算，不能通过换来源 revision 清空预算。窗口长度由宿主安排，不能把起点浓度无限积分，也不能给每个生物重复使用全部共享预算。库存和体积都必须有效，零库存的供给为 0。具体时间与事务约束见[环境摄入](Environment-Qi.md)。
 
 ## 方块传播默认值
 
@@ -199,7 +199,7 @@ k接触 = 2 / (1/k左 + 1/k右)
 
 ### 配置安装与回归
 
-宿主加载配置后持有一个 `EnvironmentQiRules`。配置不写入身体快照，也不会修改 `InMemoryBodyStore` 的旧单环境账户。日后切换配置时，宿主须先结算旧规则区间，再更新来源版本；改变区域尺寸还需要重分账本，不能只重新算区域坐标。当前没有自动热重载。
+宿主加载配置后持有一个 `EnvironmentQiRules`，供 `EnvironmentAbsorption.initialize/renewWindow` 计算供给速率。配置不写入身体快照；区域库存与预算通过 `EnvironmentQiSource` 一起保存。切换配置时须先结算旧规则窗口，再按新配置续窗并更新来源版本；改变区域尺寸还需要重分账本，不能只重新算区域坐标。当前没有自动热重载。
 
 `EnvironmentConfigurationTest` 保留配置文件到 Protobuf 往返、非法配置拒绝、负 chunk 坐标、浓度驱动既有交换额度、屏障阻断和大于 1 系数的整体回归。完整构建还校验客户端/服务端 JAR 与协议包使用同一份 schema 和描述集。
 

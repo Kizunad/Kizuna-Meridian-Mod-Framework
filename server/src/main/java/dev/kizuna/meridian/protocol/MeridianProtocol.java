@@ -82,6 +82,12 @@ public final class MeridianProtocol {
             ProtoWire.require(recipe.id().value().equals(requested.getRecipeId()) && recipe.version() == requested.getRecipeVersion(),
                     Protocol.RECIPE_RECEIPT_MISMATCH);
         }
+        // 摄入时间与环境回执属于同一次提交，其他命令不能夹带环境扣账事实。
+        ProtoWire.require(receipt.hasOrganIntake() == receipt.getCommand().hasIntakeQi(),
+                MeridianErrors.Environment.INTAKE_FACT);
+        if (receipt.hasOrganIntake()) {
+            IntakeProtobuf.validateResult(receipt.getCommand(), receipt.getOrganIntake());
+        }
     }
 
     private static void validateRequest(MeridianMessages.RequestEnvelope request) {
@@ -138,6 +144,7 @@ public final class MeridianProtocol {
                 ProtoWire.require(request.getRecipeVersion() > 0, Protocol.RECIPE_RECEIPT_MISMATCH);
             }
             case EXERT_TISSUE -> CapabilityProtobuf.fromExertion(command.getExertTissue());
+            case INTAKE_QI -> IntakeProtobuf.validateRequest(command.getIntakeQi());
             case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
         }
     }

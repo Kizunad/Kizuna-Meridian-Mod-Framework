@@ -16,6 +16,12 @@ import dev.kizuna.meridian.protocol.MeridianProtocol;
 import dev.kizuna.meridian.protocol.TimeProtobuf;
 import dev.kizuna.meridian.protocol.TransportProtobuf;
 import dev.kizuna.meridian.protocol.CapabilityProtobuf;
+import dev.kizuna.meridian.protocol.EnvironmentProtobuf;
+import dev.kizuna.meridian.environment.EnvironmentAbsorption;
+import dev.kizuna.meridian.environment.EnvironmentQiRules;
+import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
+import dev.kizuna.meridian.protocol.pb.BodyMessages.TimeCursor;
+import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.CommandReceipt;
 
 import java.util.HashMap;
@@ -27,6 +33,7 @@ import java.util.function.Function;
 /** 可运行的内存事务参考；不写磁盘，不能替代 Fabric/Bong 持久化适配。 */
 public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapshotReader {
     private final Map<BodyId, StoredBody> bodies = new HashMap<>();
+    private final Map<String, EnvironmentQiSource> sources = new HashMap<>();
     private QiInventory environmentQi;
     private boolean transactionOpen;
 
@@ -40,8 +47,20 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
     }
 
     public InMemoryBodyStore(List<BodySnapshot> snapshots, List<CommandReceipt> receipts, QiInventory environmentQi) {
+        // 旧装配没有区域库存；带摄入历史的存档必须走完整恢复入口。
+        this(snapshots, receipts, environmentQi, List.of());
+    }
+
+    public InMemoryBodyStore(List<BodySnapshot> snapshots, List<CommandReceipt> receipts,
+                             QiInventory environmentQi, List<EnvironmentQiSource> sources) {
         // 环境账恢复已保存值，绝不能遍历历史回执再次发放真元。
         this.environmentQi = MeridianErrors.required(environmentQi, Host.ENVIRONMENT_REQUIRED);
+        for (EnvironmentQiSource source : List.copyOf(sources)) {
+            EnvironmentProtobuf.validateSource(source);
+            if (this.sources.putIfAbsent(source.getSpace().getSourceId(), source) != null) {
+                throw MeridianErrors.invalid(Host.DUPLICATE_SOURCE);
+            }
+        }
         // 恢复时显式提供身体与成功回执，禁止自动补满或用重复身份覆盖旧身体。
         for (var snapshot : List.copyOf(snapshots)) {
             BodyProtobuf.toMessage(snapshot);
@@ -51,6 +70,14 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         }
         for (var receipt : List.copyOf(receipts)) {
             MeridianProtocol.validateReceipt(receipt);
+            if (receipt.hasOrganIntake()) {
+                // 恢复必须连同来源当前库存与预算；回执只用于去重，绝不重演扣账。
+                var environmentReceipt = receipt.getOrganIntake().getEnvironment();
+                var source = this.sources.get(environmentReceipt.getExchange().getOffer().getSourceId());
+                if (source == null || source.getRevision() < environmentReceipt.getSourceRevision()) {
+                    throw MeridianErrors.invalid(Host.ENVIRONMENT_REQUIRED);
+                }
+            }
             var id = new BodyId(receipt.getCommand().getBodyId());
             var stored = bodies.get(id);
             if (stored == null || receipt.getCommitted().getRevision() > stored.snapshot().revision()) {
@@ -72,26 +99,51 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
     }
 
     public synchronized QiInventory environmentQi() {
-        // 参考实现只有一个环境账户；真实宿主按身体所在世界和位置选择入账目标。
+        // 普通时间命令的默认释放账户；摄入事务的损耗直接进入选定来源，不重复入这里。
         return environmentQi;
+    }
+
+    public synchronized Optional<EnvironmentQiSource> environmentSource(String sourceId) {
+        // 只返回完整已提交来源，用于可信宿主保存或读取浓度。
+        return Optional.ofNullable(sources.get(sourceId));
+    }
+
+    public synchronized void renewEnvironmentWindow(String sourceId, long expectedRevision,
+                                                     TimeCursor from, TimeCursor until, EnvironmentQiRules rules) {
+        // 可信宿主在旧窗口结算完成后显式续窗；同一锁隔离其他身体摄入和库存读取。
+        if (transactionOpen) {
+            throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
+        }
+        EnvironmentQiSource source = sources.get(sourceId);
+        if (source == null) {
+            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_UNAVAILABLE);
+        }
+        if (source.getRevision() != expectedRevision) {
+            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_REVISION_CONFLICT);
+        }
+        EnvironmentQiSource renewed = EnvironmentAbsorption.renewWindow(source, from, until, rules);
+        sources.put(sourceId, renewed);
     }
 
     @Override
     public synchronized <T> T transact(BodyId bodyId, Function<Transaction, T> work) {
-        // 参考实现用一个锁换取清晰原子性；正式宿主可按身体分锁或使用数据库事务。
+        // 参考实现用一个锁隔离身体和共享来源；正式宿主需联合锁定两者或使用数据库事务。
         MeridianErrors.required(bodyId, Host.BODY_ID_REQUIRED);
         MeridianErrors.required(work, Host.TRANSACTION_WORK_REQUIRED);
         if (transactionOpen) {
             throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
         }
         transactionOpen = true;
-        var transaction = new MemoryTransaction(bodyId, bodies.get(bodyId), environmentQi);
+        var transaction = new MemoryTransaction(bodyId, bodies.get(bodyId), environmentQi, sources);
         try {
             T result = work.apply(transaction);
             // 所有可能失败的计算在发布之前完成；同一锁内发布身体、回执和环境余额。
             if (transaction.staged != null) {
                 bodies.put(bodyId, transaction.staged);
                 environmentQi = transaction.stagedEnvironment;
+                if (transaction.stagedSource != null) {
+                    sources.put(transaction.stagedSource.getSpace().getSourceId(), transaction.stagedSource);
+                }
             }
             return result;
         } finally {
@@ -117,12 +169,17 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         private boolean active = true;
         private StoredBody staged;
         private QiInventory stagedEnvironment;
+        private final Map<String, EnvironmentQiSource> sources;
+        private EnvironmentQiSource stagedSource;
 
-        private MemoryTransaction(BodyId bodyId, StoredBody original, QiInventory environmentQi) {
+        private MemoryTransaction(BodyId bodyId, StoredBody original, QiInventory environmentQi,
+                                  Map<String, EnvironmentQiSource> sources) {
             // 暂存区独立于已提交状态，回调失败时无需执行反向补偿。
             this.bodyId = bodyId;
             this.original = original;
             this.stagedEnvironment = environmentQi;
+            // 整个回调期间共用存储锁，来源索引不能被续窗或其他身体事务改写。
+            this.sources = sources;
         }
 
         @Override
@@ -141,6 +198,13 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         }
 
         @Override
+        public Optional<EnvironmentQiSource> environmentSource(String sourceId) {
+            // 保持与身体读取相同的事务生命周期，禁止把来源事务对象泄露给异步任务。
+            requireActive();
+            return Optional.ofNullable(sources.get(sourceId));
+        }
+
+        @Override
         public void stage(BodySnapshot next, CommandReceipt receipt) {
             // 即使宿主进程内误用，也不能创建不存在的身体或在一笔事务中多次写入。
             requireActive();
@@ -155,6 +219,22 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                 throw MeridianErrors.inconsistent(Host.STAGE_MISMATCH);
             }
             var nextEnvironment = stagedEnvironment;
+            EnvironmentQiSource nextSource = null;
+            if (receipt.hasOrganIntake()) {
+                // 从锁定的旧来源和旧身体复算，不能只检查总数相等便信任任意入账。
+                var fact = receipt.getOrganIntake();
+                String sourceId = fact.getEnvironment().getExchange().getOffer().getSourceId();
+                EnvironmentQiSource source = sources.get(sourceId);
+                if (source == null) {
+                    throw MeridianErrors.inconsistent(Host.INTAKE_STAGE_MISMATCH);
+                }
+                var expected = OrganIntakeExecution.calculate(original.snapshot(),
+                        receipt.getCommand().getIntakeQi(), fact.getPlan(), source);
+                if (!next.equals(expected.body()) || !fact.equals(expected.fact())) {
+                    throw MeridianErrors.inconsistent(Host.INTAKE_STAGE_MISMATCH);
+                }
+                nextSource = expected.source();
+            }
             if (receipt.getCommand().hasStartOrganRecipe()) {
                 // 对照原始缓存与固定配方复算，避免伪造已扣除的输入或提前发放产物。
                 var expected = OrganProcessing.start(original.snapshot(),
@@ -199,6 +279,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             }
             staged = new StoredBody(next, Map.copyOf(updated));
             stagedEnvironment = nextEnvironment;
+            stagedSource = nextSource;
         }
 
         private void requireActive() {
