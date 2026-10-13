@@ -2,6 +2,7 @@
 
 - [架构与职责](Architecture.md)
 - [基础数据定义](Data-Definitions.md)
+- [身体展示资源](Body-Presentation.md)
 - [身体数据、寿命与存档](Body-and-Persistence.md)
 - [经脉与真元](Meridian-and-Qi.md)
 - [环境真元交换](Environment-Qi.md)

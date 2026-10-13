@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "PresentationMessages";
+
+// 生物附属提供的只读展示资源，不属于身体账本或客户端变更命令。
+// 坐标为模型局部米，右手系，Y 向上、Z 向前；左右以生物自身为准。
+message BodyPresentation {
+  int32 schema_version = 1; // 当前为 1。
+  TemplateReference template = 2;
+  ModelPoint minimum = 3; // 整体包围盒；切层时保持同一坐标与相机尺度。
+  ModelPoint maximum = 4;
+  repeated PresentationLayer layers = 5;
+  repeated BodyVisual visuals = 6;
+}
+
+message ModelPoint {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+// 与顶点逐项对应的归一化 UV；贴图只从已安装的内容资源包读取。
+message ModelUv {
+  float u = 1;
+  float v = 2;
+}
+
+message PresentationLayer {
+  string id = 1; // 包内稳定身份，UI 不推断具体组织类型。
+  string display_name = 2;
+}
+
+enum BodyTargetKind {
+  BODY_TARGET_KIND_UNSPECIFIED = 0;
+  PART = 1;
+  TISSUE = 2;
+  ORGAN = 3;
+  MERIDIAN = 4;
+}
+
+message BodyVisual {
+  string id = 1; // 展示节点身份；多个几何节点可以绑定同一身体对象。
+  string display_name = 2;
+  string layer_id = 3;
+  BodyTargetKind target_kind = 4;
+  string target_id = 5; // 对应 BodySnapshot.structure 中指定种类的局部 ID。
+  repeated ModelPoint vertices = 6;
+  repeated uint32 triangles = 7 [packed = true]; // 每三个下标组成一个三角面。
+  fixed32 color_rgb = 8; // 0xRRGGBB，不包含透明度或任何业务数值。
+  string texture_resource = 9; // 可选 namespace:textures/...png；为空时使用纯色。
+  repeated ModelUv texture_uv = 10; // 使用贴图时数量必须等于 vertices，坐标为 [0,1]。
+  string description = 11; // 内容包提供的用途与位置说明，不包含实时身体数值。
+}
