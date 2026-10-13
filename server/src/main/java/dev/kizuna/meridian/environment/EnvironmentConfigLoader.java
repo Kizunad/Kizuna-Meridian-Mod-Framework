@@ -5,6 +5,10 @@ import dev.kizuna.meridian.error.MeridianErrors.Environment;
 import dev.kizuna.meridian.protocol.EnvironmentConfigProtobuf;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.BlockQiTransmission;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiConfig;
+import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentNumericRange;
+import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.FiveElementWeights;
+import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.TerrainQiProfile;
+import org.tomlj.TomlArray;
 import org.tomlj.Toml;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
@@ -88,7 +92,7 @@ public final class EnvironmentConfigLoader {
 
     private static void apply(TomlTable root, EnvironmentQiConfig.Builder builder) {
         // 按文件章节顺序覆盖，未知字段立即报错，不能让拼错的配置静默失效。
-        checkKeys(root, "", Set.of("config_version", "region", "absorption", "diffusion"));
+        checkKeys(root, "", Set.of("config_version", "region", "absorption", "diffusion", "generation"));
         if (root.contains("config_version")) {
             builder.setConfigVersion(integer(root, "config_version", "config_version"));
         }
@@ -126,6 +130,96 @@ public final class EnvironmentConfigLoader {
                 applyBlocks(blocks, builder);
             }
         }
+
+        TomlTable generation = table(root, "generation", "generation");
+        if (generation != null) {
+            applyGeneration(generation, builder);
+        }
+    }
+
+    private static void applyGeneration(TomlTable table, EnvironmentQiConfig.Builder config) {
+        // 通用范围与地形内容分开覆盖；最终发布仍由同一 Protobuf 校验入口检查。
+        checkKeys(table, "generation.", Set.of("rules_version", "dimension_id", "unclassified_min",
+                "unclassified_max", "boundary_min", "boundary_max", "preference_jitter", "profiles"));
+        var generation = config.getGeneration().toBuilder();
+        if (table.contains("rules_version")) {
+            generation.setRulesVersion(integer(table, "rules_version", "generation.rules_version"));
+        }
+        if (table.contains("dimension_id")) {
+            generation.setDimensionId(string(table.get("dimension_id"), "generation.dimension_id"));
+        }
+        generation.setUnclassifiedConcentration(range(table, "unclassified_", "generation.",
+                generation.getUnclassifiedConcentration()));
+        generation.setBoundaryTransmission(range(table, "boundary_", "generation.",
+                generation.getBoundaryTransmission()));
+        if (table.contains("preference_jitter")) {
+            generation.setPreferenceJitter(number(table, "preference_jitter", "generation.preference_jitter"));
+        }
+
+        // 按预设 ID 合并；biomes 和 weights 是完整替换，不能让旧数组元素残留。
+        TomlTable profiles = table(table, "profiles", "generation.profiles");
+        if (profiles != null) {
+            Map<String, TerrainQiProfile> merged = new TreeMap<>();
+            generation.getProfilesList().forEach(profile -> merged.put(profile.getId(), profile));
+            for (String id : profiles.keySet()) {
+                String path = "generation.profiles." + id + ".";
+                TomlTable definition = table(profiles, id, path);
+                checkKeys(definition, path, Set.of("biomes", "concentration_min", "concentration_max", "weights"));
+                var profile = merged.getOrDefault(id, TerrainQiProfile.getDefaultInstance()).toBuilder().setId(id);
+                profile.setConcentration(range(definition, "concentration_", path, profile.getConcentration()));
+                if (definition.contains("biomes")) {
+                    TomlArray biomes = array(definition, "biomes", path + "biomes");
+                    profile.clearBiomeIds();
+                    for (int index = 0; index < biomes.size(); index++) {
+                        profile.addBiomeIds(string(biomes.get(index), path + "biomes"));
+                    }
+                }
+                if (definition.contains("weights")) {
+                    TomlArray weights = array(definition, "weights", path + "weights");
+                    if (weights.size() != 5) {
+                        throw MeridianErrors.invalid(Environment.GENERATION_WEIGHTS);
+                    }
+                    profile.setWeights(FiveElementWeights.newBuilder()
+                            .setMetal(numericValue(weights.get(0), path + "weights"))
+                            .setWood(numericValue(weights.get(1), path + "weights"))
+                            .setWater(numericValue(weights.get(2), path + "weights"))
+                            .setFire(numericValue(weights.get(3), path + "weights"))
+                            .setEarth(numericValue(weights.get(4), path + "weights")));
+                }
+                merged.put(id, profile.build());
+            }
+            generation.clearProfiles().addAllProfiles(merged.values());
+        }
+        config.setGeneration(generation);
+    }
+
+    private static EnvironmentNumericRange range(TomlTable table, String prefix, String path,
+                                                  EnvironmentNumericRange original) {
+        // 区间两端可分别覆盖，缺省端点沿用原值；新预设缺失端点会在存在性校验中拒绝。
+        var range = original.toBuilder();
+        if (table.contains(prefix + "min")) {
+            range.setMinimum(number(table, prefix + "min", path + prefix + "min"));
+        }
+        if (table.contains(prefix + "max")) {
+            range.setMaximum(number(table, prefix + "max", path + prefix + "max"));
+        }
+        return range.build();
+    }
+
+    private static TomlArray array(TomlTable table, String key, String path) {
+        // 地形列表和五行权重必须是数组，拒绝把单值猜测成一个元素的列表。
+        if (!(table.get(List.of(key)) instanceof TomlArray result)) {
+            throw MeridianErrors.invalid(Environment.wrongType(path, "数组"));
+        }
+        return result;
+    }
+
+    private static String string(Object value, String path) {
+        // 内容 ID 的语法在协议层统一检查，此处只拒绝 TOML 类型错误。
+        if (!(value instanceof String result)) {
+            throw MeridianErrors.invalid(Environment.wrongType(path, "字符串"));
+        }
+        return result;
     }
 
     private static void applyBlocks(TomlTable blocks, EnvironmentQiConfig.Builder builder) {
@@ -167,7 +261,11 @@ public final class EnvironmentConfigLoader {
 
     private static double number(TomlTable table, String key, String path) {
         // TOML 的 1 和 1.0 都可表达连续数值；有限性与非负范围由协议入口统一检查。
-        Object value = table.get(List.of(key));
+        return numericValue(table.get(List.of(key)), path);
+    }
+
+    private static double numericValue(Object value, String path) {
+        // 表字段和权重数组共用数字读取规则，避免其中一条入口隐式接受字符串。
         if (value instanceof Long integer) {
             return integer.doubleValue();
         }

@@ -76,7 +76,7 @@ public class EnvironmentConfigurationTest {
     public void malformedFilesFailInsteadOfSilentlyFallingBack() throws Exception {
         // 拼错字段、重复键、类型错误与非法数值必须阻止安装配置，不能沿用看似有效的默认值。
         for (String invalid : new String[] {
-                "config_version = 2", "config_version = 1\nconfig_version = 1", "[broken",
+                "config_version = 3", "config_version = 2\nconfig_version = 2", "[broken",
                 "[regions]\nsize_chunks = 2", "[region]\nszie_chunks = 2", "region = 2",
                 "[region]\nsize_chunks = 0", "[region]\nsize_chunks = -1", "[region]\nsize_chunks = 1.5",
                 "[region]\nsize_chunks = 2147483648", "[region]\nsize_chunks = '2'",

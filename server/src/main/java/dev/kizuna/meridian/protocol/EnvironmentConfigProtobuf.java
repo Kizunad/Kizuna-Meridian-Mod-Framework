@@ -29,7 +29,7 @@ public final class EnvironmentConfigProtobuf {
     public static void validate(EnvironmentQiConfig config) {
         // 通用边界检查存在性、未知字段和有限非负数；这里检查配置自身关系。
         ProtoWire.validate(config);
-        ProtoWire.require(config.getConfigVersion() == 1, Environment.CONFIG_VERSION);
+        ProtoWire.require(config.getConfigVersion() == 2, Environment.CONFIG_VERSION);
         ProtoWire.require(config.getRegionSizeChunks() > 0, Environment.REGION_SIZE);
         ProtoWire.require(config.getDefaultBlockTransmission() < 1, Environment.DEFAULT_TRANSMISSION);
 
@@ -44,5 +44,6 @@ public final class EnvironmentConfigProtobuf {
         for (String air : new String[] {"minecraft:air", "minecraft:cave_air", "minecraft:void_air"}) {
             ProtoWire.require(Double.valueOf(1).equals(transmissions.get(air)), Environment.AIR_TRANSMISSION);
         }
+        TerrainQiProtobuf.validateConfig(config.getGeneration());
     }
 }

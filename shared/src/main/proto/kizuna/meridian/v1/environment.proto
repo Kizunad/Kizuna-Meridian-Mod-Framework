@@ -9,12 +9,73 @@ option java_outer_classname = "EnvironmentMessages";
 
 // 宿主加载 TOML 后交换的完整有效配置；省略默认值的文件不能直接作为线协议消息。
 message EnvironmentQiConfig {
-  int32 config_version = 1; // 当前为 1，独立于环境来源和身体版本。
+  int32 config_version = 1; // 当前为 2，独立于环境来源和身体版本。
   optional int32 region_size_chunks = 2; // 横向正方形区域的边长，正整数；高度由宿主世界提供。
   optional double absorption_volume_blocks_per_second = 3; // 格/模拟秒；一格指一个方块体积。
   optional double diffusion_speed_blocks_per_second = 4; // 方块边长/模拟秒；乘面积与浓度差得到元/秒。
   optional double default_block_transmission = 5; // 未列出方块的无量纲系数，范围 [0, 1)。
   repeated BlockQiTransmission block_transmissions = 6; // 方块 ID 唯一；允许第三方系数超过 1。
+  TerrainQiGenerationConfig generation = 7; // 完整地形生成配置，客户端不能修改。
+}
+
+message EnvironmentNumericRange {
+  optional double minimum = 1;
+  optional double maximum = 2;
+}
+
+// 五行权重先归一化再分配总量；不是五份独立的浓度。
+message FiveElementWeights {
+  optional double metal = 1;
+  optional double wood = 2;
+  optional double water = 3;
+  optional double fire = 4;
+  optional double earth = 5;
+}
+
+message TerrainQiProfile {
+  string id = 1;
+  repeated string biome_ids = 2; // 精确 ID 映射，空列表可停用该预设的匹配。
+  EnvironmentNumericRange concentration = 3; // 元/格。
+  FiveElementWeights weights = 4;
+}
+
+message TerrainQiGenerationConfig {
+  optional int32 rules_version = 1; // 随机算法版本，当前为 1。
+  string dimension_id = 2; // 默认主世界；其他维度须显式安装自己的配置。
+  EnvironmentNumericRange unclassified_concentration = 3; // 未分类地形的随机区间从此范围内抽取。
+  EnvironmentNumericRange boundary_transmission = 4; // 相邻区域共享的随机传播倍率。
+  optional double preference_jitter = 5; // 每种权重独立乘 [1-jitter, 1+jitter)，范围 [0,1)。
+  repeated TerrainQiProfile profiles = 6;
+}
+
+// 可信世界生成数据，不是客户端请求；宿主只对尚未初始化的区域调用。
+message TerrainQiRegionRequest {
+  int32 protocol_version = 1;
+  string world_seed = 2; // 稳定种子文本；Minecraft 长整数采用十进制，不丢失负号。
+  string dimension_id = 3;
+  string source_id = 4; // 稳定且唯一的区域身份，可包含负坐标。
+  string biome_id = 5; // 由地形生成元数据提供，无需扫描方块。
+  optional double volume_blocks = 6;
+}
+
+// 首次初始化的候选值；保存此记录不等于新增一份可独立使用的环境库存。
+message TerrainQiRegionSeed {
+  TerrainQiRegionRequest request = 1;
+  optional int32 rules_version = 2;
+  EnvironmentNumericRange concentration = 3; // 本地形实际采用的区间，含未分类地形的抽样结果。
+  FiveElementWeights weights = 4; // 区域扰动后的五行权重。
+  QiInventory initial_qi = 5; // 游离态五行灵气；实际库存由宿主原子初始化并持久化。
+}
+
+message TerrainQiBoundaryRequest {
+  int32 protocol_version = 1;
+  string world_seed = 2;
+  string dimension_id = 3;
+  string boundary_id = 4;
+  string first_source_id = 5;
+  string second_source_id = 6;
+  optional double area_blocks = 7;
+  optional int64 rules_revision = 8; // 宿主安装配置的世代，区别于随机算法版本。
 }
 
 message BlockQiTransmission {

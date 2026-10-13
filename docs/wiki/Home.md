@@ -1,6 +1,6 @@
 # Kizuna's Meridian Mod Framework Wiki
 
-通用身体、经脉与功法扩展框架的设计和接入文档。基础模组负责身体运行、数据与简易操作入口，功法附属 JAR 提供具体内容，可选 3D 经脉世界 Addon 提供工厂式建造交互，宿主负责世界接入。
+通用身体、经脉与功法扩展框架的设计和接入文档。基础模组负责通用身体运行、权威数据与简易操作入口；人体由独立生物附属模组提供，功法附属 JAR 提供功法内容，可选 3D 经脉世界 Addon 提供工厂式建造交互，宿主负责世界接入。各类生物内容使用相同公开契约，主模组不内置默认人体。
 
 > 当前已实现 Java 17 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。尚无可安装 Fabric 模组或正式版本；肌肉真元增益/攻击、连续流、实际宿主调度/实体死亡、认证/网络与磁盘存储仍待实现。
 
@@ -14,6 +14,7 @@
 | 理解真元、经脉与成长 | [经脉与真元](Meridian-and-Qi.md) |
 | 对接环境来源、供给与吸收/释放明细 | [环境真元交换](Environment-Qi.md) |
 | 配置 chunk 区域、浓度供给和方块传播 | [环境区域与配置](Environment-Configuration.md) |
+| 配置地形浓度、五行偏好与了解肺炼化 | [地形灵气生成](Terrain-Qi-Generation.md) |
 | 制作功法附属 JAR | [功法扩展](Technique-Addons.md) |
 | 理解简易操作与可选 3D 建造 | [经脉操作与 3D Addon](Inner-World.md) |
 | 接入单机或 Bong | [宿主接入](Host-Integration.md) |

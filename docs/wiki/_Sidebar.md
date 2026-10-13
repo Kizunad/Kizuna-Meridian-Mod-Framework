@@ -6,6 +6,7 @@
 - [经脉与真元](Meridian-and-Qi.md)
 - [环境真元交换](Environment-Qi.md)
 - [环境区域与配置](Environment-Configuration.md)
+- [地形灵气生成](Terrain-Qi-Generation.md)
 - [功法附属 JAR](Technique-Addons.md)
 - [经脉操作与 3D Addon](Inner-World.md)
 - [单机与 Bong 接入](Host-Integration.md)

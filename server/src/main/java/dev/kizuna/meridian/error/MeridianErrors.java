@@ -74,6 +74,15 @@ public final class MeridianErrors {
         public static final String BOUNDARY_PATCH_MISSING = "无法删除不存在的环境边界分片";
         public static final String BOUNDARY_PATCH_LIMIT = "环境边界分片数超过协议上限";
         public static final String BOUNDARY_RULES_REQUIRED = "环境边界传播规则不能为空";
+        public static final String GENERATION_VERSION = "不支持的地形灵气生成规则版本";
+        public static final String GENERATION_DIMENSION = "地形生成请求的维度与配置不匹配";
+        public static final String GENERATION_RANGE = "生成区间必须满足 0 <= 最小值 <= 最大值";
+        public static final String GENERATION_WEIGHTS = "五行权重必须全部为正且合计有限";
+        public static final String GENERATION_JITTER = "地形五行权重扰动必须在 [0, 1) 范围内";
+        public static final String DUPLICATE_TERRAIN = "地形预设 ID 或生物群系映射重复";
+        public static final String GENERATION_NUMERIC = "灵气生成数量超出可表示范围";
+        public static final String GENERATION_SEED = "初始灵气记录与区间或五行权重不一致";
+        public static final String GENERATION_HASH = "运行环境缺少 SHA-256 算法";
 
         private Environment() {
             // 集中诊断信息，避免配置层与运行层各自定义异常类型。

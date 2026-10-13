@@ -49,6 +49,8 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 环境空间与缓存使用 `EnvironmentTopologyProtobuf`：宿主按生成结果或内容定义声明 `EnvironmentSpace`，普通背景、房间和通道各持有唯一来源身份。已确认采用随机区域及边界传播倍率，不接入世界扫描、方块变化监听和修炼室自动识别。`EnvironmentBoundaryCache` 汇总共享边界的分片贡献，显式参数变更通过 Protobuf 更新。宿主保存生成结果、位置归属及当前账本；定义失效时先停用相关缓存，确认后原子发布新空间与连接，详见[空间与边界接入约定](Environment-Configuration.md)。
 
+`TerrainQiGenerator` 已接受可信 `TerrainQiRegionRequest` / `TerrainQiBoundaryRequest`，返回按地形区间与五行偏好生成的初始候选及共享边界。宿主从地形生成元数据提供群系，不查询方块；按来源唯一键原子初始化一次，并保存实际库存。`TerrainQiProtobuf` 校验输入与候选，但不执行初始化事务。主世界配置、未知群系和确定性算法见[地形灵气生成](Terrain-Qi-Generation.md)。
+
 这些 Java 回调仅用于进程内装配，不是第二套跨语言协议。持久化回执由 protoc 生成的 `CommandReceipt` 表达；其他语言自行实现相同事务语义，不要求加载 Java 类。时间回执中的释放账户必须纳入环境事务，实体死亡动作的可靠记录也由宿主一起保存；审计回调只是提交后的尽力通知。
 
 ## 可信时间与离线策略接入

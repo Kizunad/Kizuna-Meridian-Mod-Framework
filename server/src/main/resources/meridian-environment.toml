@@ -1,5 +1,5 @@
-# 环境真元配置 v1。部分覆盖文件可以省略其他字段；完整默认值由此文件提供。
-config_version = 1
+# 环境真元配置 v2。部分覆盖文件可以省略其他字段；完整默认值由此文件提供。
+config_version = 2
 
 [region]
 # 横向 N×N chunk；一个 chunk 为 16×16 格，高度采用宿主世界的有效高度。
@@ -114,3 +114,92 @@ default_block_transmission = 0.10
 # structure_void 是实际方块 ID，与无介质 void_air 区分。
 "minecraft:structure_void" = 0.95
 # 未来特殊方块可覆盖为 1 以上，例如 "addon:qi_conduit" = 2.5。
+
+[generation]
+rules_version = 1
+dimension_id = "minecraft:overworld"
+# 未分类地形先抽两个端点组成专属区间，再按区域身份在该区间内取值。
+unclassified_min = 0.20
+unclassified_max = 1.60
+boundary_min = 0.25
+boundary_max = 1.00
+preference_jitter = 0.20
+
+# 浓度单位元/格；权重顺序固定为金、木、水、火、土。初始值待实机平衡。
+[generation.profiles."meridian:desert"]
+biomes = ["minecraft:desert"]
+concentration_min = 0.10
+concentration_max = 0.30
+weights = [10, 3, 5, 22, 60]
+
+[generation.profiles."meridian:badlands"]
+biomes = ["minecraft:badlands", "minecraft:eroded_badlands"]
+concentration_min = 0.15
+concentration_max = 0.40
+weights = [25, 3, 2, 20, 50]
+
+[generation.profiles."meridian:stony"]
+biomes = ["minecraft:stony_peaks", "minecraft:windswept_hills", "minecraft:windswept_gravelly_hills", "minecraft:stony_shore", "minecraft:dripstone_caves", "minecraft:deep_dark"]
+concentration_min = 0.25
+concentration_max = 0.60
+weights = [45, 5, 10, 5, 35]
+
+[generation.profiles."meridian:snow"]
+biomes = ["minecraft:snowy_plains", "minecraft:ice_spikes", "minecraft:snowy_slopes", "minecraft:frozen_peaks", "minecraft:jagged_peaks", "minecraft:snowy_beach"]
+concentration_min = 0.25
+concentration_max = 0.55
+weights = [15, 10, 50, 5, 20]
+
+[generation.profiles."meridian:savanna"]
+biomes = ["minecraft:savanna", "minecraft:savanna_plateau", "minecraft:windswept_savanna", "minecraft:wooded_badlands"]
+concentration_min = 0.45
+concentration_max = 0.85
+weights = [10, 40, 10, 15, 25]
+
+[generation.profiles."meridian:plains"]
+biomes = ["minecraft:plains", "minecraft:sunflower_plains", "minecraft:meadow"]
+concentration_min = 0.60
+concentration_max = 1.00
+weights = [10, 45, 15, 10, 20]
+
+[generation.profiles."meridian:forest"]
+biomes = ["minecraft:forest", "minecraft:flower_forest", "minecraft:birch_forest", "minecraft:old_growth_birch_forest", "minecraft:dark_forest", "minecraft:cherry_grove", "minecraft:windswept_forest", "minecraft:lush_caves"]
+concentration_min = 1.00
+concentration_max = 1.80
+weights = [10, 60, 15, 5, 10]
+
+[generation.profiles."meridian:taiga"]
+biomes = ["minecraft:taiga", "minecraft:old_growth_pine_taiga", "minecraft:old_growth_spruce_taiga", "minecraft:snowy_taiga", "minecraft:grove"]
+concentration_min = 0.80
+concentration_max = 1.40
+weights = [10, 55, 20, 5, 10]
+
+[generation.profiles."meridian:jungle"]
+biomes = ["minecraft:jungle", "minecraft:sparse_jungle", "minecraft:bamboo_jungle"]
+concentration_min = 1.50
+concentration_max = 2.40
+weights = [5, 65, 20, 5, 5]
+
+[generation.profiles."meridian:swamp"]
+biomes = ["minecraft:swamp", "minecraft:mangrove_swamp"]
+concentration_min = 1.20
+concentration_max = 2.00
+weights = [5, 50, 30, 5, 10]
+
+[generation.profiles."meridian:river"]
+biomes = ["minecraft:river", "minecraft:frozen_river", "minecraft:beach"]
+concentration_min = 0.60
+concentration_max = 1.10
+weights = [10, 15, 55, 5, 15]
+
+[generation.profiles."meridian:ocean"]
+biomes = ["minecraft:ocean", "minecraft:deep_ocean", "minecraft:cold_ocean", "minecraft:deep_cold_ocean", "minecraft:frozen_ocean", "minecraft:deep_frozen_ocean", "minecraft:lukewarm_ocean", "minecraft:deep_lukewarm_ocean", "minecraft:warm_ocean"]
+concentration_min = 0.80
+concentration_max = 1.40
+weights = [10, 10, 65, 5, 10]
+
+[generation.profiles."meridian:mushroom"]
+biomes = ["minecraft:mushroom_fields"]
+concentration_min = 1.40
+concentration_max = 2.20
+weights = [5, 60, 20, 5, 10]
