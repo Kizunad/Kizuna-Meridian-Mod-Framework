@@ -16,6 +16,8 @@ public final class IntakeProtobuf {
         ProtoWire.validate(request);
         new Anatomy.OrganId(request.getOrganId());
         ProtoWire.require(!BodyProtobuf.fromInventory(request.getQi()).entries().isEmpty(), Environment.INTAKE_POSITIVE);
+        ProtoWire.require(request.getLoadsCount() <= 32, dev.kizuna.meridian.error.MeridianErrors.INVALID_TISSUE_LOADS);
+        request.getLoadsList().forEach(CapabilityProtobuf::fromExertion);
     }
 
     public static void validateResult(MeridianMessages.BodyCommand command, MeridianMessages.OrganIntakeResult result) {

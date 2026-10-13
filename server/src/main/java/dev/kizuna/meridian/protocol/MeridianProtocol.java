@@ -144,6 +144,11 @@ public final class MeridianProtocol {
                 ProtoWire.require(request.getRecipeVersion() > 0, Protocol.RECIPE_RECEIPT_MISMATCH);
             }
             case EXERT_TISSUE -> CapabilityProtobuf.fromExertion(command.getExertTissue());
+            case EXERT_TISSUES -> {
+                var loads = command.getExertTissues().getLoadsList();
+                ProtoWire.require(!loads.isEmpty() && loads.size() <= 32, MeridianErrors.INVALID_TISSUE_LOADS);
+                loads.forEach(CapabilityProtobuf::fromExertion);
+            }
             case INTAKE_QI -> IntakeProtobuf.validateRequest(command.getIntakeQi());
             case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
         }

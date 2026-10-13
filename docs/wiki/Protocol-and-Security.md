@@ -12,6 +12,7 @@
 | `shared/src/main/proto/kizuna/meridian/v1/protocol.proto` | 查询、寿元支出/时间结算/运输意图、内部可信时间计划、成功结果、持久化回执和公开拒绝类别 |
 | `shared/src/main/proto/kizuna/meridian/v1/environment.proto` | 可信环境供给、候选吸收/释放交换和双账户提交回执 |
 | `shared/src/main/proto/kizuna/meridian/v1/addon.proto` | 可信附属清单、宿主能力、依赖、模板/配方注册、内容引用及缺包诊断 |
+| `shared/src/main/proto/kizuna/meridian/v1/gathering.proto` / `breathing.proto` | 聚气查询、单轮启动、手动吸呼、可信生物呼吸能力及只读投影；详见[聚气编排](Gathering.md) |
 | `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` / `EnvironmentMessages` / `AddonMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
 | `BodyProtobuf` | 核心模板/快照与生成类型双向转换、独立二进制编解码 |
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
@@ -61,6 +62,7 @@ python3 "scripts/wiki.py" check
 | `ContentReferences` / `ContentAvailabilityReport` | 宿主保存引用及查询当前目录可用性 | 精确 ID/种类/版本、状态与列表边界；不授予执行权限，不自动迁移 |
 | 独立 `TimeAdvancePlan` 字节 | 可信宿主内部事实，不是客户端请求分支 | 目标游标、显式有限非负倍率、推进模式 |
 | `BodyCommand.intake_qi` / `CommandReceipt.organ_intake` | 摄入意图 / 可信计划与环境提交事实 | 器官 ID、正数原始明细；成功推进年龄与游标，并与环境原子交换 |
+| 独立 `GatheringRequest` / `GatheringResponse` | 授权会话上的单轮聚气操作与展示 | 有界解码、请求版本、目标身份、预期 revision、真实配方与线路；每个资源步骤复用原有命令处理器 |
 | 独立 `EnvironmentQiOffer` / `EnvironmentQiExchange` / `EnvironmentQiReceipt` / `EnvironmentQiSource` 字节 | 可信宿主与权威身体实现之间的环境事实及来源存档 | 来源/身体身份、版本、有效期、毛额/速率、共享预算及提交版本；详见[环境契约](Environment-Qi.md) |
 | `ResponseEnvelope.body_snapshot` | 权威宿主 → 有权读取完整身体的调用方 | 完整身体与所有模块、账户、版本、时序的核心校验 |
 | `ResponseEnvelope.command_committed` | 权威宿主 → 已授权调用者 | 身体身份、前后 revision，恰好增加 1 |
@@ -105,6 +107,7 @@ EOF
 - 协议版本、快照 schema、模板内容版本分别记录，当前线协议只接受 `1`，身体快照 schema 只接受 `2`。
 - 时间与 revision 使用非负 `int64`，精确保留至 `Long.MAX_VALUE`；真元与其他连续量使用有限 `double`，沿用[基础数据定义](Data-Definitions.md)的单位与机器舍入规则。
 - 合法为零的数值与布尔值声明为 `optional`，**v1 业务语义仍要求显式提供**。`0`、`false` 与缺失不同；单值嵌套消息通常必填，空账户须显式提供空 `QiInventory`。条件字段为：`CommandReceipt.time_advance` 仅在时间命令必填，`organ_recipe` 仅在启动加工命令必填，`organ_intake` 仅在摄入命令必填，其他命令须缺省；`OrganState.process` 在空闲时缺省，`OrganDefinition.intake` 缺省表示无摄入能力。
+- 手动吐纳的 `BreathControl.aim_z` 是可省略的方向深度；省略时执行方取入口平面 `0.5`。显式提供时必须有限且位于 `[0,1]`，不改变其他字段的必填规则。
 - 字符串非空白；所有单字符串最多 1024 个 UTF-8 字节，单列表最多 4096 项，全消息已知字段值最多 65536 个，整个载荷最多 1,048,576 字节，解析深度最多 32。
 - 未设置或未知枚举、未选择 oneof、未知字段、超限、截断、非法 UTF-8 和非有限数字全部拒绝。当前精确版本不会默默丢弃未知身体字段；不是任意新版消息都能由旧版读取。
 - `parseFrom` 只证明 Protobuf 格式可解码。`BodyProtobuf` 还执行核心构造校验，检查重复 ID、端口引用、状态对应、容量与 HP 上限、重复真元明细和在途时序。禁止把生成 Builder 当成已校验权威对象。
@@ -206,6 +209,8 @@ EOF
 ## 已实现的组织与器官意图
 
 `BodyCommand` 新增 `start_organ_recipe = 13` 和 `exert_tissue = 14`；`RequestEnvelope.get_tissue_capability = 12`，对应响应 `tissue_capability = 13`。具体字段、单位和计算规则见[功法扩展](Technique-Addons.md)。三个资源操作（运输、启动加工、做功）均要求可信时间已结算且为 `ACTIVE`，共享授权、版本、去重、私有策略与原子提交路径。
+
+`exert_tissues = 16` 一次提交 1～32 个不同组织的做功需求，先在同一原始快照验算，再合并一次 revision。力可为零，功率和时长必须为正；用于呼吸与注意力等无外部作用力的能耗。`IntakeQi.loads = 3` 可附同类组织成本，与摄入、环境扣账和成功回执一次提交，任何一项失败均不写账。恢复回执时同样复算各组织与摄入结果。
 
 启动加工成功回执必须包含 `CommandReceipt.organ_recipe = 6`，其 ID/版本与命令一致；事务用该固定定义复算输入扣除和加工事实。完成由时间命令处理，存档中的配方事实足以继续，不重新读取可能卸载的包。这个内部回执字段不能成为客户端注册新配方的入口。
 

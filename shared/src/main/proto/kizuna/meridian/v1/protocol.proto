@@ -49,6 +49,7 @@ message BodyCommand {
     StartOrganRecipe start_organ_recipe = 13;
     ExertTissue exert_tissue = 14;
     IntakeQi intake_qi = 15;
+    ExertTissues exert_tissues = 16;
   }
 }
 
@@ -56,6 +57,7 @@ message BodyCommand {
 message IntakeQi {
   string organ_id = 1;
   QiInventory qi = 2; // 正数总量，整笔成功或拒绝；保留相态与属性。
+  repeated ExertTissue loads = 3; // 可选：本次摄入的组织代价，与环境和身体入账原子提交。
 }
 
 message OrganIntakeResult {
@@ -90,6 +92,11 @@ message ExertTissue {
   double force_newtons = 2;
   double power_watts = 3;
   double duration_seconds = 4;
+}
+
+// 同一动作同时消耗多个组织预算，整批校验后一次提交。
+message ExertTissues {
+  repeated ExertTissue loads = 1;
 }
 
 // 宿主内部可信事实，不是 RequestEnvelope 的可上传字段。
@@ -182,4 +189,6 @@ enum FailureCode {
   ENVIRONMENT_REVISION_CONFLICT = 31;
   ENVIRONMENT_INTERVAL_INVALID = 32;
   ENVIRONMENT_BUDGET_EXCEEDED = 33;
+  MERIDIAN_UNOPENED = 34;
+  GATHERING_BUSY = 35;
 }

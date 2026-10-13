@@ -3,6 +3,8 @@ package dev.kizuna.meridian.server;
 import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.OrganIntake;
+import dev.kizuna.meridian.core.TissueCapabilities;
+import dev.kizuna.meridian.protocol.CapabilityProtobuf;
 import dev.kizuna.meridian.environment.EnvironmentAbsorption;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
 import dev.kizuna.meridian.protocol.IntakeProtobuf;
@@ -23,6 +25,16 @@ final class OrganIntakeExecution {
         IntakeProtobuf.validateRequest(request);
         var result = OrganIntake.apply(body, new Anatomy.OrganId(request.getOrganId()),
                 BodyProtobuf.fromInventory(request.getQi()), TimeProtobuf.fromMessage(plan));
+        BodySnapshot updatedBody = result.body();
+        if (request.getLoadsCount() > 0) {
+            // 在同一原身体上验算全部代价，合并到摄入候选；事务仍只递增一次版本。
+            var loads = request.getLoadsList().stream().map(CapabilityProtobuf::fromExertion).toList();
+            BodySnapshot exerted = TissueCapabilities.exertAll(body, loads);
+            updatedBody = new BodySnapshot(updatedBody.schemaVersion(), updatedBody.id(), updatedBody.template(),
+                    updatedBody.structure(), updatedBody.realm(), updatedBody.partStates(), exerted.tissueStates(),
+                    updatedBody.organStates(), updatedBody.meridianStates(), updatedBody.transits(), updatedBody.vitality(),
+                    updatedBody.settledAt(), updatedBody.revision());
+        }
         var offer = EnvironmentAbsorption.offer(source, body.id().value(), BodyProtobuf.toTime(body.settledAt()), plan.getTarget());
         var exchange = EnvironmentQiExchange.newBuilder().setExchangeId("intake-" + result.body().revision())
                 .setOffer(offer).setExpectedBodyRevision(body.revision())
@@ -34,6 +46,6 @@ final class OrganIntakeExecution {
         var receipt = EnvironmentQiReceipt.newBuilder().setExchange(exchange)
                 .setBodyRevision(result.body().revision()).setSourceRevision(updatedSource.getRevision()).build();
         var fact = OrganIntakeResult.newBuilder().setPlan(plan).setEnvironment(receipt).build();
-        return new Result(result.body(), updatedSource, fact);
+        return new Result(updatedBody, updatedSource, fact);
     }
 }

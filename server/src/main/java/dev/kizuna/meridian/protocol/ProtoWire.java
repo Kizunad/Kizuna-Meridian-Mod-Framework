@@ -65,8 +65,9 @@ final class ProtoWire {
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_recipe")
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_intake")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganDefinition.intake")
-                    || field.getFullName().equals("kizuna.meridian.v1.OrganState.process")) && !message.hasField(field)) {
-                // 回执随操作出现；器官可以没有加工任务或摄入能力，其他单值消息仍须存在。
+                    || field.getFullName().equals("kizuna.meridian.v1.OrganState.process")
+                    || field.getFullName().equals("kizuna.meridian.v1.BreathControl.aim_z")) && !message.hasField(field)) {
+                // 仅跳过契约明确允许省略的字段；吐纳深度由执行方补为入口所在平面。
                 continue;
             }
             if (field.isRepeated()) {

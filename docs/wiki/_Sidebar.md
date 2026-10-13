@@ -5,6 +5,7 @@
 - [身体展示资源](Body-Presentation.md)
 - [身体数据、寿命与存档](Body-and-Persistence.md)
 - [经脉与真元](Meridian-and-Qi.md)
+- [一次聚气与宿主编排](Gathering.md)
 - [环境真元交换](Environment-Qi.md)
 - [环境区域与配置](Environment-Configuration.md)
 - [地形灵气生成](Terrain-Qi-Generation.md)

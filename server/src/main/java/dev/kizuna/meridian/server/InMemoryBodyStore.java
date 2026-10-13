@@ -252,6 +252,14 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                     throw MeridianErrors.inconsistent(Host.CAPABILITY_STAGE_MISMATCH);
                 }
             }
+            if (receipt.getCommand().hasExertTissues()) {
+                // 多组织消耗同样复核整笔结果，恢复或重试不能漏掉其中一份疲劳。
+                var loads = receipt.getCommand().getExertTissues().getLoadsList().stream()
+                        .map(CapabilityProtobuf::fromExertion).toList();
+                if (!next.equals(TissueCapabilities.exertAll(original.snapshot(), loads))) {
+                    throw MeridianErrors.inconsistent(Host.CAPABILITY_STAGE_MISMATCH);
+                }
+            }
             if (receipt.getCommand().hasTransportQi()) {
                 // 直接使用事务适配也不能伪造运输余额，核验完整源扣除与唯一在途记录。
                 var expected = QiTransport.start(original.snapshot(),

@@ -6,6 +6,8 @@ import dev.kizuna.meridian.error.MeridianErrors.Data;
 import dev.kizuna.meridian.error.MeridianErrors.TransportRejectionReason;
 
 import java.util.ArrayList;
+import java.util.List;
+import java.util.HashSet;
 
 /** 组织自身的能力与做功规则；不决定具体武器伤害、移速或世界动作。 */
 public final class TissueCapabilities {
@@ -15,9 +17,9 @@ public final class TissueCapabilities {
 
     public record Exertion(Anatomy.TissueId tissueId, double forceNewtons, double powerWatts, double durationSeconds) {
         public Exertion {
-            // 本切片表达有机械输出的单次做功；静态支撑与持续任务另建明确规则。
+            // 做功需要正功率与时长；神经组织等非机械负载可以没有外部作用力。
             MeridianErrors.required(tissueId, Data.TISSUE_ID_REQUIRED);
-            DataChecks.positive(forceNewtons, "做功力量");
+            DataChecks.nonNegative(forceNewtons, "做功力量");
             DataChecks.positive(powerWatts, "做功功率");
             DataChecks.positive(durationSeconds, "做功时长");
         }
@@ -128,6 +130,29 @@ public final class TissueCapabilities {
         // 5. 返回完整候选身体，只替换组织状态并递增版本；实际提交仍由宿主事务完成。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), updatedTissues, body.organStates(), body.meridianStates(), body.transits(),
+                body.vitality(), body.settledAt(), body.revision() + 1);
+    }
+
+    public static BodySnapshot exertAll(BodySnapshot body, List<Exertion> loads) {
+        // 一次动作的全部组织先在内存中验算；任何失败都不发布部分疲劳。
+        if (loads.isEmpty() || loads.size() > 32) {
+            throw MeridianErrors.invalid(MeridianErrors.INVALID_TISSUE_LOADS);
+        }
+        var identities = new HashSet<Anatomy.TissueId>();
+        var updated = new ArrayList<>(body.tissueStates());
+        for (Exertion load : loads) {
+            if (!identities.add(load.tissueId())) {
+                throw MeridianErrors.invalid(MeridianErrors.INVALID_TISSUE_LOADS);
+            }
+            BodySnapshot candidate = exert(body, load);
+            for (int index = 0; index < updated.size(); index++) {
+                if (updated.get(index).id().equals(load.tissueId())) {
+                    updated.set(index, candidate.tissueStates().get(index));
+                }
+            }
+        }
+        return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
+                body.partStates(), updated, body.organStates(), body.meridianStates(), body.transits(),
                 body.vitality(), body.settledAt(), body.revision() + 1);
     }
 

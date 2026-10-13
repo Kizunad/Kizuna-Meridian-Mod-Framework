@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+import "kizuna/meridian/v1/protocol.proto";
+import "kizuna/meridian/v1/breathing.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "GatheringMessages";
+
+// 一次聚气的操作入口。宿主先绑定身份、身体和会话，不接受客户端声明来源或时间。
+message GatheringRequest {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  string body_id = 3;
+  oneof operation {
+    InspectGathering inspect = 10;
+    StartGathering start = 11;
+    BreathControl breath = 12;
+  }
+}
+
+message InspectGathering {}
+
+message StartGathering {
+  optional int64 expected_revision = 1;
+  string organ_id = 2;
+  string recipe_id = 3;
+  int32 recipe_version = 4;
+  string connection_id = 5;
+}
+
+message GatheringResponse {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  oneof result {
+    GatheringView view = 10;
+    RequestFailure failure = 11;
+  }
+}
+
+message GatheringView {
+  BodySnapshot body = 1;
+  GatheringEnvironment environment = 2;
+  repeated GatheringChoice choices = 3;
+  GatheringProgress progress = 4;
+  BreathingView breathing = 5; // 缺省表示宿主未提供手动吐纳能力。
+}
+
+// 只读预览，不是预留或允许客户端上传的环境库存。
+message GatheringEnvironment {
+  bool available = 1;
+  QiInventory qi = 2;
+  double concentration_per_block = 3;
+  double supply_per_second = 4;
+}
+
+message GatheringChoice {
+  string organ_id = 1;
+  OrganRecipe recipe = 2;
+  string connection_id = 3;
+  string target_meridian_id = 4;
+  double target_remaining_qi = 5; // 扣除所有入向在途预约后的容量。
+  double intake_per_second = 6;
+}
+
+message GatheringProgress {
+  GatheringStage stage = 1;
+  string organ_id = 2; // IDLE 时为空。
+  string target_meridian_id = 3;
+  int64 started_millis = 4; // 当前阶段的模拟时间，不用于客户端算账。
+  int64 next_boundary_millis = 5; // 0 表示没有后续自动步骤。
+  FailureCode failure = 6; // 非 FAILED 时为未指定。
+  double stored_qi = 7; // 仅 COMPLETED 记录本轮实际到达量。
+}
+
+enum GatheringStage {
+  GATHERING_STAGE_UNSPECIFIED = 0;
+  IDLE = 1;
+  INTAKING = 2;
+  REFINING = 3;
+  TRANSPORTING = 4;
+  COMPLETED = 5;
+  FAILED = 6;
+}

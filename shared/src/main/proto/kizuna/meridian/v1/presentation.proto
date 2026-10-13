@@ -16,6 +16,15 @@ message BodyPresentation {
   ModelPoint maximum = 4;
   repeated PresentationLayer layers = 5;
   repeated BodyVisual visuals = 6;
+  BreathingPresentation breathing = 7;
+}
+
+message BreathingPresentation {
+  string surface_layer = 1;
+  string animation_provider = 2;
+  string animation_id = 3;
+  ModelPoint intake_point = 4; // 模型局部米，通常位于口鼻。
+  string intake_bone = 5;
 }
 
 message ModelPoint {
@@ -55,4 +64,5 @@ message BodyVisual {
   string texture_resource = 9; // 可选 namespace:textures/...png；为空时使用纯色。
   repeated ModelUv texture_uv = 10; // 使用贴图时数量必须等于 vertices，坐标为 [0,1]。
   string description = 11; // 内容包提供的用途与位置说明，不包含实时身体数值。
+  string animation_bone = 12; // 可选：内容提供的动画挂点，UI 不推断人体坐标。
 }

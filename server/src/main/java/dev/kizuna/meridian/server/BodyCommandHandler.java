@@ -161,7 +161,7 @@ public final class BodyCommandHandler<C> {
         MeridianMessages.OrganIntakeResult intakeFact = null;
         try {
             // 瞬时发运、加工启动和做功使用已结算时刻；摄入自身消费可信活动区间。
-            if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue()) {
+            if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue() || command.hasExertTissues()) {
                 requireActiveSettledTime(trustedContext, body);
             }
             // 先执行纯计算基础校验，私有策略无权跳过余额、死亡或版本上限约束。
@@ -194,6 +194,12 @@ public final class BodyCommandHandler<C> {
                     // 解码只提取负载，身体能否完成动作及疲劳变化由核心计算。
                     TissueCapabilities.Exertion exertion = CapabilityProtobuf.fromExertion(command.getExertTissue());
                     yield TissueCapabilities.exert(body, exertion);
+                }
+                case EXERT_TISSUES -> {
+                    // 呼吸肌和控制组织等共同负载使用同一候选身体与一次事务。
+                    var loads = command.getExertTissues().getLoadsList().stream()
+                            .map(CapabilityProtobuf::fromExertion).toList();
+                    yield TissueCapabilities.exertAll(body, loads);
                 }
                 case INTAKE_QI -> {
                     // 时间和整个区间的来源均来自可信宿主；账户必须在同一事务内读取和锁定。
@@ -321,6 +327,7 @@ public final class BodyCommandHandler<C> {
     private static MeridianMessages.FailureCode transportFailureCode(TransportRejectionReason reason) {
         // 运输拒绝与协议类别逐项对应，方便调用者调整容量、线路或申请吞吐。
         return switch (reason) {
+            case MERIDIAN_UNOPENED -> MeridianMessages.FailureCode.MERIDIAN_UNOPENED;
             case BODY_DEAD -> MeridianMessages.FailureCode.BODY_DEAD;
             case REVISION_EXHAUSTED -> MeridianMessages.FailureCode.REVISION_EXHAUSTED;
             case NUMERIC_LIMIT -> MeridianMessages.FailureCode.NUMERIC_LIMIT;

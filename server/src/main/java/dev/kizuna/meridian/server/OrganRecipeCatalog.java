@@ -32,5 +32,13 @@ public final class OrganRecipeCatalog {
         return Optional.ofNullable(recipes.get(new Key(id, version)));
     }
 
+    public List<BodyMessages.OrganRecipe> definitions() {
+        // 固定顺序便于客户端展示与宿主过滤，返回值不能改写权威目录。
+        return recipes.values().stream()
+                .sorted(java.util.Comparator.comparing(BodyMessages.OrganRecipe::getId)
+                        .thenComparingInt(BodyMessages.OrganRecipe::getVersion))
+                .toList();
+    }
+
     private record Key(String id, int version) { }
 }

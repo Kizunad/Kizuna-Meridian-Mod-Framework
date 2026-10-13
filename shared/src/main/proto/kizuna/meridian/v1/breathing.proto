@@ -1,0 +1,63 @@
+syntax = "proto3";
+package kizuna.meridian.v1;
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "BreathingMessages";
+import "kizuna/meridian/v1/protocol.proto";
+
+// 可信生物内容。空气与真元是不同资源；空腔大小不能替代真元容量。
+message BreathingProfile {
+  repeated BreathingOrgan organs = 1;
+  string respiratory_tissue_id = 2;
+  string attention_tissue_id = 3;
+  double respiratory_watts = 4;
+  double attention_watts = 5;
+  repeated string recipe_ids = 6;
+}
+message BreathingOrgan {
+  string organ_id = 1;
+  double air_capacity_liters = 2;
+  double airflow_liters_per_second = 3;
+}
+
+// 鼠标仅提交三维方向目标；数量、时长、粒子命中由宿主决定。
+message BreathControl {
+  BreathAction action = 1;
+  double aim_x = 2;
+  double aim_y = 3;
+  int64 sequence = 4; // 同会话严格递增，拒绝迟到控制。
+  optional double aim_z = 5; // 三维局部坐标 [0,1]；省略时取入口所在的 0.5 平面。
+}
+enum BreathAction {
+  BREATH_ACTION_UNSPECIFIED = 0;
+  BEGIN_BREATHING = 1;
+  INHALE = 2;
+  EXHALE = 3;
+  HOLD = 4;
+  END_BREATHING = 5;
+}
+message BreathingView {
+  bool available = 1;
+  bool active = 2;
+  BreathAction action = 3;
+  double air_liters = 4;
+  double capacity_liters = 5;
+  double airflow_liters_per_second = 6;
+  double stamina_ratio = 7;
+  double attention_ratio = 8;
+  repeated string organ_ids = 9;
+  repeated BreathParticle particles = 10;
+  int64 sequence = 11;
+  string status = 12;
+  double absorbed_qi = 13;
+  FailureCode failure = 14; // 无失败时为 0；界面按公开类别显示原因。
+}
+// 真实三维局部坐标 [0,1]，入口为 (0.5,0.4,0.5)。旋转相机不改变粒子位置。
+// 这些粒子是摄入机会，不是环境账本中的可复制资源。
+message BreathParticle {
+  int32 id = 1;
+  string attribute = 2;
+  double x = 3;
+  double y = 4;
+  double z = 5;
+  int32 generation = 6;
+}

@@ -58,6 +58,14 @@ public final class QiTransport {
         if (!accounts.available(source) || !accounts.available(target)) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.ROUTE_UNAVAILABLE);
         }
+        if (source.id() instanceof Anatomy.MeridianId meridianId) {
+            // 生理输入可以进入未开拓经脉，主动抽调必须先建立该源经脉的意念响应。
+            MeridianState sourceMeridian = body.meridianStates().stream()
+                    .filter(state -> state.id().equals(meridianId)).findFirst().orElseThrow();
+            if (sourceMeridian.opening().stage() != MeridianOpening.Stage.OPENED) {
+                throw MeridianErrors.rejectTransport(TransportRejectionReason.MERIDIAN_UNOPENED);
+            }
+        }
 
         // 2. 汇总已有运输的占用。两端收发共用吞吐，器官内部加工不占端口吞吐。
         var usedThroughput = new HashMap<Object, Double>();

@@ -7,6 +7,29 @@ import java.util.Objects;
 
 /** Java 参考实现的异常类型与文案；公开线协议失败码仍由 Protobuf 定义。 */
 public final class MeridianErrors {
+    public static final String INVALID_GATHERING = "聚气请求或宿主配置无效";
+    public static final String INVALID_TISSUE_LOADS = "组织负载必须包含 1 至 32 个不同组织";
+    public static final String INVALID_BREATHING = "吐纳配置必须引用有效器官、组织与配方，参数须有限且为正";
+
+    public static GatheringRejected rejectGathering(FailureCode code) {
+        // 聚气编排直接保留线协议失败码，不解析底层错误文案。
+        return new GatheringRejected(code);
+    }
+
+    public static final class GatheringRejected extends RuntimeException {
+        private final FailureCode code;
+
+        private GatheringRejected(FailureCode code) {
+            // 仅在编排边界捕获业务拒绝，异常详情不发送客户端。
+            super(code.name());
+            this.code = code;
+        }
+
+        public FailureCode code() {
+            // 供请求边界生成同一 Protobuf 拒绝结果。
+            return code;
+        }
+    }
     private MeridianErrors() {
         // 错误定义不持有身体或宿主状态，只供各层在原有校验位置使用。
     }
@@ -471,6 +494,7 @@ public final class MeridianErrors {
     }
 
     public enum TransportRejectionReason {
+        MERIDIAN_UNOPENED,
         BODY_DEAD,
         REVISION_EXHAUSTED,
         NUMERIC_LIMIT,
