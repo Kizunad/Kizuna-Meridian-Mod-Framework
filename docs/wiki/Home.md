@@ -16,6 +16,8 @@
 | 配置 chunk 区域、浓度供给和方块传播 | [环境区域与配置](Environment-Configuration.md) |
 | 配置地形浓度、五行偏好与了解肺炼化 | [地形灵气生成](Terrain-Qi-Generation.md) |
 | 制作功法附属 JAR | [功法扩展](Technique-Addons.md) |
+| 注册生物/功法包与处理缺包 | [附属包接入](Addon-Integration.md) |
+| 查看已实现能力与剩余任务 | [框架能力 TODO](TODO.md) |
 | 理解简易操作与可选 3D 建造 | [经脉操作与 3D Addon](Inner-World.md) |
 | 接入单机或 Bong | [宿主接入](Host-Integration.md) |
 | 对接请求、校验与反作弊接口 | [协议与安全扩展](Protocol-and-Security.md) |

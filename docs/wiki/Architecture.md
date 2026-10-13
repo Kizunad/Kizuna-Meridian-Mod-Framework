@@ -77,12 +77,14 @@ Fabric 内置或专用服务端 / Bong / 其他宿主
 
 跨模组与宿主边界以 `.proto` 为通信定义的唯一来源，protoc 生成 Java 消息及共享描述集。`core` 保留不依赖 Protobuf 的不可变模型和校验；`protocol` 负责生成类型与核心值之间的转换。器官、组织与经脉在协议中同样各自独立，通过部位和端口引用连接。生成消息不是权威状态，也不自带身份权限。
 
-Java 运行时的异常类型和错误文案集中在 `error.MeridianErrors`，该文件只依赖 JDK；校验条件、业务顺序和异常处理保留在各层，核心无需依赖协议或宿主。公开失败码继续由 Protobuf 定义，详见[请求协议与安全扩展](Protocol-and-Security.md)。
+Java 运行时的异常类型和错误文案集中在 `error.MeridianErrors`；摄入和附属包拒绝直接携带 protoc 的失败码或诊断消息。校验条件、业务顺序和异常处理保留在各层，公开失败码继续由 Protobuf 定义，详见[请求协议与安全扩展](Protocol-and-Security.md)。
 
 现有 Java 数据类型是参考实现，不是其他服务端必须链接的运行库。其他语言从同一契约生成消息，在自己的核心中完成校验和执行；同版本规则的实现须通过共同的输入输出、守恒、时序和失败无副作用验收。Protobuf 统一数据交换，不能自动保证各实现的计算结果一致。
 
 `server.BodyQueryHandler<C>` 提供完整身体与组织能力查询；`BodyCommandHandler<C>` 提供受授权的寿元支出、时间结算、运输、加工启动、组织做功和环境摄入，以及版本、去重、私有策略和原子提交。`core` 的纯算子负责计算，`BodyResourceEvents` 按时间合并到达与加工完成，`BodyTimeSource` 提供可信时间，`BodyEnvironmentSource` 确认摄入区间的可信来源。`OrganRecipeCatalog` 只安装经过验证的 protoc 配方定义，不依赖具体功法包。`BodyTransactionStore` 负责身体、来源库存、共享预算和回执一起提交；`InMemoryBodyStore` 是无磁盘参考。处理器不另持一份身体，也不在审计通知里执行世界副作用。
 
 身体能力只在相关状态变化时重算。运输到达、来源耗尽、目标填满、配方完成、增益到期和寿命边界由事件推进；无界零时间循环应被拒绝。客户端动画不参与结算。
+
+`server.AddonRegistry` 已接收完整 Protobuf 附属包候选，检查依赖、兼容范围、能力和类型引用后生成不可变目录。模板用于宿主新建身体，配方目录接入现有命令处理器；已保存身体与正在加工的固定配方不随包卸载而重置。通用内容接入与缺包报告见[附属包接入](Addon-Integration.md)。
 
 具体数据与保存边界见[身体与持久化](Body-and-Persistence.md)。

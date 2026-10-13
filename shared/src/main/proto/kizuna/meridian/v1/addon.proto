@@ -1,0 +1,120 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "AddonMessages";
+
+// 可信宿主的安装入口，不属于玩家 BodyCommand；所有单值字段必填，列表可为空。
+message AddonRegistration {
+  int32 protocol_version = 1;
+  AddonHostProfile host = 2;
+  repeated AddonBundle bundles = 3;
+}
+
+message AddonHostProfile {
+  string host_id = 1; // namespace:path，由宿主声明实际运行环境。
+  int32 api_version = 2; // 附属内容 API 修订，独立于 Maven 版本与身体 schema。
+  repeated string capabilities = 3; // namespace:path，实际可执行的能力，不能由客户端提供。
+}
+
+message AddonBundle {
+  int32 schema_version = 1; // 当前为 1。
+  AddonManifest manifest = 2;
+  repeated ContentSymbol symbols = 3;
+  repeated BodyTemplate templates = 4;
+  repeated OrganRecipe organ_recipes = 5;
+}
+
+message AddonManifest {
+  string namespace = 1; // 每包独占 [a-z0-9_.-]+；meridian 留给框架内置身份。
+  int32 content_version = 2; // 正整数包修订；一个注册表每包只安装一个修订。
+  ContentVersionRange api_versions = 3;
+  repeated AddonDependency dependencies = 4; // 必需的直接依赖，不允许循环。
+  repeated string required_capabilities = 5;
+  repeated string supported_hosts = 6; // 非空，显式列出支持的宿主 ID。
+}
+
+message ContentVersionRange {
+  int32 minimum = 1; // 正整数，含端点。
+  int32 maximum = 2; // >= minimum，含端点。
+}
+
+message AddonDependency {
+  string namespace = 1;
+  ContentVersionRange versions = 2;
+}
+
+// 类型符号只登记身份；实际数值仍属于模板或身体构型，执行规则属于核心。
+message ContentSymbol {
+  string id = 1;
+  ContentSymbolKind kind = 2;
+}
+
+enum ContentSymbolKind {
+  CONTENT_SYMBOL_KIND_UNSPECIFIED = 0;
+  TISSUE_KIND = 1;
+  ORGAN_KIND = 2;
+  QI_ATTRIBUTE = 3;
+}
+
+// 模板和配方采用精确内容修订，不按包修订或最新版本替换旧引用。
+message ContentReference {
+  ContentDefinitionKind kind = 1;
+  string id = 2;
+  int32 version = 3;
+}
+
+enum ContentDefinitionKind {
+  CONTENT_DEFINITION_KIND_UNSPECIFIED = 0;
+  BODY_TEMPLATE = 1;
+  ORGAN_RECIPE = 2;
+}
+
+message ContentReferences {
+  int32 protocol_version = 1;
+  repeated ContentReference references = 2;
+}
+
+message ContentAvailability {
+  ContentReference reference = 1;
+  ContentAvailabilityStatus status = 2;
+}
+
+enum ContentAvailabilityStatus {
+  CONTENT_AVAILABILITY_STATUS_UNSPECIFIED = 0;
+  AVAILABLE = 1;
+  ADDON_MISSING = 2;
+  DEFINITION_MISSING = 3;
+  DEFINITION_VERSION_MISSING = 4;
+}
+
+message ContentAvailabilityReport {
+  int32 protocol_version = 1;
+  repeated ContentAvailability entries = 2; // 保持输入顺序与原始引用，不删除缺失项。
+}
+
+// 安装失败整批拒绝；字节/字段格式错误由协议边界拒绝。
+message AddonIssue {
+  AddonIssueCode code = 1;
+  string addon_namespace = 2;
+  string subject = 3; // 相关包、内容 ID 或能力 ID，供宿主定位。
+}
+
+enum AddonIssueCode {
+  ADDON_ISSUE_CODE_UNSPECIFIED = 0;
+  DUPLICATE_ADDON = 1;
+  API_INCOMPATIBLE = 2;
+  HOST_UNSUPPORTED = 3;
+  CAPABILITY_MISSING = 4;
+  DEPENDENCY_MISSING = 5;
+  DEPENDENCY_VERSION_MISMATCH = 6;
+  DEPENDENCY_CYCLE = 7;
+  NAMESPACE_MISMATCH = 8;
+  DUPLICATE_CONTENT = 9;
+  UNDECLARED_DEPENDENCY = 10;
+  SYMBOL_MISSING = 11;
+  SYMBOL_KIND_MISMATCH = 12;
+}

@@ -1,6 +1,6 @@
 # 功法附属 JAR
 
-状态：已实现 `OrganRecipeCatalog`、类型化器官配方及执行意图、组织能力查询与做功。整体功法注册、学习、蓝图、增益和世界动作仍待实现；0.x API 尚未冻结。下方候选表不是可编译示例。
+状态：已实现[附属包注册与缺包诊断](Addon-Integration.md)、`OrganRecipeCatalog`、类型化器官配方及执行意图、组织能力查询与做功。功法知识、学习、蓝图、增益和世界动作仍待实现；0.x API 尚未冻结。下方候选表不是可编译示例。
 
 经脉基础模组提供身体规则，附属包提供具体功法。官方基础功法也放在独立附属包，不能让核心反向依赖官方内容。
 
@@ -8,7 +8,9 @@
 
 ## 已实现的器官配方接口
 
-附属 JAR 向宿主提供 protoc 生成的 `BodyMessages.OrganRecipe`，跨进程内容使用 `CapabilityProtobuf.encodeRecipe/decodeRecipe`。宿主收集定义后构造不可变的 `OrganRecipeCatalog(List<BodyMessages.OrganRecipe>)`；全部校验通过才发布，重复 `id + version` 拒绝，不覆盖。将目录作为 `BodyCommandHandler` 第六个参数传入；五参数构造器安装空目录，基础功能可独立运行。
+附属 JAR 通过 `AddonBundle.organ_recipes` 提供 protoc 生成的 `BodyMessages.OrganRecipe`。宿主收集完整包集合，经 `AddonRegistry.load` 检查归属、依赖、宿主能力和类型引用后取得 `registry.recipes()`，作为 `BodyCommandHandler` 第六个参数。五参数构造器安装空目录，基础功能可独立运行。
+
+独立配方编解码仍可使用 `CapabilityProtobuf.encodeRecipe/decodeRecipe`；直接构造 `OrganRecipeCatalog(List<BodyMessages.OrganRecipe>)` 是底层入口，只检查配方及重复 `id + version`，不替代包级依赖校验。
 
 | 配方字段 | 规则 |
 |---|---|
@@ -51,7 +53,7 @@
 
 | 候选契约 | 用途 | 边界 |
 |---|---|---|
-| `TechniqueAddon` / `TechniqueRegistrar` | 注册模块、功法、配方、模板和学习来源映射 | 初始化收集、校验依赖后原子发布 |
+| 功法知识与学习来源定义 | 将已安装配方、模板与实际学习事件关联 | 复用已实现的 `AddonRegistry` 内容目录，宿主验证解锁事实 |
 | `TechniqueDefinition` / `OrganRecipeDefinition` | 声明目标能力、输入属性/相态、剂量、时间、精力、条件和作用 | 只组合已提供的类型化操作，参数有单位和范围 |
 | `TechniqueBlueprint` | 定义经脉供给路线及执行入口 | 映射到实际身体，不能虚构端口或就绪储量 |
 | `BodyQuery` / `BodyCommandGateway` | 查询允许的只读状态，提交受校验操作 | 不能直接写 HP、寿命、真元或私有存档 |
@@ -82,7 +84,7 @@ Java 书籍、界面或表现代码在 Fabric 执行；Bong 不直接执行 Java
 
 ## 注册与权限
 
-加载流程建议为：收集清单 → 检查依赖/API 版本/重复 ID → 校验定义和算子 → 原子发布注册表 → 建立身体实例。失败不能留下半套配方。
+已实现加载流程：收集清单 → 检查依赖/API/宿主能力 → 校验定义归属、重复 ID 与类型引用 → 创建不可变注册表。宿主在启动期发布目录，再用模板初始化身体；新建身体的受控命令尚未实现。失败不能留下半套配方，详细合同见[附属包接入](Addon-Integration.md)。
 
 运行时公开查询返回不可写快照；操作经核心与宿主的校验/事务提交。可信附属代码仍可以包含错误，因此官方和第三方内容使用同一校验路径；公共 API 不宣称能够沙箱隔离任意同进程恶意模组。
 

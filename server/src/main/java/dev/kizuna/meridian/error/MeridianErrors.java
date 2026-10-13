@@ -1,6 +1,7 @@
 package dev.kizuna.meridian.error;
 
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
+import dev.kizuna.meridian.protocol.pb.AddonMessages;
 
 import java.util.Objects;
 
@@ -53,6 +54,43 @@ public final class MeridianErrors {
     public static IntakeRejected rejectIntake(FailureCode code) {
         // 环境摄入直接携带 protoc 的公开失败码，避免再维护一套平行枚举。
         return new IntakeRejected(code);
+    }
+
+    public static AddonRejected rejectAddon(AddonMessages.AddonIssueCode code, String namespace, String subject) {
+        // 安装拒绝使用 protoc 的固定类别，同时保留内容定位信息供宿主展示。
+        return new AddonRejected(AddonMessages.AddonIssue.newBuilder()
+                .setCode(code).setAddonNamespace(namespace).setSubject(subject).build());
+    }
+
+    public static final class AddonRejected extends IllegalArgumentException {
+        private final AddonMessages.AddonIssue issue;
+
+        private AddonRejected(AddonMessages.AddonIssue issue) {
+            // 异常只描述失败候选，不持有或修改正在使用的注册表。
+            super("附属包安装失败：" + issue.getCode() + "，包=" + issue.getAddonNamespace()
+                    + "，目标=" + issue.getSubject());
+            this.issue = issue;
+        }
+
+        public AddonMessages.AddonIssue issue() {
+            // 宿主直接传递结构化诊断，无需解析中文异常文本。
+            return issue;
+        }
+    }
+
+    public static final class Addon {
+        public static final String PROTOCOL_VERSION = "不支持的附属包协议版本";
+        public static final String SCHEMA_VERSION = "不支持的附属内容 schema";
+        public static final String API_VERSION = "参考实现仅支持当前附属内容 API 修订";
+        public static final String NAMESPACE = "附属包命名空间格式不合法或占用框架保留命名空间";
+        public static final String VERSION = "内容版本必须为正数，范围上下限必须有序";
+        public static final String HOSTS_EMPTY = "附属包必须明确声明支持的宿主";
+        public static final String DUPLICATE_DECLARATION = "依赖、能力或宿主声明重复";
+        public static final String REGISTRATION_REQUIRED = "必须提供可信宿主的完整附属包注册请求";
+
+        private Addon() {
+            // 包格式与注册错误文案集中于此，业务判断保留在加载器。
+        }
     }
 
     public static final class IntakeRejected extends RuntimeException {

@@ -21,6 +21,14 @@ Java 参考实现和宿主处理器位于 `server/` 子项目，`client/` 目前
 
 Protobuf 只定义数据交换，不自动提供服务器、网络连接或身份认证。传输适配负责把完整请求交给处理器，把响应交回调用方；处理器依赖宿主提供可信身份、权限与状态来源。进程内调用和跨进程通信均可采用这一边界，具体网络协议不由身体数据层强制指定。
 
+## 已实现的附属内容安装
+
+宿主收集 `AddonBundle`，通过 `AddonRegistration` 提供自己的宿主 ID、内容 API 修订与实际能力，调用 `AddonRegistry.load`。注册过程有界且整批校验，失败不产生半套目录。成功后把 `registry.recipes()` 传给现有命令处理器，并通过 `findTemplate(id, version)` 读取已验证出生构型。详细字段与可用代码片段见[附属包接入](Addon-Integration.md)。
+
+清单、能力画像与安装入口必须来自可信宿主，不能由玩家网络请求提供；“安装”不等于“角色已学会”。`inspectReferences` 返回可用、缺包、缺定义或缺精确版本，宿主保留原引用并展示原因。已有身体快照和正在加工的固定配方按保存事实恢复，不用当前模板重套数值。
+
+当前未提供 JAR 自动发现、Fabric 加载回调、客户端资源校验或热重载。Java 参考注册表只负责声明式内容，其他语言按相同 Protobuf 与注册/缺包语义实现；它们不执行 JAR 中的 Java 字节码。
+
 ## 已实现的 Java 查询入口
 
 `dev.kizuna.meridian.server.BodyQueryHandler<C>` 接收一个完整请求的 `byte[]`，输出一个完整响应的 `byte[]`。装配时必须提供 `BodyReadPolicy<C>` 与 `BodySnapshotReader`，随后调用 `handle(trustedContext, payload)`：

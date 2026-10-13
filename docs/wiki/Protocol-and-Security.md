@@ -11,7 +11,8 @@
 | `shared/src/main/proto/kizuna/meridian/v1/body.proto` | 模板、实际构型、独立部位/组织/器官/经脉、端口与连接、六境、真元明细、寿命、时间游标和完整快照 |
 | `shared/src/main/proto/kizuna/meridian/v1/protocol.proto` | 查询、寿元支出/时间结算/运输意图、内部可信时间计划、成功结果、持久化回执和公开拒绝类别 |
 | `shared/src/main/proto/kizuna/meridian/v1/environment.proto` | 可信环境供给、候选吸收/释放交换和双账户提交回执 |
-| `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` / `EnvironmentMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
+| `shared/src/main/proto/kizuna/meridian/v1/addon.proto` | 可信附属清单、宿主能力、依赖、模板/配方注册、内容引用及缺包诊断 |
+| `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` / `EnvironmentMessages` / `AddonMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
 | `BodyProtobuf` | 核心模板/快照与生成类型双向转换、独立二进制编解码 |
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
 | `TimeProtobuf` / `server.BodyTimeSource<C>` | 可信时间计划的编解码、结果校验；宿主提供目标、倍率与模式 |
@@ -19,6 +20,7 @@
 | `IntakeProtobuf` / `core.OrganIntake` / `environment.EnvironmentAbsorption` | 通用器官摄入、环境真实扣账与共享区间预算；可信来源由 `BodyEnvironmentSource` 提供 |
 | `TransportProtobuf` / `core.QiTransport` | 运输请求映射、内腔扣源/在途创建及到达规则 |
 | `CapabilityProtobuf` / `OrganRecipeCatalog` | 组织能力与做功映射、器官配方编解码及可信目录注册 |
+| `AddonProtobuf` / `server.AddonRegistry` | 包级内容编解码、依赖/能力/引用校验、不可变目录与缺包报告；可信安装入口 |
 | `server.BodyQueryHandler<C>` | 解码查询、调用宿主读取策略与快照来源、校验目标身份并返回响应 |
 | `server.BodyReadPolicy<C>` / `BodySnapshotReader` | Java 宿主提供的读取授权与权威快照入口，不属于另一套线协议 |
 | `server.BodyCommandHandler<C>` | 变更授权、回执去重、版本检查、核心计算、私有策略、提交前重验与原子暂存 |
@@ -55,6 +57,8 @@ python3 "scripts/wiki.py" check
 | `RequestEnvelope.body_command` | 调用方 → 权威宿主，寿元支出、时间结算、运输、器官加工或组织做功 | 身体标识、显式预期 revision；按操作验证参数；时间请求无参数 |
 | `get_tissue_capability` / `tissue_capability` | 查询/响应 | 实际身体和组织 ID；同一读取授权，返回当前能力及 revision |
 | 独立 `OrganRecipe` 字节 | 可信内容安装，不是客户端可上传的请求 | ID/版本、器官类型、最低境界、输入/输出守恒及正数时长 |
+| 独立 `AddonRegistration` / `AddonBundle` 字节 | 可信宿主安装附属内容，不在 `RequestEnvelope` 中开放 | 包格式、宿主画像、依赖版本/循环、命名空间归属、定义冲突与类型引用 |
+| `ContentReferences` / `ContentAvailabilityReport` | 宿主保存引用及查询当前目录可用性 | 精确 ID/种类/版本、状态与列表边界；不授予执行权限，不自动迁移 |
 | 独立 `TimeAdvancePlan` 字节 | 可信宿主内部事实，不是客户端请求分支 | 目标游标、显式有限非负倍率、推进模式 |
 | `BodyCommand.intake_qi` / `CommandReceipt.organ_intake` | 摄入意图 / 可信计划与环境提交事实 | 器官 ID、正数原始明细；成功推进年龄与游标，并与环境原子交换 |
 | 独立 `EnvironmentQiOffer` / `EnvironmentQiExchange` / `EnvironmentQiReceipt` / `EnvironmentQiSource` 字节 | 可信宿主与权威身体实现之间的环境事实及来源存档 | 来源/身体身份、版本、有效期、毛额/速率、共享预算及提交版本；详见[环境契约](Environment-Qi.md) |
