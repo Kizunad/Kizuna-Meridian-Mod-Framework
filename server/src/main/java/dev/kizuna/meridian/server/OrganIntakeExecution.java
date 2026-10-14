@@ -36,15 +36,10 @@ final class OrganIntakeExecution {
                 .map(CapabilityProtobuf::fromExertion).toList();
         Set<Anatomy.TissueId> workingIds = loads.stream()
                 .map(TissueCapabilities.Exertion::tissueId).collect(Collectors.toSet());
-        List<Anatomy.TissueId> restingIds = trustedPlan.restingTissueIds().stream()
-                .filter(tissueId -> !workingIds.contains(tissueId)).toList();
-        var effectivePlan = new BodyTimeAdvancement.Plan(trustedPlan.target(),
-                trustedPlan.biologicalSecondsPerSimulationSecond(), trustedPlan.mode(), restingIds);
-        TimeAdvancePlan effectivePlanMessage = TimeProtobuf.toMessage(effectivePlan);
 
         // 2. 摄入消费尚未结算的区间；无负载的休息组织随同时间推进恢复。
         var result = OrganIntake.apply(body, new Anatomy.OrganId(request.getOrganId()),
-                BodyProtobuf.fromInventory(request.getQi()), effectivePlan);
+                BodyProtobuf.fromInventory(request.getQi()), trustedPlan, workingIds);
         BodySnapshot updatedBody = result.body();
         if (!loads.isEmpty()) {
             // 负载按区间起点能力校验；合并时只替换实际做功组织，保留其他组织刚完成的恢复。
@@ -61,7 +56,7 @@ final class OrganIntakeExecution {
             updatedBody = new BodySnapshot(updatedBody.schemaVersion(), updatedBody.id(), updatedBody.template(),
                     updatedBody.structure(), updatedBody.realm(), updatedBody.partStates(), combinedTissues,
                     updatedBody.organStates(), updatedBody.meridianStates(), updatedBody.transits(), updatedBody.vitality(),
-                    updatedBody.settledAt(), updatedBody.revision());
+                    updatedBody.settledAt(), updatedBody.revision(), updatedBody.actions());
         }
         var offer = EnvironmentAbsorption.offer(source, body.id().value(), BodyProtobuf.toTime(body.settledAt()), plan.getTarget());
         var exchange = EnvironmentQiExchange.newBuilder().setExchangeId("intake-" + result.body().revision())
@@ -73,8 +68,8 @@ final class OrganIntakeExecution {
         EnvironmentQiSource updatedSource = EnvironmentAbsorption.apply(source, exchange);
         var receipt = EnvironmentQiReceipt.newBuilder().setExchange(exchange)
                 .setBodyRevision(result.body().revision()).setSourceRevision(updatedSource.getRevision()).build();
-        // 保存实际使用的休息名单，恢复回执时不需要重新判断过去哪些组织参与了做功。
-        var fact = OrganIntakeResult.newBuilder().setPlan(effectivePlanMessage).setEnvironment(receipt).build();
+        // 回执保存可信时间；本段做功组织从原请求的 loads 复算，动作来自原身体。
+        var fact = OrganIntakeResult.newBuilder().setPlan(plan).setEnvironment(receipt).build();
         return new Result(updatedBody, updatedSource, fact);
     }
 }

@@ -249,9 +249,13 @@ public final class MeridianErrors {
         public static final String BODY_REQUIRED = "身体不能为空";
         public static final String TIME_PLAN_REQUIRED = "时间推进计划不能为空";
         public static final String TIME_MODE_REQUIRED = "时间推进模式不能为空";
-        public static final String RESTING_TISSUES_REQUIRED = "休息组织列表不能为空，未休息请提供空列表";
-        public static final String DUPLICATE_RESTING_TISSUE = "同一区间的休息组织不能重复";
-        public static final String RESTING_TISSUE_NOT_FOUND = "休息组织必须属于当前身体";
+        public static final String ACTION_REQUIRED = "必须提供动作定义";
+        public static final String ACTION_VERSION = "动作版本必须为正整数";
+        public static final String DUPLICATE_ACTION_USE = "动作不能重复声明同一组织或器官";
+        public static final String INVALID_ACTION_STATE = "动作实例必须唯一、引用实际模块且开始时间不能晚于身体游标；死体不能保留动作";
+        public static final String DUPLICATE_ACTION = "动作 ID 与版本重复";
+        public static final String ACTION_RECEIPT_MISMATCH = "动作回执定义必须与启动请求一致";
+        public static final String ACTION_CATALOG_REQUIRED = "动作目录不能为空";
         public static final String TIME_RESULT_REQUIRED = "时间推进结果不能为空";
         public static final String TRANSPORT_REQUEST_REQUIRED = "运输请求不能为空";
         public static final String TRANSIT_STATUS_REQUIRED = "在途状态不能为空";
@@ -513,7 +517,8 @@ public final class MeridianErrors {
 
     public enum CapabilityRejectionReason {
         MODULE_NOT_FOUND, MODULE_UNAVAILABLE, RECIPE_NOT_FOUND, RECIPE_INCOMPATIBLE,
-        ORGAN_BUSY, TISSUE_LOAD_EXCEEDED
+        ORGAN_BUSY, TISSUE_LOAD_EXCEEDED, ACTION_NOT_FOUND, ACTION_ALREADY_ACTIVE, ACTION_NOT_ACTIVE,
+        ACTION_LIMIT_EXCEEDED
     }
 
     public static final class CapabilityRejected extends RuntimeException {

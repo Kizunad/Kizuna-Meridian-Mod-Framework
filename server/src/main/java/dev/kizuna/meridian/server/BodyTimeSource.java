@@ -7,12 +7,12 @@ import dev.kizuna.meridian.protocol.pb.MeridianMessages.TimeAdvancePlan;
 @FunctionalInterface
 public interface BodyTimeSource<C> {
     /**
-     * 在已授权、版本匹配的时间或运输事务内返回目标游标、固定倍率、推进模式及休息组织名单。
+     * 在已授权、版本匹配的时间或运输事务内返回目标游标、固定倍率及推进模式。
      * 发运要求目标等于身体已结算游标，宿主可先以同一逻辑时刻结算，再用新版本发运。
      * 不得采用客户端自报离线时长；不得消费资源或修改宿主状态。
      * 已有成功回执的重试不调用此入口；单机暂停可返回当前游标，表示无需推进。
-     * 倍率/模式或休息名单改变前须先按旧策略结算；休息名单描述整个未结算区间。
-     * 做功区间内的组织不能声明为休息；跨世代恢复须由宿主显式迁移，不能在这里重置游标。
+     * 倍率/模式或动作占用改变前须先按旧状态结算，恢复由身体的动作实例推导。
+     * 跨世代恢复须由宿主显式迁移，不能在这里重置游标。
      */
     TimeAdvancePlan resolve(C trustedContext, BodySnapshot current);
 }

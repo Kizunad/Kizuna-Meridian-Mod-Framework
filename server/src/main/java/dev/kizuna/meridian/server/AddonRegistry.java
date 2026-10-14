@@ -24,25 +24,28 @@ public final class AddonRegistry {
     public static final String BODY_TEMPLATES = "meridian:body_templates_v1";
     public static final String ORGAN_RECIPES = "meridian:organ_recipes_v1";
     public static final String ORGAN_INTAKE = "meridian:organ_intake_v1";
-    public static final String TISSUE_RECOVERY = "meridian:tissue_recovery_v1";
+    public static final String TISSUE_RECOVERY = "meridian:tissue_recovery_v2";
+    public static final String ACTIONS = "meridian:actions_v1";
 
     private final Map<String, AddonMessages.AddonBundle> bundles;
     private final Map<String, AddonMessages.ContentSymbol> symbols;
     private final Map<String, AddonMessages.ContentDefinitionKind> definitionKinds;
     private final Map<DefinitionKey, BodyMessages.BodyTemplate> templates;
     private final OrganRecipeCatalog recipes;
+    private final ActionCatalog actions;
 
     private AddonRegistry(Map<String, AddonMessages.AddonBundle> bundles,
                           Map<String, AddonMessages.ContentSymbol> symbols,
                           Map<String, AddonMessages.ContentDefinitionKind> definitionKinds,
                           Map<DefinitionKey, BodyMessages.BodyTemplate> templates,
-                          OrganRecipeCatalog recipes) {
+                          OrganRecipeCatalog recipes, ActionCatalog actions) {
         // 只有全部校验完成才复制候选，调用方无法拿到或改写半成品目录。
         this.bundles = Map.copyOf(bundles);
         this.symbols = Map.copyOf(symbols);
         this.definitionKinds = Map.copyOf(definitionKinds);
         this.templates = Map.copyOf(templates);
         this.recipes = recipes;
+        this.actions = actions;
     }
 
     public static AddonRegistry load(AddonMessages.AddonRegistration registration) {
@@ -63,6 +66,7 @@ public final class AddonRegistry {
         var definitionKinds = new HashMap<String, AddonMessages.ContentDefinitionKind>();
         var templates = new HashMap<DefinitionKey, BodyMessages.BodyTemplate>();
         var recipes = new HashMap<DefinitionKey, BodyMessages.OrganRecipe>();
+        var actions = new HashMap<DefinitionKey, BodyMessages.ActionDefinition>();
         for (var bundle : bundles.values()) {
             String namespace = bundle.getManifest().getNamespace();
             for (var symbol : bundle.getSymbolsList()) {
@@ -84,6 +88,13 @@ public final class AddonRegistry {
                 var key = new DefinitionKey(recipe.getId(), recipe.getVersion());
                 if (recipes.putIfAbsent(key, recipe) != null) {
                     throw MeridianErrors.rejectAddon(DUPLICATE_CONTENT, namespace, recipe.getId());
+                }
+            }
+            for (var action : bundle.getActionsList()) {
+                claimDefinition(namespace, action.getId(), ACTION, symbols, definitionKinds);
+                var key = new DefinitionKey(action.getId(), action.getVersion());
+                if (actions.putIfAbsent(key, action) != null) {
+                    throw MeridianErrors.rejectAddon(DUPLICATE_CONTENT, namespace, action.getId());
                 }
             }
         }
@@ -112,7 +123,8 @@ public final class AddonRegistry {
 
         // 配方投影沿用已有执行入口；此处成功也不触碰宿主存档或正在使用的旧注册表。
         var recipeCatalog = new OrganRecipeCatalog(List.copyOf(recipes.values()));
-        return new AddonRegistry(bundles, symbols, definitionKinds, templates, recipeCatalog);
+        var actionCatalog = new ActionCatalog(List.copyOf(actions.values()));
+        return new AddonRegistry(bundles, symbols, definitionKinds, templates, recipeCatalog, actionCatalog);
     }
 
     public Optional<BodyMessages.BodyTemplate> findTemplate(String id, int version) {
@@ -132,6 +144,11 @@ public final class AddonRegistry {
     public OrganRecipeCatalog recipes() {
         // 返回不可变目录，直接传入 BodyCommandHandler 的配方参数。
         return recipes;
+    }
+
+    public ActionCatalog actions() {
+        // 与配方目录一样交付给权威入口；登记动作本身不会启动玩家动作。
+        return actions;
     }
 
     public AddonMessages.ContentAvailabilityReport inspectReferences(AddonMessages.ContentReferences references) {
@@ -159,6 +176,7 @@ public final class AddonRegistry {
         boolean installed = switch (reference.getKind()) {
             case BODY_TEMPLATE -> templates.containsKey(new DefinitionKey(reference.getId(), reference.getVersion()));
             case ORGAN_RECIPE -> recipes.find(reference.getId(), reference.getVersion()).isPresent();
+            case ACTION -> actions.find(reference.getId(), reference.getVersion()).isPresent();
             default -> false; // 公开入口已拒绝未知枚举，保留穷尽分支满足生成枚举约束。
         };
         if (!installed) {

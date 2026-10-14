@@ -177,7 +177,7 @@ EOF
 
 `body_command.advance_time {}` 只表示请求结算，固定样例（`q1`、`body-1`、revision 0）为 `0801120271315a0c0a06626f64792d3110005a00`。客户端往该空消息添加时间字段会被未知字段校验拒绝。宿主须单独授权操作，不能把身体读取权限当作时间控制权限。
 
-`BodyTimeSource.resolve(context, current)` 在身体事务内返回 protoc 生成的 `TimeAdvancePlan`。字段为 `target`、`biological_seconds_per_simulation_second`、`mode` 和 `resting_tissue_ids`；跨进程可信事实可由 `TimeProtobuf.encodePlan/decodePlan` 交换。这条通道必须由宿主认证，不能注册成客户端上传入口。倍率零值也必须显式提供，休息名单可以为空。恢复速率来自实际构型的 `TissueDefinition.rest_recovery_per_second`，规则见[组织恢复](Tissue-Recovery.md)。
+`BodyTimeSource.resolve(context, current)` 在身体事务内返回 protoc 生成的 `TimeAdvancePlan`。字段为 `target`、`biological_seconds_per_simulation_second` 和 `mode`；跨进程可信事实可由 `TimeProtobuf.encodePlan/decodePlan` 交换。这条通道必须由宿主认证，不能注册成客户端上传入口。倍率零值也必须显式提供。恢复半衰期来自实际构型的 `TissueDefinition.recovery_half_life_seconds`，占用来自 `BodySnapshot.actions`；旧休息名单字段已 reserved，规则见[组织恢复](Tissue-Recovery.md)。
 
 `BodyTimeAdvancement` 执行[年龄、事件顺序、冻结与寿尽规则](Body-and-Persistence.md)。新增失败码固定为 `CLOCK_MISMATCH = 12`、`TIME_NOT_ADVANCED = 13`、`PENDING_TIME_EVENT = 14`。时间平移溢出或无法表达的年龄增量复用 `NUMERIC_LIMIT`，死亡后新请求为 `BODY_DEAD`。
 
@@ -211,6 +211,8 @@ EOF
 `BodyCommand` 新增 `start_organ_recipe = 13` 和 `exert_tissue = 14`；`RequestEnvelope.get_tissue_capability = 12`，对应响应 `tissue_capability = 13`。具体字段、单位和计算规则见[功法扩展](Technique-Addons.md)。三个资源操作（运输、启动加工、做功）均要求可信时间已结算且为 `ACTIVE`，共享授权、版本、去重、私有策略与原子提交路径。
 
 `exert_tissues = 16` 一次提交 1～32 个不同组织的做功需求，先在同一原始快照验算，再合并一次 revision。力可为零，功率和时长必须为正；用于呼吸与注意力等无外部作用力的能耗。`IntakeQi.loads = 3` 可附同类组织成本，与摄入、环境扣账和成功回执一次提交，任何一项失败均不写账。恢复回执时同样复算各组织与摄入结果。
+
+`start_action = 17` 提交动作实例 ID、定义 ID 与版本；`stop_action = 18` 只提交实例 ID。启停要求活动模式与已结算时间，目录决定组织/器官占用，客户端不能上传替代定义。启动回执 `action_definition = 8` 固定完整定义，事务按该事实复算候选身体。权限、私有策略与幂等重试继续生效；宿主应校验玩家是否确实执行或结束相应活动。动作并发、缺包与恢复见[身体动作](Actions.md)。
 
 启动加工成功回执必须包含 `CommandReceipt.organ_recipe = 6`，其 ID/版本与命令一致；事务用该固定定义复算输入扣除和加工事实。完成由时间命令处理，存档中的配方事实足以继续，不重新读取可能卸载的包。这个内部回执字段不能成为客户端注册新配方的入口。
 

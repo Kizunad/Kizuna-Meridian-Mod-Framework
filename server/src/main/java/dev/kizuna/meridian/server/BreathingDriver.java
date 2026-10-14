@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.UUID;
 
 import static dev.kizuna.meridian.protocol.pb.BreathingMessages.BreathAction.*;
 import static dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode.*;
@@ -40,6 +41,7 @@ final class BreathingDriver<C> {
     private double flowZ = 1;
     private double suction;
     private double blowing;
+    private String bodyActionInstance;
 
     private static final class ParticleMotion {
         double vx, vy, vz;
@@ -53,7 +55,8 @@ final class BreathingDriver<C> {
         }
     }
 
-    BreathingDriver(GatheringSession<C> session, BreathingProfile profile, BodySnapshot body, OrganRecipeCatalog recipes) {
+    BreathingDriver(GatheringSession<C> session, BreathingProfile profile, BodySnapshot body,
+                    OrganRecipeCatalog recipes, ActionCatalog actions) {
         // 内容只绑定真实模块，缺失或重复引用在装配时暴露，避免运行中猜测肺或膈肌身份。
         this.session = session;
         this.profile = profile;
@@ -70,6 +73,22 @@ final class BreathingDriver<C> {
         for (String id : List.of(profile.getRespiratoryTissueId(), profile.getAttentionTissueId())) {
             valid &= body.structure().tissues().stream().anyMatch(value -> value.id().value().equals(id)
                     && value.capacity().enduranceJoules() > 0 && value.capacity().burstWatts() > 0);
+        }
+        // 吐纳动作由内容绑定；有恢复能力时必须声明占用，才能阻止有效吸呼期间恢复。
+        boolean needsAction = body.structure().tissues().stream()
+                .anyMatch(tissue -> (tissue.id().value().equals(profile.getRespiratoryTissueId())
+                        || tissue.id().value().equals(profile.getAttentionTissueId())) && tissue.recoveryHalfLifeSeconds() > 0);
+        if (profile.hasBodyAction()) {
+            var reference = profile.getBodyAction();
+            var definition = actions.find(reference.getId(), reference.getVersion()).orElse(null);
+            valid &= definition != null;
+            if (definition != null) {
+                valid &= definition.getTissueIdsList().containsAll(
+                        List.of(profile.getRespiratoryTissueId(), profile.getAttentionTissueId()));
+                valid &= definition.getOrganIdsList().containsAll(organs);
+            }
+        } else {
+            valid &= !needsAction;
         }
         var recipeIds = new HashSet<String>();
         for (String id : profile.getRecipeIdsList()) {
@@ -125,6 +144,12 @@ final class BreathingDriver<C> {
         } else if (!active) {
             throw MeridianErrors.rejectGathering(INVALID_REQUEST);
         }
+        // 按新输入切换后续区间的占用；此前气流已经由 step 按旧输入结清。
+        BreathingView current = view(session.read());
+        boolean usesBody = active && ((requested.getAction() == INHALE && airLiters < current.getCapacityLiters())
+                || (requested.getAction() == EXHALE && airLiters > 0));
+        updateBodyAction(usesBody);
+        // 只有占用提交成功才接受新气流输入，失败后继续沿用旧控制状态。
         control = requested;
         leaseMillis = now + INPUT_LEASE_MILLIS;
         boundaryMillis = active ? now + STEP_MILLIS : 0;
@@ -175,6 +200,8 @@ final class BreathingDriver<C> {
         boolean exhaling = action == EXHALE && airLiters > 0;
         if (!inhaling && !exhaling) {
             // 停气与肺容量边界只停止人体做功；环境里的游离灵气和残余气流仍会移动。
+            updateBodyAction(false);
+            session.settleManual();
             moveParticles(seconds, HOLD, before.getAirflowLitersPerSecond(), null);
             if (action == INHALE) {
                 status = "肺已充满，请右键呼气";
@@ -213,6 +240,8 @@ final class BreathingDriver<C> {
         }
         double airChange = before.getAirflowLitersPerSecond() * seconds;
         airLiters = Math.max(0, Math.min(before.getCapacityLiters(), airLiters + (inhaling ? airChange : -airChange)));
+        // 满吸或排空后解除占用，后续暂停时间可以恢复，不把整个打开窗口过程当成做功。
+        updateBodyAction(inhaling ? airLiters < before.getCapacityLiters() : airLiters > 0);
         status = inhaling ? "吸气 · 引导空间气流汇入口鼻" : "呼气 · 引导空间气流向外扩散";
         BreathingView after = view(session.read());
         if (Math.min(after.getStaminaRatio(), after.getAttentionRatio()) < .00001) {
@@ -412,11 +441,30 @@ final class BreathingDriver<C> {
     }
 
     void stop() {
-        // 结束气流不撤销已扣入的真元，不恢复任何身体预算。
+        // 先结束占用再停调度；提交失败保留重试机会，不能遗留没有唤醒的活动实例。
+        updateBodyAction(false);
         active = false;
         suction = 0;
         blowing = 0;
         boundaryMillis = 0;
         status = "吐纳已结束";
+    }
+
+    private void updateBodyAction(boolean used) {
+        // 动作引用在装配时验证；配置后只在状态切换提交一次启停。
+        if (!profile.hasBodyAction() || (used && bodyActionInstance != null) || (!used && bodyActionInstance == null)) {
+            return;
+        }
+        if (!used) {
+            // 中止只解除本会话实例，允许其他动作先改变身体版本。
+            session.stopManualAction(bodyActionInstance);
+            bodyActionInstance = null;
+            return;
+        }
+        session.settleManual();
+        String instanceId = UUID.randomUUID().toString();
+        session.execute(BodyCommand.newBuilder().setStartAction(StartAction.newBuilder().setInstanceId(instanceId)
+                .setActionId(profile.getBodyAction().getId()).setActionVersion(profile.getBodyAction().getVersion())));
+        bodyActionInstance = instanceId;
     }
 }

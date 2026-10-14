@@ -3,6 +3,8 @@ package dev.kizuna.meridian.server;
 import dev.kizuna.meridian.core.BodyId;
 import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.BodyTimeAdvancement;
+import dev.kizuna.meridian.core.BodyActions;
+import dev.kizuna.meridian.protocol.ActionProtobuf;
 import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.QiTransport;
 import dev.kizuna.meridian.core.QiAccounting;
@@ -266,6 +268,20 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                         TransportProtobuf.fromMessage(receipt.getCommand().getTransportQi()));
                 if (!next.equals(expected)) {
                     throw MeridianErrors.inconsistent(Host.TRANSPORT_STAGE_MISMATCH);
+                }
+            }
+            if (receipt.getCommand().hasStartAction()) {
+                // 原定义来自启动回执，事务检查动作和身体其他字段都符合纯算子结果。
+                var expected = BodyActions.start(original.snapshot(), receipt.getCommand().getStartAction().getInstanceId(),
+                        ActionProtobuf.fromDefinition(receipt.getActionDefinition()));
+                if (!next.equals(expected)) {
+                    throw MeridianErrors.inconsistent(Host.CAPABILITY_STAGE_MISMATCH);
+                }
+            }
+            if (receipt.getCommand().hasStopAction()) {
+                var expected = BodyActions.stop(original.snapshot(), receipt.getCommand().getStopAction().getInstanceId());
+                if (!next.equals(expected)) {
+                    throw MeridianErrors.inconsistent(Host.CAPABILITY_STAGE_MISMATCH);
                 }
             }
             if (receipt.hasTimeAdvance()) {

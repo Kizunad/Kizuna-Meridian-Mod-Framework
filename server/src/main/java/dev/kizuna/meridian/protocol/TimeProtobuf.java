@@ -1,6 +1,5 @@
 package dev.kizuna.meridian.protocol;
 
-import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.BodyTimeAdvancement;
 import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.TimeCursor;
@@ -33,8 +32,7 @@ public final class TimeProtobuf {
         ProtoWire.validate(plan);
         return new BodyTimeAdvancement.Plan(BodyProtobuf.fromTime(plan.getTarget()),
                 plan.getBiologicalSecondsPerSimulationSecond(),
-                BodyTimeAdvancement.Mode.valueOf(plan.getMode().name()),
-                plan.getRestingTissueIdsList().stream().map(Anatomy.TissueId::new).toList());
+                BodyTimeAdvancement.Mode.valueOf(plan.getMode().name()));
     }
 
     public static MeridianMessages.TimeAdvancePlan toMessage(BodyTimeAdvancement.Plan plan) {
@@ -42,8 +40,7 @@ public final class TimeProtobuf {
         MeridianErrors.required(plan, Data.TIME_PLAN_REQUIRED);
         var message = MeridianMessages.TimeAdvancePlan.newBuilder().setTarget(BodyProtobuf.toTime(plan.target()))
                 .setBiologicalSecondsPerSimulationSecond(plan.biologicalSecondsPerSimulationSecond())
-                .setMode(MeridianMessages.TimeAdvanceMode.valueOf(plan.mode().name()))
-                .addAllRestingTissueIds(plan.restingTissueIds().stream().map(Anatomy.TissueId::value).toList()).build();
+                .setMode(MeridianMessages.TimeAdvanceMode.valueOf(plan.mode().name())).build();
         ProtoWire.validate(message);
         return message;
     }

@@ -7,9 +7,9 @@ import dev.kizuna.meridian.error.MeridianErrors.TimeRejectionReason;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** 时间与自然寿命的纯计算；可信时间、调度和原子提交由宿主提供。 */
 public final class BodyTimeAdvancement {
@@ -19,28 +19,12 @@ public final class BodyTimeAdvancement {
 
     public enum Mode { ACTIVE, LIFESPAN_ONLY }
 
-    public record Plan(TimeCursor target, double biologicalSecondsPerSimulationSecond, Mode mode,
-                       List<Anatomy.TissueId> restingTissueIds) {
-        public Plan(TimeCursor target, double biologicalSecondsPerSimulationSecond, Mode mode) {
-            // 未提供可信休息事实时只结算原有时间规则，不根据没有命令推测角色在休息。
-            this(target, biologicalSecondsPerSimulationSecond, mode, List.of());
-        }
-
+    public record Plan(TimeCursor target, double biologicalSecondsPerSimulationSecond, Mode mode) {
         public Plan {
             // 零倍率表示暂停老化；它不隐含暂停运输，运输是否冻结由模式明确决定。
             MeridianErrors.required(target, Data.SETTLED_AT_REQUIRED);
             DataChecks.nonNegative(biologicalSecondsPerSimulationSecond, "老化倍率");
             MeridianErrors.required(mode, Data.TIME_MODE_REQUIRED);
-            // 同一组织只能获得一次恢复；防御性复制保证回执与候选身体采用相同的区间事实。
-            MeridianErrors.required(restingTissueIds, Data.RESTING_TISSUES_REQUIRED);
-            var identities = new HashSet<Anatomy.TissueId>();
-            for (Anatomy.TissueId tissueId : restingTissueIds) {
-                MeridianErrors.required(tissueId, Data.TISSUE_ID_REQUIRED);
-                if (!identities.add(tissueId)) {
-                    throw MeridianErrors.invalid(Data.DUPLICATE_RESTING_TISSUE);
-                }
-            }
-            restingTissueIds = List.copyOf(restingTissueIds);
         }
     }
 
@@ -53,6 +37,11 @@ public final class BodyTimeAdvancement {
     }
 
     public static Result apply(BodySnapshot body, Plan plan) {
+        // 普通时间推进按当前动作占用计算；摄入附带的区间做功另由重载补充。
+        return apply(body, plan, Set.of());
+    }
+
+    public static Result apply(BodySnapshot body, Plan plan, Set<Anatomy.TissueId> intervalUsedTissues) {
         // 1. 校验时间身份与身体状态；不同世代不能直接折算经历时长。
         MeridianErrors.required(body, Data.BODY_REQUIRED);
         MeridianErrors.required(plan, Data.TIME_PLAN_REQUIRED);
@@ -81,7 +70,7 @@ public final class BodyTimeAdvancement {
         }
         long elapsedMillis = settledAt.elapsedMillis() - start.elapsedMillis();
         // 恢复和年龄共用已经裁到寿尽的区间；没有逐秒循环，也不会把死亡后的时间用于恢复。
-        List<AnatomyState.Tissue> tissues = TissueRecovery.advance(body, plan, elapsedMillis);
+        List<AnatomyState.Tissue> tissues = TissueRecovery.advance(body, plan, elapsedMillis, intervalUsedTissues);
 
         double updatedAgeSeconds;
         if (died) {
@@ -209,7 +198,7 @@ public final class BodyTimeAdvancement {
                 vitality.spentLifespanSeconds(), died);
         var updatedBody = new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), tissues, organs, meridians, transits,
-                updatedVitality, settledAt, body.revision() + 1);
+                updatedVitality, settledAt, body.revision() + 1, died ? List.of() : body.actions());
         return new Result(updatedBody, died, releasedQi);
     }
 

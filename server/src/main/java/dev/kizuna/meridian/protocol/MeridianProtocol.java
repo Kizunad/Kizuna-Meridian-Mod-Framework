@@ -88,6 +88,15 @@ public final class MeridianProtocol {
         if (receipt.hasOrganIntake()) {
             IntakeProtobuf.validateResult(receipt.getCommand(), receipt.getOrganIntake());
         }
+        // 启动动作固定所用定义；结束动作只需实例 ID，不携带另一份占用事实。
+        ProtoWire.require(receipt.hasActionDefinition() == receipt.getCommand().hasStartAction(),
+                MeridianErrors.Data.ACTION_RECEIPT_MISMATCH);
+        if (receipt.hasActionDefinition()) {
+            var definition = ActionProtobuf.fromDefinition(receipt.getActionDefinition());
+            var requested = receipt.getCommand().getStartAction();
+            ProtoWire.require(definition.id().value().equals(requested.getActionId())
+                            && definition.version() == requested.getActionVersion(), MeridianErrors.Data.ACTION_RECEIPT_MISMATCH);
+        }
     }
 
     private static void validateRequest(MeridianMessages.RequestEnvelope request) {
@@ -150,6 +159,8 @@ public final class MeridianProtocol {
                 loads.forEach(CapabilityProtobuf::fromExertion);
             }
             case INTAKE_QI -> IntakeProtobuf.validateRequest(command.getIntakeQi());
+            case START_ACTION -> ActionProtobuf.validateStart(command.getStartAction());
+            case STOP_ACTION -> ActionProtobuf.validateInstanceId(command.getStopAction().getInstanceId());
             case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
         }
     }

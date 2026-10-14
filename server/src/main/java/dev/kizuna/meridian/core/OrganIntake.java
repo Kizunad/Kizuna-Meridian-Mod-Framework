@@ -5,6 +5,8 @@ import dev.kizuna.meridian.error.MeridianErrors.Data;
 import dev.kizuna.meridian.error.MeridianErrors.Environment;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 
+import java.util.Set;
+
 /** 一个稳定活动区间的通用摄入；产生候选身体，实际环境扣账由事务执行。 */
 public final class OrganIntake {
     private OrganIntake() {
@@ -13,6 +15,13 @@ public final class OrganIntake {
 
     public static BodyTimeAdvancement.Result apply(BodySnapshot body, Anatomy.OrganId organId,
                                                    QiInventory incoming, BodyTimeAdvancement.Plan plan) {
+        // 无附带组织代价的摄入仍遵循身体当前动作占用。
+        return apply(body, organId, incoming, plan, Set.of());
+    }
+
+    public static BodyTimeAdvancement.Result apply(BodySnapshot body, Anatomy.OrganId organId,
+                                                   QiInventory incoming, BodyTimeAdvancement.Plan plan,
+                                                   Set<Anatomy.TissueId> intervalUsedTissues) {
         // 先确认有效活动区间；成功会消费这段身体时间，换请求 ID 不能重复吸收。
         MeridianErrors.required(body, Data.BODY_REQUIRED);
         MeridianErrors.required(incoming, Data.QI_REQUIRED);
@@ -88,7 +97,7 @@ public final class OrganIntake {
         }
 
         // 先结算既有事件，再归入本段摄入，避免未来收入改变起点处阻塞任务的结果。
-        BodyTimeAdvancement.Result advanced = BodyTimeAdvancement.apply(body, plan);
+        BodyTimeAdvancement.Result advanced = BodyTimeAdvancement.apply(body, plan, intervalUsedTissues);
         BodySnapshot settled = advanced.body();
         var settledAccounts = new QiAccounts(settled);
         AnatomyState.Organ settledOrgan = settledAccounts.organ(organId);
@@ -96,7 +105,7 @@ public final class OrganIntake {
         settledAccounts.replaceOrgan(new AnatomyState.Organ(organId, settledOrgan.hp(), buffer, settledOrgan.process()));
         var supplied = new BodySnapshot(settled.schemaVersion(), settled.id(), settled.template(), settled.structure(), settled.realm(),
                 settled.partStates(), settled.tissueStates(), settledAccounts.organs(), settled.meridianStates(), settled.transits(),
-                settled.vitality(), settled.settledAt(), settled.revision());
+                settled.vitality(), settled.settledAt(), settled.revision(), settled.actions());
         return new BodyTimeAdvancement.Result(supplied, false, advanced.releasedQi());
     }
 }

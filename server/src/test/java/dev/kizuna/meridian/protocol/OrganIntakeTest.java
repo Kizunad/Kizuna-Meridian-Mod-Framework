@@ -24,7 +24,7 @@ public class OrganIntakeTest {
     public void intakeLoadsPreserveOtherTissuesRecoveryAndRollbackTogether() {
         // 同一段摄入里，实际做功组织只承担代价，另一块休息组织必须保留恢复结果。
         var message = BodyProtobuf.toMessage(body("a", 0));
-        var working = message.getStructure().getTissues(0).toBuilder().setRestRecoveryPerSecond(1);
+        var working = message.getStructure().getTissues(0).toBuilder().setRecoveryHalfLifeSeconds(1);
         var resting = working.clone().setId("resting").clearPorts();
         BodySnapshot initial = BodyProtobuf.fromMessage(message.toBuilder()
                 .setStructure(message.getStructure().toBuilder().setTissues(0, working).addTissues(resting))
@@ -35,8 +35,7 @@ public class OrganIntakeTest {
                 .addLoads(ExertTissue.newBuilder().setTissueId("tendril").setForceNewtons(0)
                         .setPowerWatts(40).setDurationSeconds(1))));
         byte[] payload = MeridianProtocol.encodeRequest(intake.build());
-        BodyTimeSource<String> time = (context, body) -> plan(1000).toBuilder()
-                .addAllRestingTissueIds(List.of("tendril", "resting")).build();
+        BodyTimeSource<String> time = (context, body) -> plan(1000);
         var handler = new BodyCommandHandler<String>((context, command) -> Optional.of(context),
                 (context, command, body) -> true, time, store, (context, receipt, before, after) -> { },
                 new OrganRecipeCatalog(List.of()), (context, body, plan) -> Optional.of("region"));
@@ -44,7 +43,7 @@ public class OrganIntakeTest {
         BodySnapshot after = store.find(initial.id()).orElseThrow();
         assertEquals(3, after.tissueStates().get(0).fatigue(), 1e-10);
         assertEquals(1, after.tissueStates().get(1).fatigue(), 0);
-        assertEquals(List.of("resting"), receipt(store, "a", "work-intake").getOrganIntake().getPlan().getRestingTissueIdsList());
+        assertEquals(plan(1000), receipt(store, "a", "work-intake").getOrganIntake().getPlan());
         committed(handler.handle("owner", payload));
         assertEquals(after, store.find(initial.id()).orElseThrow());
         assertEquals(100, after.totalQi() + sourceTotal(store), 0);

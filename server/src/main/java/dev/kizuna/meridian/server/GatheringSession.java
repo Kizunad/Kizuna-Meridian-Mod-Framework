@@ -102,7 +102,7 @@ public final class GatheringSession<C> implements AutoCloseable {
         if (breathing != null || progress.getNextBoundaryMillis() != 0) {
             throw rejectGathering(GATHERING_BUSY);
         }
-        breathing = new BreathingDriver<>(this, profile, read(), recipes);
+        breathing = new BreathingDriver<>(this, profile, read(), recipes, commands.actionCatalog());
     }
 
     private void start(GatheringRequest request, BodySnapshot body) {
@@ -383,6 +383,21 @@ public final class GatheringSession<C> implements AutoCloseable {
         }
     }
 
+    void stopManualAction(String instanceId) {
+        // 外部动作或伤势可能使原计划版本失效；清理只针对自己的实例，不继续原来的摄入计划。
+        BodySnapshot body = read();
+        expectedRevision = body.revision();
+        if (body.actions().stream().noneMatch(action -> action.instanceId().equals(instanceId))) {
+            return;
+        }
+        settleManual();
+
+        // 时间推进可能恰好寿尽并清空动作，无需再向死体提交停止请求。
+        if (read().actions().stream().anyMatch(action -> action.instanceId().equals(instanceId))) {
+            execute(BodyCommand.newBuilder().setStopAction(StopAction.newBuilder().setInstanceId(instanceId)));
+        }
+    }
+
     boolean canCaptureInterval(long maximumMillis) {
         // 摄入仅使用本次主动操作的短区间；停气与环境换窗前的闲置时间先单独结清。
         BodySnapshot body = read();
@@ -416,9 +431,10 @@ public final class GatheringSession<C> implements AutoCloseable {
     @Override
     public void close() {
         // 断线停止后续自动步骤；已摄入、加工与在途货物留在真实身体，交由宿主正常结算。
-        closed = true;
         if (breathing != null) {
+            // 在撤销读写上下文前结束本会话动作；失败交给宿主重试，不能默默遗留永久占用。
             breathing.stop();
         }
+        closed = true;
     }
 }

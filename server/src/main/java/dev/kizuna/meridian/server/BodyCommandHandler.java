@@ -24,6 +24,8 @@ import dev.kizuna.meridian.protocol.MeridianProtocol;
 import dev.kizuna.meridian.protocol.TimeProtobuf;
 import dev.kizuna.meridian.protocol.TransportProtobuf;
 import dev.kizuna.meridian.protocol.CapabilityProtobuf;
+import dev.kizuna.meridian.protocol.ActionProtobuf;
+import dev.kizuna.meridian.core.BodyActions;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages;
@@ -46,6 +48,7 @@ public final class BodyCommandHandler<C> {
     private final BodyAuditSink<C> audit;
     private final OrganRecipeCatalog recipes;
     private final BodyEnvironmentSource<C> environmentSource;
+    private final ActionCatalog actions;
 
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit) {
@@ -63,6 +66,13 @@ public final class BodyCommandHandler<C> {
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit,
                               OrganRecipeCatalog recipes, BodyEnvironmentSource<C> environmentSource) {
+        // 未装配动作内容的宿主仍能执行既有命令，动作启动会明确拒绝缺少定义。
+        this(access, security, timeSource, store, audit, recipes, environmentSource, new ActionCatalog(List.of()));
+    }
+
+    public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
+                              BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit,
+                              OrganRecipeCatalog recipes, BodyEnvironmentSource<C> environmentSource, ActionCatalog actions) {
         // 所有依赖都显式装配；公共宿主可选择放行的私有策略，但不能省略基础授权。
         this.access = MeridianErrors.required(access, Host.ACCESS_REQUIRED);
         this.security = MeridianErrors.required(security, Host.SECURITY_REQUIRED);
@@ -71,6 +81,12 @@ public final class BodyCommandHandler<C> {
         this.audit = MeridianErrors.required(audit, Host.AUDIT_REQUIRED);
         this.recipes = MeridianErrors.required(recipes, Host.RECIPES_REQUIRED);
         this.environmentSource = MeridianErrors.required(environmentSource, Host.ENVIRONMENT_SOURCE_REQUIRED);
+        this.actions = MeridianErrors.required(actions, MeridianErrors.Data.ACTION_CATALOG_REQUIRED);
+    }
+
+    ActionCatalog actionCatalog() {
+        // 通用吐纳编排在启用前核对所绑定的动作，避免调用后才发现内容漏掉呼吸组织。
+        return actions;
     }
 
     public byte[] handle(C trustedContext, byte[] payload) {
@@ -159,9 +175,11 @@ public final class BodyCommandHandler<C> {
         MeridianMessages.TimeAdvanceResult timeResult = null;
         BodyMessages.OrganRecipe recipeFact = null;
         MeridianMessages.OrganIntakeResult intakeFact = null;
+        BodyMessages.ActionDefinition actionFact = null;
         try {
             // 瞬时发运、加工启动和做功使用已结算时刻；摄入自身消费可信活动区间。
-            if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue() || command.hasExertTissues()) {
+            if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue() || command.hasExertTissues()
+                    || command.hasStartAction() || command.hasStopAction()) {
                 requireActiveSettledTime(trustedContext, body);
             }
             // 先执行纯计算基础校验，私有策略无权跳过余额、死亡或版本上限约束。
@@ -216,6 +234,14 @@ public final class BodyCommandHandler<C> {
                     intakeFact = result.fact();
                     yield result.body();
                 }
+                case START_ACTION -> {
+                    // 组织名单只能来自可信目录，动作开始不能追溯改变此前区间的恢复。
+                    MeridianMessages.StartAction request = command.getStartAction();
+                    actionFact = actions.find(request.getActionId(), request.getActionVersion())
+                            .orElseThrow(() -> MeridianErrors.rejectCapability(MeridianErrors.CapabilityRejectionReason.ACTION_NOT_FOUND));
+                    yield BodyActions.start(body, request.getInstanceId(), ActionProtobuf.fromDefinition(actionFact));
+                }
+                case STOP_ACTION -> BodyActions.stop(body, command.getStopAction().getInstanceId());
                 case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
             };
         } catch (MeridianErrors.IntakeRejected rejected) {
@@ -258,6 +284,10 @@ public final class BodyCommandHandler<C> {
         if (intakeFact != null) {
             // 保存原环境事实以支持幂等重试；不从当前窗口重建历史成功结果。
             receiptBuilder.setOrganIntake(intakeFact);
+        }
+        if (actionFact != null) {
+            // 重试与事务复算使用原定义，后续目录变更不能改变过去的启动事实。
+            receiptBuilder.setActionDefinition(actionFact);
         }
         var receipt = receiptBuilder.build();
 

@@ -64,7 +64,9 @@ final class ProtoWire {
             if ((field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.time_advance")
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_recipe")
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_intake")
+                    || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.action_definition")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganDefinition.intake")
+                    || field.getFullName().equals("kizuna.meridian.v1.BreathingProfile.body_action")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganState.process")
                     || field.getFullName().equals("kizuna.meridian.v1.BreathControl.aim_z")) && !message.hasField(field)) {
                 // 仅跳过契约明确允许省略的字段；吐纳深度由执行方补为入口所在平面。

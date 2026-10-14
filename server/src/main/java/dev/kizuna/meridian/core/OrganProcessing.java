@@ -60,7 +60,7 @@ public final class OrganProcessing {
         // 5. 一次启动只生成一份候选身体；实际发布仍由宿主事务决定。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), accounts.organs(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1);
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions());
     }
 
     static QiInventory completeDue(BodySnapshot body, QiAccounts accounts, long atMillis) {

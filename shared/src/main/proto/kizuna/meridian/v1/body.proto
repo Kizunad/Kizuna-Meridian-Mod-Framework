@@ -85,7 +85,9 @@ message TissueDefinition {
   double fatigue_capacity = 6;
   repeated Port ports = 7;
   TissueCapacity capacity = 8; // 组织自身的基础能力；被动组织可显式全零。
-  double rest_recovery_per_second = 9; // 休息时每模拟秒减少的疲劳单位；缺省或 0 表示不自然恢复。
+  reserved 9;
+  reserved "rest_recovery_per_second";
+  double recovery_half_life_seconds = 10; // 未被动作使用时，剩余疲劳减半所需模拟秒；0 禁用自然恢复。
 }
 
 message TissueCapacity {
@@ -239,5 +241,21 @@ message BodySnapshot {
   VitalityState vitality = 11;
   TimeCursor settled_at = 12;
   optional int64 revision = 13;
+  repeated ActiveAction actions = 14; // 同时执行的动作实例；定义固定，跨动作的组织占用取并集。
   // 全身真元和剩余寿命由明细派生，不传另一份可修改总账。
+}
+
+// 生物/功法附属提供动作占用定义；做功费用使用现有受校验做功入口，不能重复计费。
+message ActionDefinition {
+  string id = 1;
+  int32 version = 2;
+  string display_name = 3;
+  repeated string tissue_ids = 4; // 当前生物构型的组织 ID；包含肌肉、注意组织等，不按名称特判。
+  repeated string organ_ids = 5;
+}
+
+message ActiveAction {
+  string instance_id = 1;
+  ActionDefinition definition = 2; // 启动时固定完整定义，缺包后仍能正确占用与结束。
+  int64 started_millis = 3;
 }

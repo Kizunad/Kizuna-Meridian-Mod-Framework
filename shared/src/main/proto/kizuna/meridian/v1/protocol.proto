@@ -50,7 +50,19 @@ message BodyCommand {
     ExertTissue exert_tissue = 14;
     IntakeQi intake_qi = 15;
     ExertTissues exert_tissues = 16;
+    StartAction start_action = 17;
+    StopAction stop_action = 18;
   }
+}
+
+message StartAction {
+  string instance_id = 1;
+  string action_id = 2;
+  int32 action_version = 3;
+}
+
+message StopAction {
+  string instance_id = 1; // 仅结束这一实例；其他动作的占用仍有效。
 }
 
 // 摄入目标器官与原始明细；时间、位置、来源和效率不能由客户端声明。
@@ -100,12 +112,13 @@ message ExertTissues {
 }
 
 // 宿主内部可信事实，不是 RequestEnvelope 的可上传字段。
-// 一段结算区间内倍率、模式和休息名单必须固定；切换策略前先按旧策略结算。
+// 一段结算区间内倍率、模式和动作占用必须固定；切换动作前先结清旧区间。
 message TimeAdvancePlan {
   TimeCursor target = 1;
   optional double biological_seconds_per_simulation_second = 2;
   TimeAdvanceMode mode = 3;
-  repeated string resting_tissue_ids = 4; // 整段区间内允许休息恢复的实际组织 ID；唯一，空表不恢复。
+  reserved 4;
+  reserved "resting_tissue_ids";
 }
 
 enum TimeAdvanceMode {
@@ -138,6 +151,7 @@ message CommandReceipt {
   TimeAdvanceResult time_advance = 5; // 仅 advance_time 回执必填，其他操作必须缺省。
   OrganRecipe organ_recipe = 6; // 仅 start_organ_recipe 必填，记录宿主解析的配方。
   OrganIntakeResult organ_intake = 7; // 仅 intake_qi 必填，包含同一次身体提交的环境回执。
+  ActionDefinition action_definition = 8; // 仅 start_action 必填，保存可信目录解析的定义。
 }
 
 message ResponseEnvelope {
@@ -192,4 +206,8 @@ enum FailureCode {
   ENVIRONMENT_BUDGET_EXCEEDED = 33;
   MERIDIAN_UNOPENED = 34;
   GATHERING_BUSY = 35;
+  ACTION_NOT_FOUND = 36;
+  ACTION_ALREADY_ACTIVE = 37;
+  ACTION_NOT_ACTIVE = 38;
+  ACTION_LIMIT_EXCEEDED = 39;
 }

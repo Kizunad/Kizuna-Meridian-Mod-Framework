@@ -56,6 +56,25 @@ public class AddonRegistryTest {
     }
 
     @Test
+    public void actionContentRequiresCapabilityAndReportsMissingVersions() {
+        // 功法包可独立登记动作；启动时再验证具体身体模块，注册不依赖某个身体实例。
+        var action = BodyMessages.ActionDefinition.newBuilder().setId("arts:hold").setVersion(1)
+                .setDisplayName("维持触须").addTissueIds("tendril").build();
+        var content = techniques().toBuilder().addActions(action).build();
+        rejected(registration(species(), content), CAPABILITY_MISSING, "arts", AddonRegistry.ACTIONS);
+        var request = registration(species(), content).toBuilder().setHost(host().addCapabilities(AddonRegistry.ACTIONS)).build();
+        var registry = AddonRegistry.load(AddonProtobuf.decodeRegistration(AddonProtobuf.encodeRegistration(request)));
+        assertEquals(action, registry.actions().find("arts:hold", 1).orElseThrow());
+        var references = references(reference(ACTION, "arts:hold", 1), reference(ACTION, "arts:hold", 2));
+        assertEquals(List.of(AVAILABLE, DEFINITION_VERSION_MISSING), registry.inspectReferences(references)
+                .getEntriesList().stream().map(AddonMessages.ContentAvailability::getStatus).toList());
+        assertEquals(ADDON_MISSING, AddonRegistry.load(registration(species())).inspectReferences(references)
+                .getEntries(0).getStatus());
+        rejected(request.toBuilder().setBundles(0, content.toBuilder().addActions(action)).setBundles(1, species()).build(),
+                DUPLICATE_CONTENT, "arts", "arts:hold");
+    }
+
+    @Test
     public void dependenciesVersionsAndHostCapabilitiesMustAllBeSatisfied() {
         // 缺直接依赖和版本不符整批拒绝，诊断提供包和关联目标。
         rejected(registration(techniques()), DEPENDENCY_MISSING, "arts", "sample");
@@ -89,7 +108,7 @@ public class AddonRegistryTest {
                 .addCapabilities(AddonRegistry.BODY_TEMPLATES)).build();
         rejected(withoutIntakeCapability, CAPABILITY_MISSING, "sample", AddonRegistry.ORGAN_INTAKE);
         var withRecovery = species().toBuilder().setTemplates(0, template.toBuilder().setStructure(template.getStructure().toBuilder()
-                .setTissues(0, template.getStructure().getTissues(0).toBuilder().setRestRecoveryPerSecond(2)))).build();
+                .setTissues(0, template.getStructure().getTissues(0).toBuilder().setRecoveryHalfLifeSeconds(2)))).build();
         rejected(registration(withRecovery), CAPABILITY_MISSING, "sample", AddonRegistry.TISSUE_RECOVERY);
         var supportedRecovery = registration(withRecovery).toBuilder()
                 .setHost(host().addCapabilities(AddonRegistry.TISSUE_RECOVERY)).build();

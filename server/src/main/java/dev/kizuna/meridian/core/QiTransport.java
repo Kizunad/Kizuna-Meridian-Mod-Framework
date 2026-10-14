@@ -129,7 +129,7 @@ public final class QiTransport {
         accounts.replace(source, remainingSourceQi);
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), accounts.organs(), accounts.meridians(), updatedTransits,
-                body.vitality(), body.settledAt(), body.revision() + 1);
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions());
     }
 
     static List<QiTransit> arrive(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits, long atMillis) {

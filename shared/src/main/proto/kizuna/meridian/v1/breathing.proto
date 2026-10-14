@@ -12,6 +12,11 @@ message BreathingProfile {
   double respiratory_watts = 4;
   double attention_watts = 5;
   repeated string recipe_ids = 6;
+  BreathingActionReference body_action = 7; // 可缺省；声明恢复能力的呼吸组织必须绑定已登记动作。
+}
+message BreathingActionReference {
+  string id = 1;
+  int32 version = 2;
 }
 message BreathingOrgan {
   string organ_id = 1;

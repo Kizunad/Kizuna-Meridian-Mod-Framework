@@ -13,7 +13,8 @@
 | `BodyTemplate.Reference` | 模板标识及正整数内容版本 |
 | `BodyTemplate` | 出生构型定义，不包含某个角色的余额、年龄或伤势 |
 | `BodyStructure` | 部位、组织、器官、经脉、端口和连接，以及这套构型的有效结构参数 |
-| `BodySnapshot` | 模板来源引用、当前实际构型、逐模块状态、境界、真元、寿命、时间游标与 revision |
+| `BodySnapshot` | 模板来源引用、当前实际构型、逐模块状态、并行动作实例、境界、真元、寿命、时间游标与 revision |
+| `BodyAction.Definition` / `BodyAction.Active` | 附属动作 ID/版本、名称、使用的组织及器官 / 身体内实例 ID、固定定义与开始时间 |
 
 模板与实例可以安全共用同一个不可变结构值。角色改造后创建新的实际 `BodyStructure`，原模板和其他身体保持原值。加载角色时使用保存的实际构型，不重新套用出生模板；模板引用只是来源，不要求实际构型始终等于模板。
 
@@ -28,7 +29,7 @@
 | 定义与状态 | 基础字段 |
 |---|---|
 | `Anatomy.PartDefinition` / `AnatomyState.Part` | 部位名称、最大 HP / 当前 HP |
-| `Anatomy.TissueDefinition` / `AnatomyState.Tissue` | 类型、归属部位、最大 HP、疲劳容量、端口、基础力量 N/爆发功率 W/耐力 J、休息恢复速率 / 当前 HP 与疲劳 |
+| `Anatomy.TissueDefinition` / `AnatomyState.Tissue` | 类型、归属部位、最大 HP、疲劳容量、端口、基础力量 N/爆发功率 W/耐力 J、疲劳恢复半衰期 / 当前 HP 与疲劳 |
 | `Anatomy.OrganDefinition` / `AnatomyState.Organ` | 类型、归属部位、最大 HP、端口、真元容量、端口共享吞吐、可缺省摄入能力 / 当前 HP、缓存、可缺省加工任务 |
 | `Anatomy.OrganIntakeCapability` | 正数 `maxQiPerSecond`，元/模拟秒；独立于端口吞吐，保存在实际构型中 |
 | `OrganRecipe` / `OrganProcess` | 配方 ID/版本、器官类型、输入输出、时长、最低境界 / 已固定配方、完成时刻、是否到期阻塞 |
@@ -39,7 +40,7 @@
 
 肌肉、皮肤、骨骼等由组织类型 ID 区分，特异器官也使用内容 ID，不在通用层加入固定种族分支。一条经脉可经过多个已存在的部位；肌肉和器官可以有自己的输入输出端口。器官的转换效率和产物属于配方，未错误地固定到端口上。
 
-`TissueDefinition.restRecoveryPerSecond` 使用疲劳单位/模拟秒，有限非负，缺省为零。实际恢复由可信时间计划的休息名单与活动模式共同决定，写回同一 `TissueState.fatigue`，详见[组织恢复](Tissue-Recovery.md)。
+`TissueDefinition.recoveryHalfLifeSeconds` 使用模拟秒，有限非负，缺省或零禁用自然恢复。`BodySnapshot.actions` 保存当前并行动作，组织占用取并集；未被使用的组织按指数函数减少同一 `TissueState.fatigue`。详见[动作定义](Actions.md)及[组织恢复](Tissue-Recovery.md)。
 
 `OrganDefinition.intake` 缺省表示不具备环境摄入能力，明确声明后由 `OrganIntake.apply` 按可信活动区间摄入原始真元。它检查生命、器官/部位 HP、速率、缓存和加工占容以及在途预约，并消费身体时间；来源库存与共享供给预算由同一事务核验。原始属性保留，动态炼化效率仍待实现，详见[环境摄入与交换](Environment-Qi.md)。
 

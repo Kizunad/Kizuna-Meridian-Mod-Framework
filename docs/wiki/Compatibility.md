@@ -18,6 +18,8 @@
 
 身体 schema 2 要求每条经脉显式提供 `MeridianState.opening = 6`。schema 1 和缺少开拓数据的快照均拒绝，不按完好度、真元或境界补全。当前未提供旧开发快照迁移器；初始化方必须按实际角色事实给出开拓阶段与进度，两端同步使用当前协议产物。
 
+当前开发版用 `TissueDefinition.recovery_half_life_seconds = 10` 替代线性恢复，旧字段 `rest_recovery_per_second = 9` 及 `TimeAdvancePlan.resting_tissue_ids = 4` 的编号和名称均 reserved。带旧字段的消息不自动迁移；没有旧字段的新建数据以半衰期零表示禁用恢复。宿主须同步支持 `meridian:tissue_recovery_v2` 和按 `BodySnapshot.actions = 14` 判断占用；不能继续声明 v1 后套用新公式。动作定义通过 `meridian:actions_v1` 登记。当前仍保持开发中的协议 1、schema 2，发布前须冻结版本并提供正式迁移策略。
+
 环境配置版本 2 新增业务必填 `generation = 7`；版本 1 和缺少生成配置的完整消息均拒绝。TOML 覆盖文件省略版本时沿用当前默认值，显式写 `config_version = 1` 的旧开发配置须改为 2 并检查新默认地形表。线协议版本 1、生成算法版本 1、宿主规则世代各自独立；新生成规则不能重新初始化已有区域余额。
 
 ## 附属包清单

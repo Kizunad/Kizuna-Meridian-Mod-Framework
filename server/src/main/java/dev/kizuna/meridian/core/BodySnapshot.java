@@ -15,8 +15,18 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
                            List<AnatomyState.Organ> organStates,
                            List<MeridianState> meridianStates,
                            List<QiTransit> transits,
-                           VitalityState vitality, TimeCursor settledAt, long revision) {
+                           VitalityState vitality, TimeCursor settledAt, long revision,
+                           List<BodyAction.Active> actions) {
     public static final int CURRENT_SCHEMA_VERSION = 2;
+
+    public BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference template, BodyStructure structure,
+                        Realm realm, List<AnatomyState.Part> partStates, List<AnatomyState.Tissue> tissueStates,
+                        List<AnatomyState.Organ> organStates, List<MeridianState> meridianStates, List<QiTransit> transits,
+                        VitalityState vitality, TimeCursor settledAt, long revision) {
+        // 初始化没有活动动作的身体；已有身体的变更必须显式保留其动作实例。
+        this(schemaVersion, id, template, structure, realm, partStates, tissueStates, organStates,
+                meridianStates, transits, vitality, settledAt, revision, List.of());
+    }
 
     public BodySnapshot {
         // 先拒绝未知 schema，避免把不同字段语义的数据误当作当前快照。
@@ -33,6 +43,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         organStates = List.copyOf(organStates);
         meridianStates = List.copyOf(meridianStates);
         transits = List.copyOf(transits);
+        actions = List.copyOf(actions);
         MeridianErrors.required(vitality, Data.VITALITY_REQUIRED);
         MeridianErrors.required(settledAt, Data.SETTLED_AT_REQUIRED);
         DataChecks.revision(revision);
@@ -42,6 +53,18 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         var tissues = match(structure.tissues(), Anatomy.TissueDefinition::id, tissueStates, AnatomyState.Tissue::id, "组织");
         var organs = match(structure.organs(), Anatomy.OrganDefinition::id, organStates, AnatomyState.Organ::id, "器官");
         var meridians = match(structure.meridians(), Anatomy.MeridianDefinition::id, meridianStates, MeridianState::id, "经脉");
+        // 多动作允许共用同一组织；同实例只记一次，死体或未来动作不能伪装成当前占用。
+        DataChecks.index(actions, BodyAction.Active::instanceId, "动作实例");
+        if (actions.size() > BodyActions.MAX_ACTIVE_ACTIONS || (vitality.dead() && !actions.isEmpty())) {
+            throw MeridianErrors.invalid(Data.INVALID_ACTION_STATE);
+        }
+        for (BodyAction.Active action : actions) {
+            if (action.startedMillis() > settledAt.elapsedMillis()
+                    || !tissues.keySet().containsAll(action.definition().tissueIds())
+                    || !organs.keySet().containsAll(action.definition().organIds())) {
+                throw MeridianErrors.invalid(Data.INVALID_ACTION_STATE);
+            }
+        }
         // 使用角色当前实际构型的上限，改造后的身体不受出生模板数值覆盖。
         for (var state : partStates) {
             DataChecks.atMost(state.hp(), parts.get(state.id()).maxHp(), "部位 HP");

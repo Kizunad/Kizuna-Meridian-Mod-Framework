@@ -81,6 +81,9 @@ public final class AddonProtobuf {
         for (var recipe : bundle.getOrganRecipesList()) {
             CapabilityProtobuf.fromRecipe(recipe);
         }
+        for (var action : bundle.getActionsList()) {
+            ActionProtobuf.fromDefinition(action);
+        }
     }
 
     public static byte[] encodeReferences(AddonMessages.ContentReferences references) {

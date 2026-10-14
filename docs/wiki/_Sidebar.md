@@ -5,6 +5,7 @@
 - [身体展示资源](Body-Presentation.md)
 - [身体数据、寿命与存档](Body-and-Persistence.md)
 - [组织耐力与精力恢复](Tissue-Recovery.md)
+- [身体动作与模块占用](Actions.md)
 - [经脉与真元](Meridian-and-Qi.md)
 - [一次聚气与宿主编排](Gathering.md)
 - [环境真元交换](Environment-Qi.md)

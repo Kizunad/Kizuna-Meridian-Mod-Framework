@@ -49,10 +49,13 @@ final class AddonDependencies {
             }
             boolean declaresRecovery = bundle.getTemplatesList().stream()
                     .flatMap(template -> template.getStructure().getTissuesList().stream())
-                    .anyMatch(tissue -> tissue.getRestRecoveryPerSecond() > 0);
+                    .anyMatch(tissue -> tissue.getRecoveryHalfLifeSeconds() > 0);
             if (declaresRecovery) {
                 // 其他语言核心也须显式支持恢复规则，不能只读取字段却忽略其运行含义。
                 requireCapability(capabilities, namespace, AddonRegistry.TISSUE_RECOVERY);
+            }
+            if (bundle.getActionsCount() > 0) {
+                requireCapability(capabilities, namespace, AddonRegistry.ACTIONS);
             }
 
             for (var dependency : manifest.getDependenciesList()) {

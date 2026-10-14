@@ -30,15 +30,15 @@ public class TissueRecoveryTest {
         byte[] response = handler.handle("owner", request);
         assertTrue(MeridianProtocol.decodeResponse(response).hasCommandCommitted());
         BodySnapshot recovered = store.find(initial.id()).orElseThrow();
-        assertEquals(12, recovered.tissueStates().get(0).fatigue(), 0);
-        assertEquals(60, recovered.tissueStates().get(1).fatigue(), 0);
-        assertEquals(400, TissueCapabilities.available(recovered, new Anatomy.TissueId("tendril")).enduranceJoules(), 1e-10);
-        assertEquals(120, TissueCapabilities.available(recovered, new Anatomy.TissueId("focus")).enduranceJoules(), 1e-10);
+        assertEquals(10, recovered.tissueStates().get(0).fatigue(), 1e-10);
+        assertEquals(20, recovered.tissueStates().get(1).fatigue(), 1e-10);
+        assertEquals(500, TissueCapabilities.available(recovered, new Anatomy.TissueId("tendril")).enduranceJoules(), 1e-10);
+        assertEquals(240, TissueCapabilities.available(recovered, new Anatomy.TissueId("focus")).enduranceJoules(), 1e-10);
         assertEquals(initial.totalQi(), recovered.totalQi(), 0);
         assertEquals(initial.partStates(), recovered.partStates());
         assertEquals(1, recovered.revision());
 
-        // 快照保存恢复速率，回执保存休息名单；成功重试不能再读取当前时钟。
+        // 快照保存半衰期与动作，回执保存可信时间；成功重试不能再读取当前时钟。
         var receipt = store.transact(initial.id(), tx -> tx.receipt("owner", "rest").orElseThrow());
         var savedReceipt = MeridianProtocol.decodeReceipt(MeridianProtocol.encodeReceipt(receipt));
         BodySnapshot savedBody = BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(recovered));
@@ -56,8 +56,8 @@ public class TissueRecoveryTest {
         var resumed = handler(restored, (context, current) -> plan(8000), true);
         assertTrue(MeridianProtocol.decodeResponse(resumed.handle("owner", request("next", 1))).hasCommandCommitted());
         BodySnapshot continued = restored.find(initial.id()).orElseThrow();
-        assertEquals(4, continued.tissueStates().get(0).fatigue(), 0);
-        assertEquals(40, continued.tissueStates().get(1).fatigue(), 0);
+        assertEquals(5, continued.tissueStates().get(0).fatigue(), 1e-10);
+        assertEquals(5, continued.tissueStates().get(1).fatigue(), 1e-10);
         assertEquals(MeridianMessages.FailureCode.TIME_NOT_ADVANCED,
                 MeridianProtocol.decodeResponse(resumed.handle("owner", request("same-time", 2))).getFailure().getCode());
         assertEquals(continued, restored.find(initial.id()).orElseThrow());
@@ -69,18 +69,19 @@ public class TissueRecoveryTest {
         BodySnapshot initial = body();
         BodySnapshot direct = advance(initial, plan(4000));
         BodySnapshot split = advance(advance(initial, plan(2000)), plan(4000));
-        assertEquals(direct.tissueStates(), split.tissueStates());
+        for (int index = 0; index < direct.tissueStates().size(); index++) {
+            assertEquals(direct.tissueStates().get(index).fatigue(), split.tissueStates().get(index).fatigue(), 1e-10);
+        }
         BodySnapshot fastAging = advance(initial, plan(4000).toBuilder().setBiologicalSecondsPerSimulationSecond(10).build());
         assertEquals(direct.tissueStates(), fastAging.tissueStates());
         BodySnapshot fullyRecovered = advance(initial, plan(Long.MAX_VALUE));
         assertEquals(0, fullyRecovered.tissueStates().get(0).fatigue(), 0);
         assertEquals(0, fullyRecovered.tissueStates().get(1).fatigue(), 0);
 
-        // 冻结区间不能在解冻后补领；没有休息事实的组织保持疲劳。
+        // 冻结区间不能在解冻后补领，只有之后一秒可用于恢复。
         BodySnapshot frozen = advance(initial, plan(10_000).toBuilder().setMode(MeridianMessages.TimeAdvanceMode.LIFESPAN_ONLY).build());
         assertEquals(initial.tissueStates(), frozen.tissueStates());
-        assertEquals(18, advance(frozen, plan(11_000)).tissueStates().get(0).fatigue(), 0);
-        assertEquals(initial.tissueStates(), advance(initial, plan(4000).toBuilder().clearRestingTissueIds().build()).tissueStates());
+        assertEquals(20 * Math.pow(0.5, .25), advance(frozen, plan(11_000)).tissueStates().get(0).fatigue(), 1e-10);
         var message = BodyProtobuf.toMessage(initial);
         BodySnapshot disabledPart = BodyProtobuf.fromMessage(message.toBuilder().setPartStates(0,
                 message.getPartStates(0).toBuilder().setHp(0)).build());
@@ -89,7 +90,7 @@ public class TissueRecoveryTest {
                 message.getTissueStates(0).toBuilder().setHp(0)).build());
         BodySnapshot afterInjury = advance(disabledTissue, plan(4000));
         assertEquals(disabledTissue.tissueStates().get(0), afterInjury.tissueStates().get(0));
-        assertEquals(60, afterInjury.tissueStates().get(1).fatigue(), 0);
+        assertEquals(20, afterInjury.tissueStates().get(1).fatigue(), 1e-10);
 
         // 寿尽前两秒可恢复，之后的八秒不能计入；死体不能再次推进。
         BodySnapshot mortal = BodyProtobuf.fromMessage(message.toBuilder().setVitality(message.getVitality().toBuilder()
@@ -97,25 +98,21 @@ public class TissueRecoveryTest {
         BodySnapshot dead = advance(mortal, plan(10_000).toBuilder().setBiologicalSecondsPerSimulationSecond(1).build());
         assertTrue(dead.vitality().dead());
         assertEquals(2000, dead.settledAt().elapsedMillis());
-        assertEquals(16, dead.tissueStates().get(0).fatigue(), 0);
-        assertEquals(70, dead.tissueStates().get(1).fatigue(), 0);
+        assertEquals(20 / Math.sqrt(2), dead.tissueStates().get(0).fatigue(), 1e-10);
+        assertEquals(40, dead.tissueStates().get(1).fatigue(), 1e-10);
         assertEquals(MeridianErrors.TimeRejectionReason.BODY_DEAD,
                 assertThrows(MeridianErrors.TimeRejected.class, () -> advance(dead, plan(20_000))).reason());
     }
 
     @Test
     public void invalidRecoveryFactsAndRejectedTransactionsNeverChangeFatigue() {
-        // 配置与宿主事实都经过 protoc 边界；拒绝负速率、非法数值、重复及不存在的组织。
+        // 半衰期配置经过 protoc 边界，负值与非有限数均不能进入恢复计算。
         var message = BodyProtobuf.toMessage(body());
-        for (double rate : new double[] {-1, Double.NaN, Double.POSITIVE_INFINITY}) {
+        for (double halfLifeSeconds : new double[] {-1, Double.NaN, Double.POSITIVE_INFINITY}) {
             var malformed = message.toBuilder().setStructure(message.getStructure().toBuilder().setTissues(0,
-                    message.getStructure().getTissues(0).toBuilder().setRestRecoveryPerSecond(rate))).build();
+                    message.getStructure().getTissues(0).toBuilder().setRecoveryHalfLifeSeconds(halfLifeSeconds))).build();
             assertThrows(IllegalArgumentException.class, () -> BodyProtobuf.decodeSnapshot(malformed.toByteArray()));
         }
-        assertThrows(IllegalArgumentException.class,
-                () -> TimeProtobuf.fromMessage(plan(1000).toBuilder().addRestingTissueIds("tendril").build()));
-        assertThrows(IllegalArgumentException.class,
-                () -> advance(body(), plan(1000).toBuilder().addRestingTissueIds("missing").build()));
         assertEquals(plan(1000), TimeProtobuf.decodePlan(TimeProtobuf.encodePlan(plan(1000))));
 
         // 私有策略可拒绝恢复，但不能留下候选疲劳、时间或回执。
@@ -127,12 +124,12 @@ public class TissueRecoveryTest {
         assertEquals(initial, store.find(initial.id()).orElseThrow());
         assertTrue(store.transact(initial.id(), tx -> tx.receipt("owner", "denied").isEmpty()));
 
-        // 未声明恢复速率的旧定义不获得默认数值；极小不可表示增量不能只移走时间游标。
+        // 半衰期为零禁用自然恢复；极小不可表示增量不能只移走时间游标。
         BodySnapshot noRecovery = BodyProtobuf.fromMessage(message.toBuilder().setStructure(message.getStructure().toBuilder()
-                .setTissues(0, message.getStructure().getTissues(0).toBuilder().clearRestRecoveryPerSecond())).build());
+                .setTissues(0, message.getStructure().getTissues(0).toBuilder().clearRecoveryHalfLifeSeconds())).build());
         assertEquals(initial.tissueStates().get(0), advance(noRecovery, plan(4000)).tissueStates().get(0));
         BodySnapshot tinyRecovery = BodyProtobuf.fromMessage(message.toBuilder().setStructure(message.getStructure().toBuilder()
-                .setTissues(0, message.getStructure().getTissues(0).toBuilder().setRestRecoveryPerSecond(Double.MIN_VALUE))).build());
+                .setTissues(0, message.getStructure().getTissues(0).toBuilder().setRecoveryHalfLifeSeconds(Double.MAX_VALUE))).build());
         assertEquals(MeridianErrors.TimeRejectionReason.NUMERIC_LIMIT,
                 assertThrows(MeridianErrors.TimeRejected.class, () -> advance(tinyRecovery, plan(1))).reason());
     }
@@ -140,9 +137,9 @@ public class TissueRecoveryTest {
     private static BodySnapshot body() {
         // 独立非人构型同时声明两种组织，框架不能依赖人体 ID 或默认恢复比例。
         var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
-        var tendril = original.getStructure().getTissues(0).toBuilder().setRestRecoveryPerSecond(2);
+        var tendril = original.getStructure().getTissues(0).toBuilder().setRecoveryHalfLifeSeconds(4);
         var focus = tendril.clone().setId("focus").setKind("sample:nerve").clearPorts()
-                .setFatigueCapacity(100).setRestRecoveryPerSecond(5)
+                .setFatigueCapacity(100).setRecoveryHalfLifeSeconds(2)
                 .setCapacity(BodyMessages.TissueCapacity.newBuilder().setStrengthNewtons(0)
                         .setBurstWatts(100).setEnduranceJoules(300));
         return BodyProtobuf.fromMessage(original.toBuilder().setRevision(0).clearTransits()
@@ -154,11 +151,10 @@ public class TissueRecoveryTest {
     }
 
     private static MeridianMessages.TimeAdvancePlan plan(long millis) {
-        // 宿主明确声明整个区间的休息名单；零老化倍率用于隔离恢复的模拟时间单位。
+        // 零老化倍率隔离模拟时间单位；哪些组织休息由身体动作决定。
         return MeridianMessages.TimeAdvancePlan.newBuilder().setTarget(BodyMessages.TimeCursor.newBuilder()
                         .setDomain("sample:world").setEpoch("epoch-1").setElapsedMillis(millis))
-                .setBiologicalSecondsPerSimulationSecond(0).setMode(MeridianMessages.TimeAdvanceMode.ACTIVE)
-                .addAllRestingTissueIds(List.of("tendril", "focus")).build();
+                .setBiologicalSecondsPerSimulationSecond(0).setMode(MeridianMessages.TimeAdvanceMode.ACTIVE).build();
     }
 
     private static BodySnapshot advance(BodySnapshot body, MeridianMessages.TimeAdvancePlan plan) {

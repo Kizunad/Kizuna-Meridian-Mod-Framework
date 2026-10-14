@@ -26,6 +26,7 @@ message AddonBundle {
   repeated ContentSymbol symbols = 3;
   repeated BodyTemplate templates = 4;
   repeated OrganRecipe organ_recipes = 5;
+  repeated ActionDefinition actions = 6;
 }
 
 message AddonManifest {
@@ -71,6 +72,7 @@ enum ContentDefinitionKind {
   CONTENT_DEFINITION_KIND_UNSPECIFIED = 0;
   BODY_TEMPLATE = 1;
   ORGAN_RECIPE = 2;
+  ACTION = 3;
 }
 
 message ContentReferences {
