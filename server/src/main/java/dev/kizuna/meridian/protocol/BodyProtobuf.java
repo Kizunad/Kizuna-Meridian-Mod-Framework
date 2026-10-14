@@ -133,6 +133,7 @@ public final class BodyProtobuf {
         return BodyMessages.TissueDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
                 .setKind(value.kind().value()).setPartId(value.partId().value()).setMaxHp(value.maxHp())
                 .setFatigueCapacity(value.fatigueCapacity())
+                .setRestRecoveryPerSecond(value.restRecoveryPerSecond())
                 .setCapacity(CapabilityProtobuf.toCapacity(value.capacity()))
                 .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList()).build();
     }
@@ -142,7 +143,7 @@ public final class BodyProtobuf {
         return new Anatomy.TissueDefinition(new Anatomy.TissueId(value.getId()), value.getDisplayName(),
                 new DefinitionId(value.getKind()), new Anatomy.PartId(value.getPartId()), value.getMaxHp(),
                 value.getFatigueCapacity(), value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
-                CapabilityProtobuf.fromCapacity(value.getCapacity()));
+                CapabilityProtobuf.fromCapacity(value.getCapacity()), value.getRestRecoveryPerSecond());
     }
 
     private static BodyMessages.OrganDefinition toOrgan(Anatomy.OrganDefinition value) {

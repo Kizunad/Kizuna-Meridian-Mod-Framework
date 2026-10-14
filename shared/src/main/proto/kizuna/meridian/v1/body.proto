@@ -85,6 +85,7 @@ message TissueDefinition {
   double fatigue_capacity = 6;
   repeated Port ports = 7;
   TissueCapacity capacity = 8; // 组织自身的基础能力；被动组织可显式全零。
+  double rest_recovery_per_second = 9; // 休息时每模拟秒减少的疲劳单位；缺省或 0 表示不自然恢复。
 }
 
 message TissueCapacity {

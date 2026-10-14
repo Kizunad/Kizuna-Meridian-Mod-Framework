@@ -249,6 +249,9 @@ public final class MeridianErrors {
         public static final String BODY_REQUIRED = "身体不能为空";
         public static final String TIME_PLAN_REQUIRED = "时间推进计划不能为空";
         public static final String TIME_MODE_REQUIRED = "时间推进模式不能为空";
+        public static final String RESTING_TISSUES_REQUIRED = "休息组织列表不能为空，未休息请提供空列表";
+        public static final String DUPLICATE_RESTING_TISSUE = "同一区间的休息组织不能重复";
+        public static final String RESTING_TISSUE_NOT_FOUND = "休息组织必须属于当前身体";
         public static final String TIME_RESULT_REQUIRED = "时间推进结果不能为空";
         public static final String TRANSPORT_REQUEST_REQUIRED = "运输请求不能为空";
         public static final String TRANSIT_STATUS_REQUIRED = "在途状态不能为空";

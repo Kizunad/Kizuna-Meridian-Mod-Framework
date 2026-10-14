@@ -177,7 +177,7 @@ EOF
 
 `body_command.advance_time {}` 只表示请求结算，固定样例（`q1`、`body-1`、revision 0）为 `0801120271315a0c0a06626f64792d3110005a00`。客户端往该空消息添加时间字段会被未知字段校验拒绝。宿主须单独授权操作，不能把身体读取权限当作时间控制权限。
 
-`BodyTimeSource.resolve(context, current)` 在身体事务内返回 protoc 生成的 `TimeAdvancePlan`。字段为 `target`、`biological_seconds_per_simulation_second`、`mode`；跨进程可信事实可由 `TimeProtobuf.encodePlan/decodePlan` 交换。这条通道必须由宿主认证，不能注册成客户端上传入口。倍率零值也必须显式提供。
+`BodyTimeSource.resolve(context, current)` 在身体事务内返回 protoc 生成的 `TimeAdvancePlan`。字段为 `target`、`biological_seconds_per_simulation_second`、`mode` 和 `resting_tissue_ids`；跨进程可信事实可由 `TimeProtobuf.encodePlan/decodePlan` 交换。这条通道必须由宿主认证，不能注册成客户端上传入口。倍率零值也必须显式提供，休息名单可以为空。恢复速率来自实际构型的 `TissueDefinition.rest_recovery_per_second`，规则见[组织恢复](Tissue-Recovery.md)。
 
 `BodyTimeAdvancement` 执行[年龄、事件顺序、冻结与寿尽规则](Body-and-Persistence.md)。新增失败码固定为 `CLOCK_MISMATCH = 12`、`TIME_NOT_ADVANCED = 13`、`PENDING_TIME_EVENT = 14`。时间平移溢出或无法表达的年龄增量复用 `NUMERIC_LIMIT`，死亡后新请求为 `BODY_DEAD`。
 

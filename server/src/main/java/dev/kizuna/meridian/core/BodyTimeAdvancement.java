@@ -7,6 +7,7 @@ import dev.kizuna.meridian.error.MeridianErrors.TimeRejectionReason;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,12 +19,28 @@ public final class BodyTimeAdvancement {
 
     public enum Mode { ACTIVE, LIFESPAN_ONLY }
 
-    public record Plan(TimeCursor target, double biologicalSecondsPerSimulationSecond, Mode mode) {
+    public record Plan(TimeCursor target, double biologicalSecondsPerSimulationSecond, Mode mode,
+                       List<Anatomy.TissueId> restingTissueIds) {
+        public Plan(TimeCursor target, double biologicalSecondsPerSimulationSecond, Mode mode) {
+            // 未提供可信休息事实时只结算原有时间规则，不根据没有命令推测角色在休息。
+            this(target, biologicalSecondsPerSimulationSecond, mode, List.of());
+        }
+
         public Plan {
             // 零倍率表示暂停老化；它不隐含暂停运输，运输是否冻结由模式明确决定。
             MeridianErrors.required(target, Data.SETTLED_AT_REQUIRED);
             DataChecks.nonNegative(biologicalSecondsPerSimulationSecond, "老化倍率");
             MeridianErrors.required(mode, Data.TIME_MODE_REQUIRED);
+            // 同一组织只能获得一次恢复；防御性复制保证回执与候选身体采用相同的区间事实。
+            MeridianErrors.required(restingTissueIds, Data.RESTING_TISSUES_REQUIRED);
+            var identities = new HashSet<Anatomy.TissueId>();
+            for (Anatomy.TissueId tissueId : restingTissueIds) {
+                MeridianErrors.required(tissueId, Data.TISSUE_ID_REQUIRED);
+                if (!identities.add(tissueId)) {
+                    throw MeridianErrors.invalid(Data.DUPLICATE_RESTING_TISSUE);
+                }
+            }
+            restingTissueIds = List.copyOf(restingTissueIds);
         }
     }
 
@@ -63,6 +80,8 @@ public final class BodyTimeAdvancement {
             settledAt = deathAt.get();
         }
         long elapsedMillis = settledAt.elapsedMillis() - start.elapsedMillis();
+        // 恢复和年龄共用已经裁到寿尽的区间；没有逐秒循环，也不会把死亡后的时间用于恢复。
+        List<AnatomyState.Tissue> tissues = TissueRecovery.advance(body, plan, elapsedMillis);
 
         double updatedAgeSeconds;
         if (died) {
@@ -185,11 +204,11 @@ public final class BodyTimeAdvancement {
             }
         }
 
-        // 5. 一次区间结算只递增一次版本，伤势、疲劳、构型和已耗寿元均不在本算子中重算。
+        // 5. 疲劳恢复与寿命、资源事件一起提交，一次区间结算只递增一次版本。
         var updatedVitality = new VitalityState(updatedAgeSeconds, vitality.lifespanLimitSeconds(),
                 vitality.spentLifespanSeconds(), died);
         var updatedBody = new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
-                body.partStates(), body.tissueStates(), organs, meridians, transits,
+                body.partStates(), tissues, organs, meridians, transits,
                 updatedVitality, settledAt, body.revision() + 1);
         return new Result(updatedBody, died, releasedQi);
     }

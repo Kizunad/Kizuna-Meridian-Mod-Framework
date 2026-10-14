@@ -100,11 +100,12 @@ message ExertTissues {
 }
 
 // 宿主内部可信事实，不是 RequestEnvelope 的可上传字段。
-// 一段结算区间内倍率和模式必须固定；切换策略前先按旧策略结算。
+// 一段结算区间内倍率、模式和休息名单必须固定；切换策略前先按旧策略结算。
 message TimeAdvancePlan {
   TimeCursor target = 1;
   optional double biological_seconds_per_simulation_second = 2;
   TimeAdvanceMode mode = 3;
+  repeated string resting_tissue_ids = 4; // 整段区间内允许休息恢复的实际组织 ID；唯一，空表不恢复。
 }
 
 enum TimeAdvanceMode {

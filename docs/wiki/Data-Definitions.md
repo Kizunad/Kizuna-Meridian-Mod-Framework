@@ -28,7 +28,7 @@
 | 定义与状态 | 基础字段 |
 |---|---|
 | `Anatomy.PartDefinition` / `AnatomyState.Part` | 部位名称、最大 HP / 当前 HP |
-| `Anatomy.TissueDefinition` / `AnatomyState.Tissue` | 类型、归属部位、最大 HP、疲劳容量、端口、基础力量 N/爆发功率 W/耐力 J / 当前 HP 与疲劳 |
+| `Anatomy.TissueDefinition` / `AnatomyState.Tissue` | 类型、归属部位、最大 HP、疲劳容量、端口、基础力量 N/爆发功率 W/耐力 J、休息恢复速率 / 当前 HP 与疲劳 |
 | `Anatomy.OrganDefinition` / `AnatomyState.Organ` | 类型、归属部位、最大 HP、端口、真元容量、端口共享吞吐、可缺省摄入能力 / 当前 HP、缓存、可缺省加工任务 |
 | `Anatomy.OrganIntakeCapability` | 正数 `maxQiPerSecond`，元/模拟秒；独立于端口吞吐，保存在实际构型中 |
 | `OrganRecipe` / `OrganProcess` | 配方 ID/版本、器官类型、输入输出、时长、最低境界 / 已固定配方、完成时刻、是否到期阻塞 |
@@ -38,6 +38,8 @@
 | `Anatomy.Connection` | 连接 ID、起止端口、相对阻力、距离 |
 
 肌肉、皮肤、骨骼等由组织类型 ID 区分，特异器官也使用内容 ID，不在通用层加入固定种族分支。一条经脉可经过多个已存在的部位；肌肉和器官可以有自己的输入输出端口。器官的转换效率和产物属于配方，未错误地固定到端口上。
+
+`TissueDefinition.restRecoveryPerSecond` 使用疲劳单位/模拟秒，有限非负，缺省为零。实际恢复由可信时间计划的休息名单与活动模式共同决定，写回同一 `TissueState.fatigue`，详见[组织恢复](Tissue-Recovery.md)。
 
 `OrganDefinition.intake` 缺省表示不具备环境摄入能力，明确声明后由 `OrganIntake.apply` 按可信活动区间摄入原始真元。它检查生命、器官/部位 HP、速率、缓存和加工占容以及在途预约，并消费身体时间；来源库存与共享供给预算由同一事务核验。原始属性保留，动态炼化效率仍待实现，详见[环境摄入与交换](Environment-Qi.md)。
 

@@ -64,7 +64,14 @@ public final class Anatomy {
 
     /** kind 使用内容标识区分肌肉、皮肤、骨骼等，不封闭第三方组织类型。 */
     public record TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
-                                   double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity) {
+                                   double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity,
+                                   double restRecoveryPerSecond) {
+        public TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
+                                double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity) {
+            // 内容没有声明恢复能力时保持零速率，避免给所有物种暗中配置相同恢复数值。
+            this(id, displayName, kind, partId, maxHp, fatigueCapacity, ports, capacity, 0);
+        }
+
         public TissueDefinition {
             // 先检查类型与归属，再检查组织自身的承载上限。
             MeridianErrors.required(id, Data.TISSUE_ID_REQUIRED);
@@ -74,6 +81,7 @@ public final class Anatomy {
             DataChecks.positive(maxHp, "组织生命值");
             DataChecks.positive(fatigueCapacity, "组织疲劳容量");
             MeridianErrors.required(capacity, Data.CAPACITY_REQUIRED);
+            DataChecks.nonNegative(restRecoveryPerSecond, "组织休息恢复速率");
             // 防止调用者随后修改端口列表，绕过构型校验。
             ports = List.copyOf(ports);
         }

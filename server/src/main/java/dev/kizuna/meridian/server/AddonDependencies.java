@@ -47,6 +47,13 @@ final class AddonDependencies {
             if (declaresIntake) {
                 requireCapability(capabilities, namespace, AddonRegistry.ORGAN_INTAKE);
             }
+            boolean declaresRecovery = bundle.getTemplatesList().stream()
+                    .flatMap(template -> template.getStructure().getTissuesList().stream())
+                    .anyMatch(tissue -> tissue.getRestRecoveryPerSecond() > 0);
+            if (declaresRecovery) {
+                // 其他语言核心也须显式支持恢复规则，不能只读取字段却忽略其运行含义。
+                requireCapability(capabilities, namespace, AddonRegistry.TISSUE_RECOVERY);
+            }
 
             for (var dependency : manifest.getDependenciesList()) {
                 var installed = bundles.get(dependency.getNamespace());

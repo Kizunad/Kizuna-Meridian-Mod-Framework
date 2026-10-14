@@ -34,8 +34,9 @@
 | `meridian:body_templates_v1` | 包含身体模板 |
 | `meridian:organ_recipes_v1` | 包含固定器官配方 |
 | `meridian:organ_intake_v1` | 模板中有器官声明 `intake` |
+| `meridian:tissue_recovery_v1` | 模板中有组织声明正数 `rest_recovery_per_second` |
 
-这三项由内容推导，清单漏写也不能绕过。`required_capabilities` 可额外声明宿主条件；每一项都必须出现在可信宿主画像中。能力列表是宿主对自身实现的承诺，不会动态下载算子或创建 Java 回调，更不能由客户端上传获得支持。
+这些要求由内容推导，清单漏写也不能绕过。`required_capabilities` 可额外声明宿主条件；每一项都必须出现在可信宿主画像中。能力列表是宿主对自身实现的承诺，不会动态下载算子或创建 Java 回调，更不能由客户端上传获得支持。
 
 ## 注册与执行
 

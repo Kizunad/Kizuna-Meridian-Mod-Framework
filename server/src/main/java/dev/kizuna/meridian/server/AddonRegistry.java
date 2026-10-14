@@ -24,6 +24,7 @@ public final class AddonRegistry {
     public static final String BODY_TEMPLATES = "meridian:body_templates_v1";
     public static final String ORGAN_RECIPES = "meridian:organ_recipes_v1";
     public static final String ORGAN_INTAKE = "meridian:organ_intake_v1";
+    public static final String TISSUE_RECOVERY = "meridian:tissue_recovery_v1";
 
     private final Map<String, AddonMessages.AddonBundle> bundles;
     private final Map<String, AddonMessages.ContentSymbol> symbols;

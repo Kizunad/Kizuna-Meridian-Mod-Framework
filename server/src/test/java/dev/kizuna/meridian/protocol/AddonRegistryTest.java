@@ -88,6 +88,12 @@ public class AddonRegistryTest {
         var withoutIntakeCapability = registration(withIntake).toBuilder().setHost(host().clearCapabilities()
                 .addCapabilities(AddonRegistry.BODY_TEMPLATES)).build();
         rejected(withoutIntakeCapability, CAPABILITY_MISSING, "sample", AddonRegistry.ORGAN_INTAKE);
+        var withRecovery = species().toBuilder().setTemplates(0, template.toBuilder().setStructure(template.getStructure().toBuilder()
+                .setTissues(0, template.getStructure().getTissues(0).toBuilder().setRestRecoveryPerSecond(2)))).build();
+        rejected(registration(withRecovery), CAPABILITY_MISSING, "sample", AddonRegistry.TISSUE_RECOVERY);
+        var supportedRecovery = registration(withRecovery).toBuilder()
+                .setHost(host().addCapabilities(AddonRegistry.TISSUE_RECOVERY)).build();
+        assertNotNull(AddonRegistry.load(supportedRecovery));
     }
 
     @Test
