@@ -7,6 +7,14 @@ import "kizuna/meridian/v1/body.proto";
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "PresentationMessages";
 
+// 宿主向已认证连接推送只读身体；资源路径由生物内容提供，UI 无需猜测种族。
+// Fabric 适配使用 meridian:body_view 通道，消息上限 1 MiB。
+message BodyViewUpdate {
+  int32 protocol_version = 1;
+  BodySnapshot body = 2;
+  string presentation_resource = 3; // namespace:path，相对于资源包 assets。
+}
+
 // 生物附属提供的只读展示资源，不属于身体账本或客户端变更命令。
 // 坐标为模型局部米，右手系，Y 向上、Z 向前；左右以生物自身为准。
 message BodyPresentation {

@@ -123,6 +123,13 @@ final class BreathingDriver<C> {
             throw MeridianErrors.rejectGathering(REQUEST_ID_CONFLICT);
         }
         long now = session.now();
+        if (active && requested.getAction() == control.getAction()
+                && (requested.getAction() == INHALE || requested.getAction() == EXHALE || requested.getAction() == HOLD)) {
+            // 持续输入只刷新瞄准与租约；按键续期不能把 250 ms 摄入窗口切碎成网络包间隔。
+            control = requested;
+            leaseMillis = now + INPUT_LEASE_MILLIS;
+            return;
+        }
         if (active) {
             step(now);
         }

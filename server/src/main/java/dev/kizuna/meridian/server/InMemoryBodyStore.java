@@ -105,6 +105,38 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         return environmentQi;
     }
 
+    public synchronized List<CommandReceipt> receipts() {
+        // 宿主保存身体时同时取得已提交回执；不可变消息不会暴露可写事务或去重索引。
+        return bodies.values().stream().flatMap(body -> body.receipts().values().stream()).toList();
+    }
+
+    public synchronized void registerBody(BodySnapshot initial) {
+        // 可信宿主只登记首次出生的身体；既有身份不能借重新登录覆盖资源与回执。
+        if (transactionOpen) {
+            throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
+        }
+        BodyProtobuf.toMessage(initial);
+        if (bodies.putIfAbsent(initial.id(), new StoredBody(initial, Map.of())) != null) {
+            throw MeridianErrors.invalid(Host.DUPLICATE_BODY);
+        }
+    }
+
+    public synchronized void registerEnvironmentSource(EnvironmentQiSource initial) {
+        // 新区域与所有身体共用事务锁，重复登记明确拒绝，不能借加载区块补满库存。
+        if (transactionOpen) {
+            throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
+        }
+        EnvironmentProtobuf.validateSource(initial);
+        if (sources.putIfAbsent(initial.getSpace().getSourceId(), initial) != null) {
+            throw MeridianErrors.invalid(Host.DUPLICATE_SOURCE);
+        }
+    }
+
+    public synchronized List<EnvironmentQiSource> environmentSources() {
+        // 保存当前库存、版本和共享预算；返回不可变列表，不暴露可写来源表。
+        return List.copyOf(sources.values());
+    }
+
     public synchronized Optional<EnvironmentQiSource> environmentSource(String sourceId) {
         // 只返回完整已提交来源，用于可信宿主保存或读取浓度。
         return Optional.ofNullable(sources.get(sourceId));

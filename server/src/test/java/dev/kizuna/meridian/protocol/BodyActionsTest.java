@@ -38,7 +38,9 @@ public class BodyActionsTest {
 
         // 已存实例固定占用定义，卸载目录后仍能结算和停止，不能偷偷解除另一动作。
         BodySnapshot saved = BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(current(store)));
-        var restored = new InMemoryBodyStore(List.of(saved), List.of());
+        var restored = new InMemoryBodyStore(List.of(saved), store.receipts(), store.environmentQi());
+        assertEquals(store.receipts().size(), restored.receipts().size());
+        assertThrows(UnsupportedOperationException.class, () -> store.receipts().clear());
         var missingContent = handler(restored, now, true, new ActionCatalog(List.of()));
         committed(missingContent, restored, "stop-b", stop("b"));
         now.set(12000);

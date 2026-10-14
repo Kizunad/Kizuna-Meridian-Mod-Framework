@@ -105,6 +105,12 @@ public final class GatheringSession<C> implements AutoCloseable {
         breathing = new BreathingDriver<>(this, profile, read(), recipes, commands.actionCatalog());
     }
 
+    public void synchronizeBodyRevision() {
+        // 宿主串行协调行走、恢复等其他合法动作后接纳最新版本；下一步骤仍重新校验器官与资源。
+        // 这不是客户端重试入口，也不跳过 execute 内对本次计算期间版本冲突的检查。
+        expectedRevision = read().revision();
+    }
+
     private void start(GatheringRequest request, BodySnapshot body) {
         // 同一个成功请求重放只读当前进展；旧请求的旧 revision 不能再次启动新一轮。
         if (accepted != null && accepted.getRequestId().equals(request.getRequestId())) {
@@ -269,7 +275,8 @@ public final class GatheringSession<C> implements AutoCloseable {
                     stage(GatheringStage.REFINING, current.getSettledAt().getElapsedMillis(), organ.getProcess().getCompletionMillis());
                 }
                 case REFINING -> {
-                    execute(BodyCommand.newBuilder().setAdvanceTime(AdvanceTime.getDefaultInstance()));
+                    // 宿主可能已为其他动作推进到本时刻；加工事实直接读取，避免再次空推进。
+                    settleManual();
                     BodyMessages.BodySnapshot current = BodyProtobuf.toMessage(read());
                     double organRate = current.getStructure().getOrgansList().stream()
                             .filter(value -> value.getId().equals(choice.getOrganId())).findFirst().orElseThrow().getThroughputPerSecond();
@@ -287,7 +294,8 @@ public final class GatheringSession<C> implements AutoCloseable {
                     stage(GatheringStage.TRANSPORTING, dispatched.settledAt().elapsedMillis(), transit.arrivalMillis());
                 }
                 case TRANSPORTING -> {
-                    execute(BodyCommand.newBuilder().setAdvanceTime(AdvanceTime.getDefaultInstance()));
+                    // 时间推进由同一身体共享，到达已经结算时继续检查货物即可。
+                    settleManual();
                     BodySnapshot arrived = read();
                     var remaining = arrived.transits().stream().filter(value -> value.id().equals(transitId)).findFirst();
                     if (remaining.isPresent()) {
