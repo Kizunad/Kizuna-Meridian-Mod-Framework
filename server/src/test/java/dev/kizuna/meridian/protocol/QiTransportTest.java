@@ -193,7 +193,7 @@ public class QiTransportTest {
         // 破裂/断裂、属性余额不足和无法表示的扣款都必须在生成候选身体之前拒绝。
         var initial = body();
         rejected(TransportRejectionReason.ROUTE_NOT_FOUND, initial, request("missing", free(1), 1));
-        var unsupported = BodyProtobuf.fromMessage(BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING))
+        var unsupported = BodyProtobuf.fromMessage(BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI))
                 .toBuilder().setRevision(0).build());
         rejected(TransportRejectionReason.ROUTE_UNSUPPORTED, unsupported, request("channel.tissue", free(1), 1));
         for (var state : List.of(BodyMessages.MeridianCondition.LEAKING, BodyMessages.MeridianCondition.SEVERED)) {
@@ -315,7 +315,7 @@ public class QiTransportTest {
         var mixed = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 10),
                 new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("addon:lava"), 10)));
         return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("transport-body"),
-                new BodyTemplate.Reference(new DefinitionId("sample:transport"), 1), structure, Realm.AWAKENING,
+                new BodyTemplate.Reference(new DefinitionId("sample:transport"), 1), structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(part, 100)), List.of(), List.of(),
                 List.of(state("a", mixed), state("b", free(2)), state("c", mixed)), List.of(),
                 new VitalityState(10, 1000, 5, false), plan(1000, ACTIVE).target(), 0);

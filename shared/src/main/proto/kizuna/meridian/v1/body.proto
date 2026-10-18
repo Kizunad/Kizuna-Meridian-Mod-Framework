@@ -15,22 +15,22 @@ import "google/protobuf/any.proto";
 
 enum Realm {
   REALM_UNSPECIFIED = 0;
-  AWAKENING = 1;
-  QI_GUIDANCE = 2;
-  MERIDIAN_CONDENSATION = 3;
-  ESSENCE_SOLIDIFICATION = 4;
-  SPIRITUAL_ATTUNEMENT = 5;
-  VOID_TRANSFORMATION = 6;
+  WANDERING_QI = 1; // 游炁：炁在脉中零散游走，和外界的游离灵气是同一种状态。
+  TRUE_QI = 2; // 真炁：炼成真炁，能在经脉里运转周天。
+  ESSENCE_TRANSFORMATION = 3; // 化元：炁化为元，真元有了重量，能在脉中流动。
+  ESSENCE_CONDENSATION = 4; // 凝元：元凝成实体。
+  HEAVENLY_PATTERN = 5; // 天纹：真元排列成纹，和天地的纹理同构。
+  VOID_TRANSFORMATION = 6; // 化虚：天纹在高密度下耦合干涉，相长时极实，相消时化实为虚。
 }
 
 enum QiPhase {
   QI_PHASE_UNSPECIFIED = 0;
-  FREE = 1;
-  GAS = 2;
-  LIQUID = 3;
-  SOLID = 4;
-  SPIRITUAL = 5;
-  VOID = 6;
+  FREE = 1; // 游离态，对应游炁。
+  GAS = 2; // 气态，对应真炁。
+  LIQUID = 3; // 液态，对应化元。
+  SOLID = 4; // 固态，对应凝元。
+  ORDERED = 5; // 有序态，对应天纹。
+  COHERENT = 6; // 相干态，对应化虚。
 }
 
 enum PortDirection {

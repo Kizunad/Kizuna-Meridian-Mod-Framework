@@ -362,7 +362,7 @@ public class BodyCommandHandlerTest {
 
     private static BodySnapshot body() {
         // 复用非人混相构型，但使用可递增的初始版本；本轮不推进已有时间或在途货物。
-        return BodyProtobuf.fromMessage(BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING))
+        return BodyProtobuf.fromMessage(BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI))
                 .toBuilder().setRevision(0).build());
     }
 

@@ -55,7 +55,7 @@ public class GatheringSessionTest {
     @Test
     public void nonHumanOrganCanRefineCustomAttributeAndStoreInUnopenedChannel() throws Exception {
         // 使用已有非人构型与第三方属性，证明 UI 链路不需要肺、五行或左右命名分支。
-        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         TimeCursor startTime = original.getSettledAt().toBuilder().setElapsedMillis(0).build();
         var structure = original.getStructure().toBuilder().setOrgans(0, original.getStructure().getOrgans(0).toBuilder()
                 .setIntake(OrganIntakeCapability.newBuilder().setMaxQiPerSecond(1)));
@@ -70,7 +70,7 @@ public class GatheringSessionTest {
         var store = new InMemoryBodyStore(List.of(initial), List.of(), QiInventory.empty(), List.of(environment));
         var recipe = OrganRecipe.newBuilder().setId("sample:refine").setVersion(1).setOrganKind("sample:filter")
                 .setInput(qi("addon:mist", 1)).setOutput(qi("meridian:none", 0.5)).setDurationMillis(500)
-                .setMinimumRealm(dev.kizuna.meridian.protocol.pb.BodyMessages.Realm.AWAKENING).build();
+                .setMinimumRealm(dev.kizuna.meridian.protocol.pb.BodyMessages.Realm.WANDERING_QI).build();
         var recipes = new OrganRecipeCatalog(List.of(recipe));
         var now = new AtomicLong();
         BodyTimeSource<String> clock = (caller, body) -> TimeAdvancePlan.newBuilder()
@@ -108,7 +108,7 @@ public class GatheringSessionTest {
     @Test
     public void contactsShareOneTimestampUseLiveConcentrationAndPersistAtomically() {
         // 非人体过滤器在零经过时间接收多颗，验证剂量不再绑定 250 ms 或器官每秒上限。
-        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         TimeCursor now = original.getSettledAt().toBuilder().setElapsedMillis(0).build();
         var structure = original.getStructure().toBuilder().setOrgans(0, original.getStructure().getOrgans(0).toBuilder()
                 .setIntake(OrganIntakeCapability.newBuilder().setMaxQiPerSecond(.001)));
@@ -120,7 +120,7 @@ public class GatheringSessionTest {
                 new EnvironmentQiRules(EnvironmentConfigLoader.defaults()));
         var recipe = OrganRecipe.newBuilder().setId("sample:contact_refine").setVersion(1).setOrganKind("sample:filter")
                 .setInput(qi("addon:mist", .05)).setOutput(qi("meridian:none", .01)).setDurationMillis(100)
-                .setMinimumRealm(dev.kizuna.meridian.protocol.pb.BodyMessages.Realm.AWAKENING).build();
+                .setMinimumRealm(dev.kizuna.meridian.protocol.pb.BodyMessages.Realm.WANDERING_QI).build();
         var store = new InMemoryBodyStore(List.of(initial), List.of(), QiInventory.empty(), List.of(source));
         BodyTimeSource<String> clock = (caller, body) -> TimeAdvancePlan.newBuilder().setTarget(now)
                 .setMode(TimeAdvanceMode.ACTIVE).setBiologicalSecondsPerSimulationSecond(1).build();

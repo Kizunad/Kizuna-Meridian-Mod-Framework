@@ -326,7 +326,7 @@ public class AddonRegistryTest {
 
     private static AddonMessages.AddonBundle species() {
         // 非人构型只存在于测试内容包，公开框架不内置此种族。
-        var body = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.QI_GUIDANCE));
+        var body = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.TRUE_QI));
         return bundle("sample").toBuilder().addSymbols(symbol("sample:muscle", TISSUE_KIND))
                 .addSymbols(symbol("sample:filter", ORGAN_KIND)).addTemplates(BodyMessages.BodyTemplate.newBuilder()
                         .setReference(body.getTemplate()).setStructure(body.getStructure())).build();
@@ -342,7 +342,7 @@ public class AddonRegistryTest {
         // 数值只用于验证守恒和跨包调用，不是官方人体的炼化配置。
         return BodyMessages.OrganRecipe.newBuilder().setId("arts:refine").setVersion(1).setOrganKind("sample:filter")
                 .setInput(qi("meridian:wood", 4)).setOutput(qi("meridian:none", 3)).setDurationMillis(2000)
-                .setMinimumRealm(BodyMessages.Realm.AWAKENING).build();
+                .setMinimumRealm(BodyMessages.Realm.WANDERING_QI).build();
     }
 
     private static BodyMessages.ActionDefinition openingAction() {
@@ -427,7 +427,7 @@ public class AddonRegistryTest {
 
     private static BodySnapshot initialBody() {
         // 复用非人构型，只重设本测试需要的时间和原料，保留快照中的其他实际事实。
-        var source = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.QI_GUIDANCE));
+        var source = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.TRUE_QI));
         return BodyProtobuf.fromMessage(source.toBuilder().setRevision(0).clearTransits()
                 .setSettledAt(source.getSettledAt().toBuilder().setElapsedMillis(1000))
                 .setOrganStates(0, source.getOrganStates(0).toBuilder().setBuffer(qi("meridian:wood", 4))).build());

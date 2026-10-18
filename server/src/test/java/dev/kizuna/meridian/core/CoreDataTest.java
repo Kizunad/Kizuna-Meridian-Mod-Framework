@@ -87,7 +87,7 @@ public class CoreDataTest {
         // 基础生命不依赖真元，空经脉列表不能导致非法身体或除零。
         BodyStructure structure = new BodyStructure(List.of(new Anatomy.PartDefinition(PART, "躯体", 100)),
                 List.of(), List.of(), List.of(), List.of());
-        BodySnapshot body = new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"), TEMPLATE, structure, Realm.AWAKENING,
+        BodySnapshot body = new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"), TEMPLATE, structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(PART, 100)), List.of(), List.of(), List.of(), List.of(),
                 new VitalityState(10, 100, 0, false), NOW, 0);
 
@@ -208,8 +208,8 @@ public class CoreDataTest {
     public void realmExposesTenfoldCapacityAndControlSlots() {
         // 显式列出六境防止遗漏化虚，再验证共同的十倍容量与任务位规则。
         Realm[] realms = Realm.values();
-        assertArrayEquals(new Realm[] {Realm.AWAKENING, Realm.QI_GUIDANCE, Realm.MERIDIAN_CONDENSATION,
-                Realm.ESSENCE_SOLIDIFICATION, Realm.SPIRITUAL_ATTUNEMENT, Realm.VOID_TRANSFORMATION}, realms);
+        assertArrayEquals(new Realm[] {Realm.WANDERING_QI, Realm.TRUE_QI, Realm.ESSENCE_TRANSFORMATION,
+                Realm.ESSENCE_CONDENSATION, Realm.HEAVENLY_PATTERN, Realm.VOID_TRANSFORMATION}, realms);
         for (int i = 0; i < realms.length; i++) {
             assertEquals(i + 1, realms[i].controlTasks());
             assertEquals(0.01 * Math.pow(10, i), realms[i].capacityRatio(), 0.000001);
@@ -254,7 +254,7 @@ public class CoreDataTest {
 
     private static BodySnapshot body(BodyStructure structure, List<MeridianState> states, List<QiTransit> transits) {
         // 用固定局部伤势与寿命隔离测试变量，余额及构型由每个案例提供。
-        return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"), TEMPLATE, structure, Realm.AWAKENING,
+        return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"), TEMPLATE, structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(PART, 50)), List.of(new AnatomyState.Tissue(TISSUE, 60, 0)),
                 List.of(new AnatomyState.Organ(ORGAN, 40, QiInventory.empty(), null)), states, transits,
                 new VitalityState(10, 100, 5, false), NOW, 0);

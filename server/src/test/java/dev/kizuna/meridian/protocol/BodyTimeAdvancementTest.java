@@ -282,7 +282,7 @@ public class BodyTimeAdvancementTest {
 
     private static BodySnapshot body() {
         // 复用混相非人构型；组织端口仍未实现，用它保护不能跳过未知事件的规则。
-        var message = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var message = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         return BodyProtobuf.fromMessage(message.toBuilder().setRevision(0)
                 .setSettledAt(message.getSettledAt().toBuilder().setElapsedMillis(1000))
                 .setTransits(0, message.getTransits(0).toBuilder().setArrivalMillis(5000)

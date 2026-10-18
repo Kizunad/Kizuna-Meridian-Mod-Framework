@@ -39,13 +39,18 @@ public record Qi(QiPhase phase, QiAttribute attribute, double amount) {
     }
 
     public enum QiPhase {
+        /** 游离态，游炁境。 */
         FREE,
+        /** 气态，真炁境。 */
         GAS,
+        /** 液态，化元境。 */
         LIQUID,
+        /** 固态，凝元境。 */
         SOLID,
-        SPIRITUAL,
-        /** 化虚相态标识；具体性质与转化规则尚待实现。 */
-        VOID
+        /** 有序态，天纹境：真元排列成与天地纹理同构的纹。 */
+        ORDERED,
+        /** 相干态，化虚境：高密度天纹耦合干涉。 */
+        COHERENT
     }
 
     /** 属性以命名空间区分；第三方熔岩等属性不会被合并成同一个 CUSTOM。 */

@@ -111,7 +111,7 @@ public class PassiveQiDiffusionTest {
         var selfRoute = message.toBuilder().setStructure(structure.toBuilder().setConnections(0,
                 connection.toBuilder().setTo("a.port"))).build();
         assertThrows(IllegalArgumentException.class, () -> BodyProtobuf.fromMessage(selfRoute));
-        var organRoute = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var organRoute = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         assertThrows(IllegalArgumentException.class, () -> BodyProtobuf.fromMessage(organRoute.toBuilder()
                 .setStructure(organRoute.getStructure().toBuilder().setConnections(0,
                         organRoute.getStructure().getConnections(0).toBuilder().setPassiveQiFlow(connection.getPassiveQiFlow()))).build()));
@@ -137,7 +137,7 @@ public class PassiveQiDiffusionTest {
         var mixed = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 3),
                 new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("sample:lava"), 3)));
         return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("diffusion-body"),
-                new BodyTemplate.Reference(new DefinitionId("sample:diffusion"), 1), structure, Realm.AWAKENING,
+                new BodyTemplate.Reference(new DefinitionId("sample:diffusion"), 1), structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(part, 100)), List.of(), List.of(),
                 List.of(state("a", mixed), state("b", QiInventory.empty()), state("c", QiInventory.empty())),
                 List.of(), new VitalityState(0, 1000, 0, false), plan(0, BodyTimeAdvancement.Mode.ACTIVE, 0).target(), 0);

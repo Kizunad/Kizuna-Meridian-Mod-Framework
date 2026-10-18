@@ -80,7 +80,7 @@ public class BodyQueryHandlerTest {
         // 查询 ID 只作关联，权限撤销后即使复用旧 ID 也不能读缓存中的私有快照。
         var checks = new AtomicInteger();
         var reads = new AtomicInteger();
-        var body = ProtocolFixtures.snapshot(Realm.AWAKENING);
+        var body = ProtocolFixtures.snapshot(Realm.WANDERING_QI);
         var handler = new BodyQueryHandler<String>((caller, id) -> checks.incrementAndGet() == 1, id -> {
             reads.incrementAndGet();
             return Optional.of(body);
@@ -96,7 +96,7 @@ public class BodyQueryHandlerTest {
     public void mismatchedBodyFromHostNeverLeaksAsSuccess() {
         // 存储串号属于宿主故障；不能把另一个身体发送给当前目标的合法读者。
         var handler = new BodyQueryHandler<String>((caller, id) -> true,
-                id -> Optional.of(ProtocolFixtures.snapshot(Realm.AWAKENING)));
+                id -> Optional.of(ProtocolFixtures.snapshot(Realm.WANDERING_QI)));
         assertFailure(handler.handle("trusted-player", request("different-body")), MeridianMessages.FailureCode.INTERNAL_ERROR);
     }
 
@@ -153,7 +153,7 @@ public class BodyQueryHandlerTest {
     @Test
     public void snapshotResponseCannotBeUsedAsAQuery() {
         // 服务入口不能让响应消息绕过请求方向限制成为身体上传操作。
-        var body = ProtocolFixtures.snapshot(Realm.AWAKENING);
+        var body = ProtocolFixtures.snapshot(Realm.WANDERING_QI);
         var response = MeridianMessages.ResponseEnvelope.newBuilder()
                 .setProtocolVersion(1).setRequestId("query-1")
                 .setBodySnapshot(BodyProtobuf.toMessage(body)).build();

@@ -93,20 +93,37 @@ public class BodyProtobufTest {
     @Test
     public void roundTripPreservesSixRealmsMixedQiAndAllIndependentModules() {
         // 比较整个值对象，保护每个模块字段、跨语言整数精度及三类余额。
-        for (Realm realm : Realm.values()) {
-            BodySnapshot source = ProtocolFixtures.snapshot(realm);
+        Realm[] realms = Realm.values();
+        for (int index = 0; index < realms.length; index++) {
+            BodySnapshot source = ProtocolFixtures.snapshot(realms[index]);
+            BodyMessages.BodySnapshot message = BodyProtobuf.toMessage(source);
+            // 更名仍沿用原来的 1–6 编号，已保存的二进制身体不能因此换境。
+            assertArrayEquals(new byte[] {0x28, (byte) (index + 1)},
+                    BodyMessages.BodySnapshot.newBuilder().setRealm(message.getRealm()).build().toByteArray());
             BodySnapshot restored = BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(source));
             assertEquals(source, restored);
             assertEquals(9, restored.totalQi(), 0);
             assertEquals(985, restored.vitality().remainingSeconds(), 0);
             assertEquals(Long.MAX_VALUE, restored.revision());
         }
+
+        // 各相态沿用编号；尤其第五、六项须稳定映射为有序态和相干态。
+        BodyMessages.QiPhase[] phases = {BodyMessages.QiPhase.FREE, BodyMessages.QiPhase.GAS,
+                BodyMessages.QiPhase.LIQUID, BodyMessages.QiPhase.SOLID,
+                BodyMessages.QiPhase.ORDERED, BodyMessages.QiPhase.COHERENT};
+        var entries = message().getMeridianStates(0).getLumenQi().getEntriesList();
+        assertEquals(phases.length, entries.size());
+        for (int index = 0; index < phases.length; index++) {
+            assertEquals(phases[index], entries.get(index).getPhase());
+            assertArrayEquals(new byte[] {0x08, (byte) (index + 1)},
+                    BodyMessages.Qi.newBuilder().setPhase(phases[index]).build().toByteArray());
+        }
     }
 
     @Test
     public void templateRoundTripRetainsStructureWithoutIndividualState() {
         // 模板只有来源和构型，解码不会生成角色或附带角色余额。
-        BodySnapshot body = ProtocolFixtures.snapshot(Realm.AWAKENING);
+        BodySnapshot body = ProtocolFixtures.snapshot(Realm.WANDERING_QI);
         BodyTemplate template = new BodyTemplate(body.template(), body.structure());
         assertEquals(template, BodyProtobuf.decodeTemplate(BodyProtobuf.encodeTemplate(template)));
     }
@@ -118,7 +135,7 @@ public class BodyProtobufTest {
         var structure = new BodyStructure(List.of(new Anatomy.PartDefinition(part, "躯体", 10)),
                 List.of(), List.of(), List.of(), List.of());
         var body = new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("body-1"),
-                new BodyTemplate.Reference(new DefinitionId("sample:shell"), 1), structure, Realm.AWAKENING,
+                new BodyTemplate.Reference(new DefinitionId("sample:shell"), 1), structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(part, 0)), List.of(), List.of(), List.of(), List.of(),
                 new VitalityState(0, 100, 0, false), new TimeCursor(new DefinitionId("sample:world"), "first", 0), 0);
         assertEquals(body, BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(body)));
@@ -190,7 +207,7 @@ public class BodyProtobufTest {
     @Test
     public void malformedTruncatedAndOversizedInputIsRejected() {
         // 限制字节大小并拒绝截断消息，不能恢复出部分有效对象。
-        byte[] valid = BodyProtobuf.encodeSnapshot(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        byte[] valid = BodyProtobuf.encodeSnapshot(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         assertThrows(IllegalArgumentException.class, () -> BodyProtobuf.decodeSnapshot(Arrays.copyOf(valid, valid.length - 1)));
         assertThrows(IllegalArgumentException.class, () -> BodyProtobuf.decodeSnapshot(new byte[0]));
         assertThrows(IllegalArgumentException.class, () -> BodyProtobuf.decodeSnapshot(new byte[] {(byte) 0x80}));

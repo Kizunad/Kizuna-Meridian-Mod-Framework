@@ -119,7 +119,7 @@ public class BodyActionsTest {
 
     private static BodySnapshot body() {
         // 为恢复隔离出两个组织，内容来自非人测试构型，初始都疲劳。
-        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         var tissue = original.getStructure().getTissues(0).toBuilder().setRecoveryHalfLifeSeconds(4);
         return BodyProtobuf.fromMessage(original.toBuilder().setRevision(0).clearTransits().setSettledAt(plan(0).getTarget())
                 .setMeridianStates(0, original.getMeridianStates(0).toBuilder().setCondition(BodyMessages.MeridianCondition.INTACT))

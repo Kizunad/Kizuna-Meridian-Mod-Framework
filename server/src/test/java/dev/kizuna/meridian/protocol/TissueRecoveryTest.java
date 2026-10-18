@@ -136,7 +136,7 @@ public class TissueRecoveryTest {
 
     private static BodySnapshot body() {
         // 独立非人构型同时声明两种组织，框架不能依赖人体 ID 或默认恢复比例。
-        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         var tendril = original.getStructure().getTissues(0).toBuilder().setRecoveryHalfLifeSeconds(4);
         var focus = tendril.clone().setId("focus").setKind("sample:nerve").clearPorts()
                 .setFatigueCapacity(100).setRecoveryHalfLifeSeconds(2)

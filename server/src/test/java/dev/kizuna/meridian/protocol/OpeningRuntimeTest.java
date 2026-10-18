@@ -237,7 +237,7 @@ public class OpeningRuntimeTest {
 
     private static BodySnapshot body() {
         // 两条经脉组成有向循环；输入器官和控制组织使用非人体身份。
-        var base = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING)).toBuilder();
+        var base = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI)).toBuilder();
         var structure = base.getStructure().toBuilder().clearConnections().clearMeridians();
         for (String id : List.of("channel", "supply")) {
             structure.addMeridians(BodyMessages.MeridianDefinition.newBuilder().setId(id).setDisplayName(id)

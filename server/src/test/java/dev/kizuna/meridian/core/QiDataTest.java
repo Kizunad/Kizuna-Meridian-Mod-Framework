@@ -11,12 +11,12 @@ import static org.junit.Assert.assertThrows;
 public class QiDataTest {
     @Test
     public void customAttributesAndMixedPhasesKeepSeparateBalances() {
-        // 同属性混相和异属性同相都应保留独立明细，包含化虚相态。
+        // 同属性混相和异属性同相都应保留独立明细，包含化虚境的相干态。
         var entries = new ArrayList<>(List.of(
                 new Qi(Qi.QiPhase.LIQUID, Qi.QiAttribute.of("addon:lava"), 3),
                 new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("addon:lava"), 4),
                 new Qi(Qi.QiPhase.LIQUID, Qi.QiAttribute.of("addon:frost"), 5),
-                new Qi(Qi.QiPhase.VOID, Qi.QiAttribute.of("addon:lava"), 6)));
+                new Qi(Qi.QiPhase.COHERENT, Qi.QiAttribute.of("addon:lava"), 6)));
         QiInventory inventory = new QiInventory(entries);
         entries.clear();
 

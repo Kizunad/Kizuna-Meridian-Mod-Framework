@@ -58,7 +58,7 @@ public class MeridianProtocolTest {
     public void bodyResponseCannotBeSubmittedAsRequest() {
         // 请求类型没有写入快照分支，误用响应载荷必须失败，不能产生状态覆盖入口。
         var response = MeridianMessages.ResponseEnvelope.newBuilder().setProtocolVersion(1).setRequestId("q1")
-                .setBodySnapshot(BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING))).build();
+                .setBodySnapshot(BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI))).build();
         assertThrows(IllegalArgumentException.class, () -> MeridianProtocol.decodeRequest(response.toByteArray()));
         assertThrows(IllegalArgumentException.class, () -> MeridianProtocol.decodeResponse(ProtocolFixtures.request().toByteArray()));
     }
@@ -66,7 +66,7 @@ public class MeridianProtocolTest {
     @Test
     public void invalidSnapshotIsRejectedBeforeAResponseIsAccepted() {
         // 外层响应合法也不能掩盖超额 HP 或缺失局部状态。
-        var body = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING)).toBuilder().clearPartStates();
+        var body = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI)).toBuilder().clearPartStates();
         var response = MeridianMessages.ResponseEnvelope.newBuilder().setProtocolVersion(1).setRequestId("q1")
                 .setBodySnapshot(body).build();
         assertThrows(IllegalArgumentException.class, () -> MeridianProtocol.encodeResponse(response));

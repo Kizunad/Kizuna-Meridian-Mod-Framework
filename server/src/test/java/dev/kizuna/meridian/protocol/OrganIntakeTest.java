@@ -182,7 +182,7 @@ public class OrganIntakeTest {
         BodySnapshot supplied = BodyProtobuf.fromMessage(message.toBuilder().setOrganStates(0,
                 message.getOrganStates(0).toBuilder().setBuffer(BodyProtobuf.toInventory(wood(2)))).build());
         var recipe = new OrganRecipe(new DefinitionId("sample:refine"), 1, new DefinitionId("sample:filter"),
-                wood(2), new QiInventory(List.of(qi(Qi.QiAttribute.NONE, 1))), 1000, Realm.AWAKENING);
+                wood(2), new QiInventory(List.of(qi(Qi.QiAttribute.NONE, 1))), 1000, Realm.WANDERING_QI);
         BodySnapshot processing = OrganProcessing.start(supplied, new Anatomy.OrganId("filter"), recipe);
         var store = store(List.of(processing));
         failure(handler(store, 1500, true).handle("owner", request("a", 1, "cross-event", wood(1))), FailureCode.PENDING_TIME_EVENT);
@@ -205,7 +205,7 @@ public class OrganIntakeTest {
     @Test
     public void reservedCargoAndProcessingInputCannotBeOverwrittenByIntake() {
         // 经脉尚未开拓也不妨碍器官摄入；已预约的到达与加工原料仍占器官空间。
-        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         var base = BodyProtobuf.toMessage(body("a", 0));
         var structure = original.getStructure().toBuilder().setOrgans(0,
                 base.getStructure().getOrgans(0).toBuilder().setQiCapacity(4));
@@ -237,7 +237,7 @@ public class OrganIntakeTest {
                 base.getStructure().getOrgans(0).toBuilder().setQiCapacity(4)))
                 .setOrganStates(0, base.getOrganStates(0).toBuilder().setBuffer(BodyProtobuf.toInventory(wood(3)))).build();
         var recipe = new OrganRecipe(new DefinitionId("sample:slow"), 1, new DefinitionId("sample:filter"),
-                wood(3), wood(2), 2000, Realm.AWAKENING);
+                wood(3), wood(2), 2000, Realm.WANDERING_QI);
         BodySnapshot processing = OrganProcessing.start(BodyProtobuf.fromMessage(withInput), new Anatomy.OrganId("filter"), recipe);
         assertRejected(processing, wood(2), FailureCode.CAPACITY_EXCEEDED);
     }
@@ -308,7 +308,7 @@ public class OrganIntakeTest {
 
     private static BodySnapshot body(String id, long startMillis) {
         // 合成构型不安装人体内容，也没有经脉；所有能力显式声明。
-        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         var organ = original.getStructure().getOrgans(0).toBuilder()
                 .setIntake(BodyMessages.OrganIntakeCapability.newBuilder().setMaxQiPerSecond(4));
         return BodyProtobuf.fromMessage(original.toBuilder().setId(id).setRevision(0).setSettledAt(time(startMillis))

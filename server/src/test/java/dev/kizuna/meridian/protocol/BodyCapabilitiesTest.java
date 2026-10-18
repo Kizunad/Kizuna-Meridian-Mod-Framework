@@ -159,7 +159,7 @@ public class BodyCapabilitiesTest {
     public void longAdvanceMatchesEventByEventWhenCompletionFreesBlockedCapacity() {
         // 模拟结构收缩后已经在路上的货物：先到达却装不下，加工损耗腾出空间后再入账。
         var running = OrganProcessing.start(body(4), ORGAN,
-                new OrganRecipe(recipe().id(), 1, recipe().organKind(), qi(4), fire(2), 5000, Realm.QI_GUIDANCE));
+                new OrganRecipe(recipe().id(), 1, recipe().organKind(), qi(4), fire(2), 5000, Realm.TRUE_QI));
         var message = BodyProtobuf.toMessage(running);
         var changed = BodyProtobuf.fromMessage(message.toBuilder().setStructure(message.getStructure().toBuilder()
                         .setOrgans(0, message.getStructure().getOrgans(0).toBuilder().setQiCapacity(4)))
@@ -193,10 +193,10 @@ public class BodyCapabilitiesTest {
         now.set(1000);
         committed(handler.handle("host", start("start", 0, "sample:fire", 1)));
         failure(handler.handle("host", start("busy", 1, "sample:fire", 1)), MeridianMessages.FailureCode.ORGAN_BUSY);
-        var young = BodyProtobuf.fromMessage(BodyProtobuf.toMessage(initial).toBuilder().setRealm(BodyMessages.Realm.AWAKENING).build());
+        var young = BodyProtobuf.fromMessage(BodyProtobuf.toMessage(initial).toBuilder().setRealm(BodyMessages.Realm.WANDERING_QI).build());
         assertEquals(MeridianErrors.CapabilityRejectionReason.RECIPE_INCOMPATIBLE,
                 assertThrows(MeridianErrors.CapabilityRejected.class, () -> OrganProcessing.start(young, ORGAN, recipe())).reason());
-        var wrong = new OrganRecipe(recipe().id(), 1, new DefinitionId("other:organ"), qi(4), fire(3), 1, Realm.QI_GUIDANCE);
+        var wrong = new OrganRecipe(recipe().id(), 1, new DefinitionId("other:organ"), qi(4), fire(3), 1, Realm.TRUE_QI);
         assertThrows(MeridianErrors.CapabilityRejected.class, () -> OrganProcessing.start(initial, ORGAN, wrong));
     }
 
@@ -262,7 +262,7 @@ public class BodyCapabilitiesTest {
 
     private static BodySnapshot body(double buffer) {
         // 非人构型保持原端口图，独立赋值肌肉能力、器官余额与经脉状态。
-        var message = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.QI_GUIDANCE));
+        var message = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.TRUE_QI));
         return BodyProtobuf.fromMessage(message.toBuilder().setRevision(0).clearTransits()
                 .setSettledAt(message.getSettledAt().toBuilder().setElapsedMillis(1000))
                 .setPartStates(0, message.getPartStates(0).toBuilder().setHp(100))
@@ -275,7 +275,7 @@ public class BodyCapabilitiesTest {
     private static OrganRecipe recipe() {
         // 测试配方只占测试命名空间，核心没有固定五行器官或功法 ID。
         return new OrganRecipe(new DefinitionId("sample:fire"), 1, new DefinitionId("sample:filter"),
-                qi(4), fire(3), 2000, Realm.QI_GUIDANCE);
+                qi(4), fire(3), 2000, Realm.TRUE_QI);
     }
 
     private static OrganRecipeCatalog catalog() {
