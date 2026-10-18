@@ -1,0 +1,51 @@
+syntax = "proto3";
+package kizuna.meridian.v1;
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "OperationUiMessages";
+
+// 附属提供的只读操作卡，不携带可执行脚本。每次更新完整替换该 namespace 的卡片。
+message MeridianOperationUpdate {
+  int32 protocol_version = 1;
+  string namespace = 2;
+  string body_id = 3;
+  optional int64 body_revision = 4;
+  repeated MeridianOperationView operations = 5;
+}
+message MeridianOperationView {
+  string id = 1; // 必须属于发布者命名空间。
+  int32 version = 2;
+  string meridian_id = 3;
+  string title = 4;
+  string status = 5;
+  repeated MeridianOperationMeter meters = 6;
+  string action_id = 7; // 当前允许提交的意图，例如 start 或 pause。
+  string action_label = 8;
+  bool enabled = 9;
+  string hint = 10; // 不满足条件时的调整方向。
+  bool active = 11;
+}
+message MeridianOperationMeter {
+  string id = 1;
+  string label = 2;
+  double fraction = 3; // [0,1]，仅供绘制；门槛边界以 state 为准。
+  OperationMeterState state = 4;
+  string hint = 5;
+  double incoming_fraction = 6; // 已预约在途，绘成不同颜色，不冒充已到账。
+}
+enum OperationMeterState {
+  METER_UNSPECIFIED = 0;
+  METER_WAITING = 1;
+  METER_READY = 2;
+  METER_RUNNING = 3;
+  METER_BLOCKED = 4;
+}
+message MeridianOperationRequest {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  string body_id = 3;
+  optional int64 expected_revision = 4;
+  string operation_id = 5;
+  int32 operation_version = 6;
+  string meridian_id = 7;
+  string action_id = 8;
+}

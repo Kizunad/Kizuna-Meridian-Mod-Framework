@@ -27,7 +27,7 @@ public final class IntakeProtobuf {
         var plan = TimeProtobuf.fromMessage(result.getPlan());
         EnvironmentProtobuf.validateReceipt(result.getEnvironment());
         var exchange = result.getEnvironment().getExchange();
-        ProtoWire.require(plan.mode() == BodyTimeAdvancement.Mode.ACTIVE
+        ProtoWire.require(!exchange.getContactCapture() && plan.mode() == BodyTimeAdvancement.Mode.ACTIVE
                 && result.getPlan().getTarget().equals(exchange.getEndedAt())
                 && command.getBodyId().equals(exchange.getOffer().getBodyId())
                 && command.getExpectedRevision() == exchange.getExpectedBodyRevision()

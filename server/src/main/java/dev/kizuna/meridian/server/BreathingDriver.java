@@ -4,6 +4,8 @@ import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.TissueCapabilities;
 import dev.kizuna.meridian.error.MeridianErrors;
+import dev.kizuna.meridian.protocol.pb.BodyMessages.Qi;
+import dev.kizuna.meridian.protocol.pb.BodyMessages.QiPhase;
 import dev.kizuna.meridian.protocol.pb.BreathingMessages.*;
 import dev.kizuna.meridian.protocol.pb.GatheringMessages.GatheringChoice;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.*;
@@ -20,6 +22,7 @@ import static dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode.*;
 final class BreathingDriver<C> {
     private static final long STEP_MILLIS = 250;
     private static final long INPUT_LEASE_MILLIS = 750;
+    private static final double MOUTH_RADIUS = .08;
     private final GatheringSession<C> session;
     private final BreathingProfile profile;
     private final List<BreathParticle> particles = new ArrayList<>();
@@ -32,9 +35,11 @@ final class BreathingDriver<C> {
     private long boundaryMillis;
     private double airLiters;
     private double absorbedQi;
+    private double storedQi;
     private String status = "准备吐纳";
     private FailureCode failure = FAILURE_CODE_UNSPECIFIED;
     private int lastOrgan;
+    private int nextParticleId;
     private double sceneSeconds;
     private double flowX;
     private double flowY;
@@ -64,7 +69,7 @@ final class BreathingDriver<C> {
         boolean valid = profile.getOrgansCount() > 0 && profile.getOrgansCount() <= 32
                 && positive(profile.getRespiratoryWatts()) && positive(profile.getAttentionWatts())
                 && !profile.getRespiratoryTissueId().equals(profile.getAttentionTissueId())
-                && profile.getRecipeIdsCount() > 0;
+                && profile.getRecipeIdsCount() > 0 && positive(profile.getParticleVolumeBlocks());
         for (BreathingOrgan organ : profile.getOrgansList()) {
             valid &= organs.add(organ.getOrganId()) && positive(organ.getAirCapacityLiters())
                     && positive(organ.getAirflowLitersPerSecond())
@@ -103,10 +108,7 @@ final class BreathingDriver<C> {
         if (!valid) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_BREATHING);
         }
-        for (int index = 0; index < 36; index++) {
-            particles.add(spawn(index, 0));
-            motions.add(new ParticleMotion(.012 + random.nextDouble() * .043, random.nextDouble() * Math.PI * 2));
-        }
+        refreshParticles();
     }
 
     private static boolean positive(double value) {
@@ -195,6 +197,8 @@ final class BreathingDriver<C> {
             status = "操作已暂停";
             return;
         }
+        // 接触摄入受阻可以自行恢复；每段重新观察，不能让旧失败永久遮住后续成功。
+        failure = FAILURE_CODE_UNSPECIFIED;
         BodySnapshot body = session.read();
         BreathingView before = view(body);
         if (body.vitality().dead() || before.getCapacityLiters() <= 0) {
@@ -209,7 +213,7 @@ final class BreathingDriver<C> {
             // 停气与肺容量边界只停止人体做功；环境里的游离灵气和残余气流仍会移动。
             updateBodyAction(false);
             session.settleManual();
-            moveParticles(seconds, HOLD, before.getAirflowLitersPerSecond(), null);
+            moveParticles(seconds, HOLD, before.getAirflowLitersPerSecond());
             if (action == INHALE) {
                 status = "肺已充满，请右键呼气";
             } else if (action == EXHALE) {
@@ -234,17 +238,14 @@ final class BreathingDriver<C> {
         seconds = Math.min(seconds, respiratory.enduranceJoules() / respiratoryWatts);
         seconds = Math.min(seconds, attention.enduranceJoules() / attentionWatts);
 
-        // 先收集命中候选；疲劳不足已在上面截断，最终所有身体命令仍经过私有策略。
+        // 每段呼吸做功只支付一次；同段多颗接触独立入账，不再按捕获次数重复收取疲劳。
         ExertTissues loads = ExertTissues.newBuilder()
                 .addLoads(load(profile.getRespiratoryTissueId(), respiratoryWatts, seconds))
                 .addLoads(load(profile.getAttentionTissueId(), attentionWatts, seconds)).build();
         BreathAction effectiveAction = inhaling ? INHALE : EXHALE;
-        boolean captured = moveParticles(seconds, effectiveAction, before.getAirflowLitersPerSecond(), loads);
-        if (!captured) {
-            // 未吸到灵气也会疲劳；命中时则由摄入事务一并支付，不能重复扣费。
-            session.settleManual();
-            session.execute(BodyCommand.newBuilder().setExertTissues(loads));
-        }
+        session.settleManual();
+        session.execute(BodyCommand.newBuilder().setExertTissues(loads));
+        moveParticles(seconds, effectiveAction, before.getAirflowLitersPerSecond());
         double airChange = before.getAirflowLitersPerSecond() * seconds;
         airLiters = Math.max(0, Math.min(before.getCapacityLiters(), airLiters + (inhaling ? airChange : -airChange)));
         // 满吸或排空后解除占用，后续暂停时间可以恢复，不把整个打开窗口过程当成做功。
@@ -263,8 +264,9 @@ final class BreathingDriver<C> {
                 .setPowerWatts(watts).setDurationSeconds(seconds).build();
     }
 
-    private boolean moveParticles(double seconds, BreathAction action, double airflow, ExertTissues loads) {
+    private void moveParticles(double seconds, BreathAction action, double airflow) {
         // 用连续的三维源汇场近似空气流动；所有灵气都受影响，距离和方向决定响应强弱。
+        List<Qi> inventory = refreshParticles();
         sceneSeconds += seconds;
         boolean inhaling = action == INHALE;
         double flowResponse = 1 - Math.exp(-seconds * 2.5);
@@ -291,7 +293,6 @@ final class BreathingDriver<C> {
             }
         }
 
-        boolean captured = false;
         for (int index = 0; index < particles.size(); index++) {
             BreathParticle particle = particles.get(index);
             ParticleMotion motion = motions.get(index);
@@ -325,12 +326,11 @@ final class BreathingDriver<C> {
             y += motion.vy * seconds;
             z += motion.vz * seconds;
 
-            // 三维入口检查同时要求深度靠近；画面重叠不等于真实到达身体。
-            double arrivalDistance = Math.sqrt(Math.pow(x - .5, 2) + Math.pow(y - .4, 2) + Math.pow(z - .5, 2));
-            if (inhaling && arrivalDistance < .035 && !captured) {
-                captured = tryCapture(particle.getAttribute(), loads);
-                if (captured) {
-                    particles.set(index, spawn(particle.getId(), particle.getGeneration() + 1));
+            // 入口附近直接接收；整段轨迹都参与检测，更新跨过口鼻也不会漏掉。
+            // 逐颗处理同段所有命中，只有真实库存与存储空间决定本次能接收多少。
+            if (inhaling && touchesMouth(particle.getX(), particle.getY(), particle.getZ(), x, y, z)) {
+                if (tryCapture(particle.getAttribute())) {
+                    particles.set(index, spawn(particle.getId(), particle.getGeneration() + 1, inventory));
                     motion.vx = motion.vy = motion.vz = 0;
                     continue;
                 }
@@ -348,45 +348,99 @@ final class BreathingDriver<C> {
             }
             particles.set(index, particle.toBuilder().setX(clamp(x)).setY(clamp(y)).setZ(clamp(z)).build());
         }
-        return captured;
     }
 
-    private boolean tryCapture(String attribute, ExertTissues loads) {
-        // 只从可信小批配方中挑选，左右或更多器官轮换；客户端不能直接声明捕获量。
-        if (!session.canCaptureInterval(STEP_MILLIS)) {
-            return false;
+    static boolean touchesMouth(double fromX, double fromY, double fromZ, double toX, double toY, double toZ) {
+        // 求入口到运动线段的最短距离，兼容静止粒子、起点已在范围内和高速穿过。
+        double dx = toX - fromX, dy = toY - fromY, dz = toZ - fromZ;
+        double squaredLength = dx * dx + dy * dy + dz * dz;
+        double along = 0;
+        if (squaredLength > 0) {
+            along = ((.5 - fromX) * dx + (.4 - fromY) * dy + (.5 - fromZ) * dz) / squaredLength;
+            along = Math.max(0, Math.min(1, along));
         }
+        double offsetX = fromX + along * dx - .5;
+        double offsetY = fromY + along * dy - .4;
+        double offsetZ = fromZ + along * dz - .5;
+        return offsetX * offsetX + offsetY * offsetY + offsetZ * offsetZ <= MOUTH_RADIUS * MOUTH_RADIUS;
+    }
+
+    private boolean tryCapture(String attribute) {
+        // 配方只提供转换比例，剂量由当前浓度计算；器官轮换且无需等待上一批运输。
         var choices = session.view().getChoicesList();
+        FailureCode captureFailure = FAILURE_CODE_UNSPECIFIED;
         for (int offset = 0; offset < profile.getOrgansCount(); offset++) {
             int organIndex = (lastOrgan + offset) % profile.getOrgansCount();
             String organId = profile.getOrgans(organIndex).getOrganId();
             for (GatheringChoice choice : choices) {
                 if (!choice.getOrganId().equals(organId) || !profile.getRecipeIdsList().contains(choice.getRecipe().getId())
                         || choice.getRecipe().getInput().getEntriesCount() != 1
-                        || !choice.getRecipe().getInput().getEntries(0).getAttribute().equals(attribute)
-                        || GatheringChoices.total(choice.getRecipe().getOutput()) > choice.getTargetRemainingQi()) {
+                        || choice.getRecipe().getInput().getEntries(0).getPhase() != QiPhase.FREE
+                        || !choice.getRecipe().getInput().getEntries(0).getAttribute().equals(attribute)) {
                     continue;
                 }
-                double input = GatheringChoices.total(choice.getRecipe().getInput());
-                double elapsed = (session.now() - session.read().settledAt().elapsedMillis()) / 1000.0;
-                if (input > elapsed * choice.getIntakePerSecond()) {
-                    continue;
-                }
-                if (session.capture(choice, loads)) {
-                    absorbedQi += input;
+                try {
+                    absorbedQi += session.capture(choice, profile.getParticleVolumeBlocks());
                     lastOrgan = (organIndex + 1) % profile.getOrgansCount();
+                    failure = FAILURE_CODE_UNSPECIFIED;
                     return true;
+                } catch (MeridianErrors.GatheringRejected rejection) {
+                    // 一个器官满了就尝试其他入口；没收到的粒子保留，等待后续空间或来源变化。
+                    if (rejection.code() != CAPACITY_EXCEEDED && rejection.code() != MODULE_UNAVAILABLE
+                            && rejection.code() != INSUFFICIENT_QI && rejection.code() != ENVIRONMENT_UNAVAILABLE
+                            && rejection.code() != ENVIRONMENT_INTERVAL_INVALID) {
+                        throw rejection;
+                    }
+                    captureFailure = rejection.code();
                 }
             }
         }
+        failure = captureFailure;
         return false;
     }
 
-    private BreathParticle spawn(int id, int generation) {
-        // 颜色按当前环境实有属性配比抽样；粒子只是机会标记，重生不补充环境库存。
-        var inventory = session.view().getEnvironment().getQi().getEntriesList();
-        double total = inventory.stream().mapToDouble(value -> value.getAmount()).sum();
-        String attribute = "meridian:none";
+    void recordStoredQi(double amount) {
+        // 仅由运输完成边界累计炼化产物；捕获原料或开始加工不等于经脉已经收货。
+        storedQi += amount;
+    }
+
+    private List<Qi> refreshParticles() {
+        // 机会标记只代表当前器官可炼化的游离灵气；损耗释放物不能挤占可操作粒子。
+        var view = session.view();
+        List<String> organIds = profile.getOrgansList().stream().map(BreathingOrgan::getOrganId).toList();
+        List<String> attributes = view.getChoicesList().stream()
+                .filter(choice -> organIds.contains(choice.getOrganId()))
+                .filter(choice -> profile.getRecipeIdsList().contains(choice.getRecipe().getId()))
+                .map(GatheringChoice::getRecipe)
+                .filter(recipe -> recipe.getInput().getEntriesCount() == 1)
+                .map(recipe -> recipe.getInput().getEntries(0))
+                .filter(qi -> qi.getPhase() == QiPhase.FREE)
+                .map(Qi::getAttribute).distinct().toList();
+        List<Qi> inventory = view.getEnvironment().getQi().getEntriesList().stream()
+                .filter(qi -> qi.getPhase() == QiPhase.FREE && qi.getAmount() > 0)
+                .filter(qi -> attributes.contains(qi.getAttribute())).toList();
+        List<String> availableAttributes = inventory.stream().map(Qi::getAttribute).toList();
+
+        // 来源耗尽或改换后移除失效标记，运动数据随同删除；不凭空补出不存在的属性。
+        for (int index = particles.size() - 1; index >= 0; index--) {
+            if (!availableAttributes.contains(particles.get(index).getAttribute())) {
+                particles.remove(index);
+                motions.remove(index);
+            }
+        }
+        if (!inventory.isEmpty()) {
+            while (particles.size() < 36) {
+                particles.add(spawn(nextParticleId++, 0, inventory));
+                motions.add(new ParticleMotion(.012 + random.nextDouble() * .043, random.nextDouble() * Math.PI * 2));
+            }
+        }
+        return inventory;
+    }
+
+    private BreathParticle spawn(int id, int generation, List<Qi> inventory) {
+        // 颜色按可炼化原料的实际配比抽样；粒子重生只提供接触机会，不补充环境库存。
+        double total = inventory.stream().mapToDouble(Qi::getAmount).sum();
+        String attribute = inventory.get(inventory.size() - 1).getAttribute();
         double pick = random.nextDouble() * total;
         for (var qi : inventory) {
             pick -= qi.getAmount();
@@ -433,6 +487,7 @@ final class BreathingDriver<C> {
                 .setAttentionRatio(ratio(body, profile.getAttentionTissueId()))
                 .addAllOrganIds(profile.getOrgansList().stream().map(BreathingOrgan::getOrganId).toList())
                 .addAllParticles(particles).setSequence(control.getSequence()).setStatus(status).setAbsorbedQi(absorbedQi)
+                .setStoredQi(storedQi)
                 .setFailure(failure).build();
     }
 

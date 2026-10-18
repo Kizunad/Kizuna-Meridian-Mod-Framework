@@ -12,6 +12,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalLong;
 
@@ -19,8 +20,10 @@ import java.util.OptionalLong;
 public final class QiTransport {
     public static final double BASE_SPEED_METERS_PER_SECOND = 1;
 
+    private enum DispatchMode { ACTIVE, PASSIVE, OPENING_GUIDANCE }
+
     private QiTransport() {
-        // 运输按发运与到达事件计算，不在这里启动逐帧流体模拟或自动循环。
+        // 主动运输与生理扩散共用批次账本，移动只在发运和到达事件结算。
     }
 
     public record Request(Anatomy.ConnectionId connectionId, QiInventory cargo, double throughputPerSecond) {
@@ -43,12 +46,37 @@ public final class QiTransport {
         if (body.revision() == Long.MAX_VALUE) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.REVISION_EXHAUSTED);
         }
-        var connections = DataChecks.index(body.structure().connections(), Anatomy.Connection::id, "连接");
-        Anatomy.Connection connection = connections.get(request.connectionId());
+        var accounts = new QiAccounts(body);
+        Anatomy.Connection connection = accounts.connection(request.connectionId());
         if (connection == null) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.ROUTE_NOT_FOUND);
         }
-        var accounts = new QiAccounts(body);
+        List<QiTransit> updatedTransits = dispatch(body, accounts, body.transits(), connection, request,
+                body.settledAt().elapsedMillis(), DispatchMode.ACTIVE);
+        return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
+                body.partStates(), body.tissueStates(), accounts.organs(), accounts.meridians(), updatedTransits,
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
+    }
+
+    static List<QiTransit> dispatchPassive(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
+                                          Anatomy.Connection connection, Request request, long atMillis) {
+        // 生理扩散使用构型声明的通路，不申请意念主动调用权限。
+        return dispatch(body, accounts, transits, connection, request, atMillis, DispatchMode.PASSIVE);
+    }
+
+    static List<QiTransit> dispatchGuided(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
+                                         Anatomy.Connection connection, Request request, long atMillis) {
+        // 专用权限仅供身体内部已受校验的开脉任务使用，网络请求没有此标志。
+        if (body.openingTask() == null || !body.openingTask().active()) {
+            throw MeridianErrors.invalid(MeridianErrors.Opening.TASK_STATE);
+        }
+        return dispatch(body, accounts, transits, connection, request, atMillis, DispatchMode.OPENING_GUIDANCE);
+    }
+
+    private static List<QiTransit> dispatch(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
+                                          Anatomy.Connection connection, Request request, long atMillis,
+                                          DispatchMode mode) {
+        // 内部事件与公开意图使用同一校验和扣账顺序；被动权限只由可信构型声明。
         QiAccounts.Endpoint source = accounts.endpoint(connection.from());
         QiAccounts.Endpoint target = accounts.endpoint(connection.to());
         if (source == null || target == null || source.id().equals(target.id())) {
@@ -58,7 +86,7 @@ public final class QiTransport {
         if (!accounts.available(source) || !accounts.available(target)) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.ROUTE_UNAVAILABLE);
         }
-        if (source.id() instanceof Anatomy.MeridianId meridianId) {
+        if (mode == DispatchMode.ACTIVE && source.id() instanceof Anatomy.MeridianId meridianId) {
             // 生理输入可以进入未开拓经脉，主动抽调必须先建立该源经脉的意念响应。
             MeridianState sourceMeridian = body.meridianStates().stream()
                     .filter(state -> state.id().equals(meridianId)).findFirst().orElseThrow();
@@ -66,12 +94,83 @@ public final class QiTransport {
                 throw MeridianErrors.rejectTransport(TransportRejectionReason.MERIDIAN_UNOPENED);
             }
         }
+        if (mode == DispatchMode.PASSIVE && connection.passiveQiFlow() == null) {
+            throw MeridianErrors.invalid(Data.PASSIVE_ROUTE_INVALID);
+        }
 
         // 2. 汇总已有运输的占用。两端收发共用吞吐，器官内部加工不占端口吞吐。
+        DispatchCapacity capacity = availableCapacity(accounts, transits, source, target);
+        if (request.throughputPerSecond() > capacity.throughputPerSecond()) {
+            throw MeridianErrors.rejectTransport(TransportRejectionReason.THROUGHPUT_EXCEEDED);
+        }
+        if (request.cargo().totalQi() > capacity.targetQi()) {
+            throw MeridianErrors.rejectTransport(TransportRejectionReason.CAPACITY_EXCEEDED);
+        }
+
+        // 3. 逐相态、逐属性扣源并计算到达时间；外壁不参与余额检查，失败不产生新快照。
+        QiInventory remainingSourceQi = QiAccounting.debit(accounts.inventory(source), request.cargo());
+        long transportDurationMillis = durationMillis(connection, request);
+        if (transportDurationMillis > Long.MAX_VALUE - atMillis) {
+            throw MeridianErrors.rejectTransport(TransportRejectionReason.NUMERIC_LIMIT);
+        }
+        long arrivalMillis = atMillis + transportDurationMillis;
+
+        // 4. 为新批次分配稳定标识，再一起保存扣源结果与独立在途记录。
+        var existingTransitIds = new HashSet<String>();
+        transits.forEach(transit -> existingTransitIds.add(transit.id()));
+        // 自动批次以事件时间和连接区分身份，恢复后仍可复算相同标识。
+        String baseId = switch (mode) {
+            case ACTIVE -> "transport-" + (body.revision() + 1);
+            case PASSIVE -> "passive-" + atMillis + "-" + connection.id().value();
+            case OPENING_GUIDANCE -> "opening-" + atMillis + "-" + connection.id().value();
+        };
+        String transitId = baseId;
+        for (int suffix = 1; existingTransitIds.contains(transitId); suffix++) {
+            transitId = baseId + "-" + suffix;
+        }
+        var updatedTransits = new ArrayList<>(transits);
+        updatedTransits.add(new QiTransit(transitId, connection.id(), request.cargo(),
+                arrivalMillis, request.throughputPerSecond(), QiTransit.Status.MOVING));
+
+        accounts.replace(source, remainingSourceQi);
+        return List.copyOf(updatedTransits);
+    }
+
+    record DispatchCapacity(double throughputPerSecond, double targetQi) { }
+
+    public static double availableThroughputPerSecond(BodySnapshot body, Anatomy.ConnectionId connectionId) {
+        // 编排器按当前共享预约选择可申请流量；读取不预留资源，最终发运仍重新校验。
+        MeridianErrors.required(body, Data.BODY_REQUIRED);
+        var accounts = new QiAccounts(body);
+        Anatomy.Connection connection = accounts.connection(connectionId);
+        if (connection == null) {
+            throw MeridianErrors.rejectTransport(TransportRejectionReason.ROUTE_NOT_FOUND);
+        }
+        QiAccounts.Endpoint source = accounts.endpoint(connection.from());
+        QiAccounts.Endpoint target = accounts.endpoint(connection.to());
+        if (source == null || target == null || source.id().equals(target.id())) {
+            throw MeridianErrors.rejectTransport(TransportRejectionReason.ROUTE_UNSUPPORTED);
+        }
+        if (body.vitality().dead() || !accounts.available(source) || !accounts.available(target)) {
+            return 0;
+        }
+        return Math.max(0, availableCapacity(accounts, body.transits(), source, target).throughputPerSecond());
+    }
+
+    static DispatchCapacity availableCapacity(QiAccounts accounts, List<QiTransit> transits,
+                                              QiAccounts.Endpoint source, QiAccounts.Endpoint target) {
+        // 主动和被动发送读取同一预约事实，不能分别计算出两份可用吞吐和目标空间。
+        return availableCapacity(accounts, transits, source, target, Map.of());
+    }
+
+    static DispatchCapacity availableCapacity(QiAccounts accounts, List<QiTransit> transits,
+                                              QiAccounts.Endpoint source, QiAccounts.Endpoint target,
+                                              Map<Object, Double> reservedThroughput) {
+        // 自动引导可让出部分空闲吞吐；预留只限制本次调度，不创建在途或额外资源账户。
         var usedThroughput = new HashMap<Object, Double>();
         double reservedTargetQi = 0;
-        for (var transit : body.transits()) {
-            Anatomy.Connection route = connections.get(transit.connectionId());
+        for (var transit : transits) {
+            Anatomy.Connection route = accounts.connection(transit.connectionId());
             QiAccounts.Endpoint from = accounts.endpoint(route.from());
             QiAccounts.Endpoint to = accounts.endpoint(route.to());
             if (to != null && to.id().equals(target.id())) {
@@ -91,45 +190,14 @@ public final class QiTransport {
         // 任意一端的剩余吞吐不足，都不能接受整个批次的流量申请。
         double sourceUsedRate = usedThroughput.getOrDefault(source.id(), 0.0);
         double targetUsedRate = usedThroughput.getOrDefault(target.id(), 0.0);
-        double sourceAvailableRate = source.throughputPerSecond() - sourceUsedRate;
-        double targetAvailableRate = target.throughputPerSecond() - targetUsedRate;
+        double sourceAvailableRate = source.throughputPerSecond() - sourceUsedRate
+                - reservedThroughput.getOrDefault(source.id(), 0.0);
+        double targetAvailableRate = target.throughputPerSecond() - targetUsedRate
+                - reservedThroughput.getOrDefault(target.id(), 0.0);
         double availableThroughputPerSecond = Math.min(sourceAvailableRate, targetAvailableRate);
-        if (request.throughputPerSecond() > availableThroughputPerSecond) {
-            throw MeridianErrors.rejectTransport(TransportRejectionReason.THROUGHPUT_EXCEEDED);
-        }
         double occupiedTargetQi = accounts.occupied(target);
         double availableTargetCapacity = target.capacity() - occupiedTargetQi - reservedTargetQi;
-        if (request.cargo().totalQi() > availableTargetCapacity) {
-            throw MeridianErrors.rejectTransport(TransportRejectionReason.CAPACITY_EXCEEDED);
-        }
-
-        // 3. 逐相态、逐属性扣源并计算到达时间；外壁不参与余额检查，失败不产生新快照。
-        QiInventory remainingSourceQi = QiAccounting.debit(accounts.inventory(source), request.cargo());
-        long transportDurationMillis = durationMillis(connection, request);
-        long startMillis = body.settledAt().elapsedMillis();
-        if (transportDurationMillis > Long.MAX_VALUE - startMillis) {
-            throw MeridianErrors.rejectTransport(TransportRejectionReason.NUMERIC_LIMIT);
-        }
-        long arrivalMillis = startMillis + transportDurationMillis;
-
-        // 4. 为新批次分配稳定标识，再一起保存扣源结果与独立在途记录。
-        var existingTransitIds = new HashSet<String>();
-        body.transits().forEach(transit -> existingTransitIds.add(transit.id()));
-        String baseId = "transport-" + (body.revision() + 1);
-        String transitId = baseId;
-        for (int suffix = 1; existingTransitIds.contains(transitId); suffix++) {
-            // 身体版本给出稳定 ID，导入的同名记录用确定性后缀避让，重试可复算同一结果。
-            transitId = baseId + "-" + suffix;
-        }
-        var updatedTransits = new ArrayList<>(body.transits());
-        updatedTransits.add(new QiTransit(transitId, connection.id(), request.cargo(),
-                arrivalMillis, request.throughputPerSecond(), QiTransit.Status.MOVING));
-
-        // 源扣除和独立在途记录共同组成候选身体；目标只预留容量，不提前入账。
-        accounts.replace(source, remainingSourceQi);
-        return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
-                body.partStates(), body.tissueStates(), accounts.organs(), accounts.meridians(), updatedTransits,
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions());
+        return new DispatchCapacity(availableThroughputPerSecond, availableTargetCapacity);
     }
 
     static List<QiTransit> arrive(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits, long atMillis) {

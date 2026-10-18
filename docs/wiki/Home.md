@@ -2,7 +2,7 @@
 
 通用身体、经脉与功法扩展框架的设计和接入文档。基础模组负责通用身体运行、权威数据与操作协议；独立 Meridian UI Addon 提供通用身体查看和后续操作界面，人体模型与构型由生物附属提供，功法附属 JAR 提供功法内容，可选 3D 经脉世界 Addon 提供工厂式建造交互，宿主负责世界接入。
 
-> 当前已实现 Java 17 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。尚无可安装 Fabric 模组或正式版本；肌肉真元增益/攻击、连续流、实际宿主调度/实体死亡、认证/网络与磁盘存储仍待实现。
+> 当前已实现 Java 17 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输与[被动扩散](Meridian-and-Qi.md)、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。框架自身没有可安装 Fabric 模组或正式版本；Human 附属提供可选 Fabric 玩家宿主。肌肉真元增益/攻击、连续流、通用实体死亡映射、认证/网络与磁盘存储由各自后续模块及宿主处理。
 
 ## 阅读入口
 
@@ -13,6 +13,7 @@
 | 提供模型、分层和身体对象映射 | [身体展示资源](Body-Presentation.md) |
 | 了解寿命和身体数据归谁保存 | [身体与持久化](Body-and-Persistence.md) |
 | 理解真元、经脉与成长 | [经脉与真元](Meridian-and-Qi.md) |
+| 配置单脉规则、引导、连续适应与完成扩容 | [开脉定义与运行](Meridian-Opening.md) |
 | 对接环境来源、供给与吸收/释放明细 | [环境真元交换](Environment-Qi.md) |
 | 配置 chunk 区域、浓度供给和方块传播 | [环境区域与配置](Environment-Configuration.md) |
 | 配置地形浓度、五行偏好与了解肺炼化 | [地形灵气生成](Terrain-Qi-Generation.md) |

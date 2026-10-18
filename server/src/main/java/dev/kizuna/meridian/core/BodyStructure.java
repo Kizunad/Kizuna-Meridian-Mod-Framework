@@ -35,6 +35,7 @@ public record BodyStructure(List<Anatomy.PartDefinition> parts,
 
         // 检查模块的部位归属，并建立整具身体唯一的端口索引。
         Map<Anatomy.PortId, Anatomy.Port> ports = new HashMap<>();
+        Map<Anatomy.PortId, Anatomy.MeridianId> meridianPorts = new HashMap<>();
         for (var tissue : tissues) {
             requirePart(partIndex, tissue.partId());
             addPorts(ports, tissue.ports());
@@ -46,6 +47,7 @@ public record BodyStructure(List<Anatomy.PartDefinition> parts,
         for (var meridian : meridians) {
             meridian.partIds().forEach(part -> requirePart(partIndex, part));
             addPorts(ports, meridian.ports());
+            meridian.ports().forEach(port -> meridianPorts.put(port.id(), meridian.id()));
         }
 
         // 循环是合法经脉拓扑；此处只拒绝悬空、方向错误和重复边。
@@ -62,6 +64,14 @@ public record BodyStructure(List<Anatomy.PartDefinition> parts,
             }
             if (!edges.add(List.of(connection.from(), connection.to()))) {
                 throw MeridianErrors.invalid(Data.duplicateConnection(connection.id()));
+            }
+            if (connection.passiveQiFlow() != null) {
+                // 被动出元仅属于内容声明的经脉生理连接，不能把器官原料缓存当作扩散源。
+                Anatomy.MeridianId sourceMeridian = meridianPorts.get(connection.from());
+                Anatomy.MeridianId targetMeridian = meridianPorts.get(connection.to());
+                if (sourceMeridian == null || targetMeridian == null || sourceMeridian.equals(targetMeridian)) {
+                    throw MeridianErrors.invalid(Data.PASSIVE_ROUTE_INVALID);
+                }
             }
         }
 

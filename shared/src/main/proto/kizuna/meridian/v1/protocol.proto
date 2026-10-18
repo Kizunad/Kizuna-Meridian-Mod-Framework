@@ -4,6 +4,7 @@ package kizuna.meridian.v1;
 
 import "kizuna/meridian/v1/body.proto";
 import "kizuna/meridian/v1/environment.proto";
+import "kizuna/meridian/v1/opening.proto";
 
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "MeridianMessages";
@@ -52,7 +53,23 @@ message BodyCommand {
     ExertTissues exert_tissues = 16;
     StartAction start_action = 17;
     StopAction stop_action = 18;
+    StartMeridianOpening start_meridian_opening = 19;
+    PauseMeridianOpening pause_meridian_opening = 20;
+    DebugQi debug_qi = 21; // 默认拒绝；可信宿主须另行开启管理员调试授权。
+    CaptureQi capture_qi = 22; // 仅可信命中入口；普通网络命令入口拒绝。
   }
+}
+
+// 仅注入游离态无属性真元，保留既有余额、在途、外壁和开拓状态。
+message DebugQi {
+  DebugQiMode mode = 1;
+  string meridian_id = 2; // 全身 fill 为空；局部 fill / 扩散必须指定真实经脉。
+  optional double amount = 3; // fill 是期望局部总量；diffuse 是新增量，不能超过扣预约后的可用容量。
+}
+enum DebugQiMode {
+  DEBUG_QI_UNSPECIFIED = 0;
+  FILL_LUMENS = 1;
+  INJECT_FOR_DIFFUSION = 2; // 模拟炼化后入脉，后续沿真实连接扩散，不伪造环境摄入证明。
 }
 
 message StartAction {
@@ -74,6 +91,19 @@ message IntakeQi {
 
 message OrganIntakeResult {
   TimeAdvancePlan plan = 1; // 从身体旧游标到可信目标时刻，成功同时推进年龄与游标。
+  EnvironmentQiReceipt environment = 2;
+}
+
+// 宿主已确认接触的一个灵气团；数量由锁定环境的浓度推导，不能由玩家报告命中。
+message CaptureQi {
+  string organ_id = 1;
+  string recipe_id = 2;
+  int32 recipe_version = 3;
+  double sample_volume_blocks = 4; // 一个粒子代表的环境体积，由生物吐纳配置提供。
+}
+
+message QiCaptureResult {
+  OrganRecipe recipe = 1; // 采用的比例定义；接触摄入即时转换，不等待固定批次时长。
   EnvironmentQiReceipt environment = 2;
 }
 
@@ -152,6 +182,14 @@ message CommandReceipt {
   OrganRecipe organ_recipe = 6; // 仅 start_organ_recipe 必填，记录宿主解析的配方。
   OrganIntakeResult organ_intake = 7; // 仅 intake_qi 必填，包含同一次身体提交的环境回执。
   ActionDefinition action_definition = 8; // 仅 start_action 必填，保存可信目录解析的定义。
+  OpeningCommandResult opening = 9; // 仅开脉开始/暂停必填；释放与身体原子提交。
+  QiCaptureResult qi_capture = 10; // 仅 capture_qi 必填；保存环境扣账与所用配方。
+}
+
+message OpeningCommandResult {
+  MeridianOpeningRule rule = 1;
+  ActionDefinition action = 2;
+  QiInventory released_qi = 3;
 }
 
 message ResponseEnvelope {
@@ -210,4 +248,10 @@ enum FailureCode {
   ACTION_ALREADY_ACTIVE = 37;
   ACTION_NOT_ACTIVE = 38;
   ACTION_LIMIT_EXCEEDED = 39;
+  OPENING_RULE_NOT_FOUND = 40;
+  OPENING_BUSY = 41;
+  MERIDIAN_ALREADY_OPENED = 42;
+  OPENING_REQUIREMENTS_UNMET = 43;
+  OPENING_NOT_ACTIVE = 44;
+  OPENING_POLICY_UNAVAILABLE = 45;
 }

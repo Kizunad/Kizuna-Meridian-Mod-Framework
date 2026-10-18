@@ -17,7 +17,7 @@ message AddonRegistration {
 message AddonHostProfile {
   string host_id = 1; // namespace:path，由宿主声明实际运行环境。
   int32 api_version = 2; // 附属内容 API 修订，独立于 Maven 版本与身体 schema。
-  repeated string capabilities = 3; // namespace:path，实际可执行的能力，不能由客户端提供。
+  repeated string capabilities = 3; // namespace:path，实际支持的定义或运行能力，不能由客户端提供。
 }
 
 message AddonBundle {
@@ -27,6 +27,7 @@ message AddonBundle {
   repeated BodyTemplate templates = 4;
   repeated OrganRecipe organ_recipes = 5;
   repeated ActionDefinition actions = 6;
+  repeated MeridianOpeningRule opening_rules = 7;
 }
 
 message AddonManifest {
@@ -61,7 +62,7 @@ enum ContentSymbolKind {
   QI_ATTRIBUTE = 3;
 }
 
-// 模板和配方采用精确内容修订，不按包修订或最新版本替换旧引用。
+// 各类定义采用精确内容修订，不按包修订或最新版本替换旧引用。
 message ContentReference {
   ContentDefinitionKind kind = 1;
   string id = 2;
@@ -73,6 +74,7 @@ enum ContentDefinitionKind {
   BODY_TEMPLATE = 1;
   ORGAN_RECIPE = 2;
   ACTION = 3;
+  MERIDIAN_OPENING_RULE = 4;
 }
 
 message ContentReferences {
@@ -119,4 +121,7 @@ enum AddonIssueCode {
   UNDECLARED_DEPENDENCY = 10;
   SYMBOL_MISSING = 11;
   SYMBOL_KIND_MISMATCH = 12;
+  DEFINITION_REFERENCE_MISSING = 13;
+  DEFINITION_REFERENCE_KIND_MISMATCH = 14;
+  DEFINITION_REFERENCE_VERSION_MISSING = 15;
 }

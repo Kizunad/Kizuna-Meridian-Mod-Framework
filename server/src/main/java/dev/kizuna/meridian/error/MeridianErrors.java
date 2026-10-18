@@ -7,6 +7,10 @@ import java.util.Objects;
 
 /** Java 参考实现的异常类型与文案；公开线协议失败码仍由 Protobuf 定义。 */
 public final class MeridianErrors {
+    public static final String INVALID_QI_CAPTURE = "接触摄入需要有效器官、单种输入配方和正数采样体积";
+    public static final String QI_CAPTURE_FACT = "接触摄入回执与环境、身体或配方不一致";
+    public static final String INVALID_DEBUG_QI = "真元调试模式、目标或剂量无效";
+    public static final String DEBUG_QI_MISMATCH = "调试回执与实际身体入账不一致";
     public static final String INVALID_GATHERING = "聚气请求或宿主配置无效";
     public static final String INVALID_TISSUE_LOADS = "组织负载必须包含 1 至 32 个不同组织";
     public static final String INVALID_BREATHING = "吐纳配置必须引用有效器官、组织与配方，参数须有限且为正";
@@ -98,6 +102,36 @@ public final class MeridianErrors {
         public AddonMessages.AddonIssue issue() {
             // 宿主直接传递结构化诊断，无需解析中文异常文本。
             return issue;
+        }
+    }
+
+    public static final class Opening {
+        public static final String POLICY_INVALID = "开拓附属策略身份重复或返回了无效的 Protobuf 裁定";
+        public static final String RULE_ID_REQUIRED = "必须提供开拓规则标识";
+        public static final String ACTION_ID_REQUIRED = "开拓规则必须引用动作";
+        public static final String VERSION = "开拓规则与引用动作的版本必须为正整数";
+        public static final String PREREQUISITES_REQUIRED = "必须提供开拓前置经脉列表，首脉可为空";
+        public static final String INVALID_PREREQUISITES = "前置经脉不能重复或包含目标经脉";
+        public static final String QI_REQUIRED = "必须提供开拓的内腔真元门槛";
+        public static final String QI_EMPTY = "开拓的内腔真元门槛必须包含正数明细";
+        public static final String DURATION = "开拓有效持续时间必须为正数模拟毫秒";
+        public static final String DUPLICATE_RULE = "开拓规则 ID 与版本重复";
+        public static final String PROTOCOL_VERSION = "不支持的经脉开拓意图协议版本";
+        public static final String BODY_FRACTION = "开拓启动的全身内腔比例必须在 0 到 1 之间";
+        public static final String SEQUENCE_GROUP = "递增开拓组必须包含目标经脉且不能重复";
+        public static final String SEQUENCE_DURATION = "递增开拓时长必须非负且在最大组规模下不溢出";
+        public static final String EFFORTS = "开拓做功必须引用组织或器官并提供正数功率";
+        public static final String INTAKE = "开拓摄入要求必须包含不重复器官、正数速率和窗口";
+        public static final String ACTION_RESOURCES = "开拓消耗和摄入使用的模块必须被其动作占用";
+        public static final String GUIDANCE = "开拓引导吞吐和批次须同时启用或同时关闭";
+        public static final String GUIDANCE_BUFFER = "开拓引导缓冲必须配合有效的引导吞吐与批次";
+        public static final String PRESSURE_LIMIT = "开拓增压额度不足或没有有效组门槛";
+        public static final String TASK_STATE = "开拓任务的状态、时间、动作或经脉额度不匹配";
+        public static final String ORGAN_ENDURANCE = "器官疲劳必须有对应的独立耐力能力且不能超限";
+        public static final String RECEIPT = "开拓命令、规则、动作与释放回执不匹配";
+
+        private Opening() {
+            // 开拓定义和意图的错误文案集中保存，业务位置保留触发条件。
         }
     }
 
@@ -204,6 +238,8 @@ public final class MeridianErrors {
         public static final String MERIDIAN_WITHOUT_PART = "经脉必须映射至少一个实际部位";
         public static final String WALL_WITHOUT_REFERENCE = "外壁储备空间必须有液态参照";
         public static final String SELF_CONNECTION = "连接不能指向自身";
+        public static final String PASSIVE_BATCH_RANGE = "自然扩散最小批次不能超过最大批次";
+        public static final String PASSIVE_ROUTE_INVALID = "自然扩散连接必须连接两条不同经脉的端口";
         public static final String QI_KIND_MISMATCH = "只有相同相态和属性的真元才能直接合并";
         public static final String DUPLICATE_QI_KIND = "同相态同属性的真元必须合并为一条明细";
         public static final String NEGATIVE_ARRIVAL = "到达时间不能为负数";

@@ -26,6 +26,8 @@ import dev.kizuna.meridian.protocol.TransportProtobuf;
 import dev.kizuna.meridian.protocol.CapabilityProtobuf;
 import dev.kizuna.meridian.protocol.ActionProtobuf;
 import dev.kizuna.meridian.core.BodyActions;
+import dev.kizuna.meridian.core.OpeningRuntime;
+import dev.kizuna.meridian.protocol.OpeningProtobuf;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages;
@@ -49,6 +51,8 @@ public final class BodyCommandHandler<C> {
     private final OrganRecipeCatalog recipes;
     private final BodyEnvironmentSource<C> environmentSource;
     private final ActionCatalog actions;
+    private final MeridianOpeningCatalog openings;
+    private final java.util.function.Predicate<C> debugAccess;
 
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit) {
@@ -73,6 +77,24 @@ public final class BodyCommandHandler<C> {
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit,
                               OrganRecipeCatalog recipes, BodyEnvironmentSource<C> environmentSource, ActionCatalog actions) {
+        // 旧装配没有开脉内容时仍可运行其他身体命令。
+        this(access, security, timeSource, store, audit, recipes, environmentSource, actions,
+                new MeridianOpeningCatalog(List.of()));
+    }
+
+    public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
+                              BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit,
+                              OrganRecipeCatalog recipes, BodyEnvironmentSource<C> environmentSource,
+                              ActionCatalog actions, MeridianOpeningCatalog openings) {
+        // 常规装配默认拒绝调试命令，即使宿主原来的普通授权策略允许所有身体操作。
+        this(access, security, timeSource, store, audit, recipes, environmentSource, actions, openings, context -> false);
+    }
+
+    public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
+                              BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit,
+                              OrganRecipeCatalog recipes, BodyEnvironmentSource<C> environmentSource,
+                              ActionCatalog actions, MeridianOpeningCatalog openings,
+                              java.util.function.Predicate<C> debugAccess) {
         // 所有依赖都显式装配；公共宿主可选择放行的私有策略，但不能省略基础授权。
         this.access = MeridianErrors.required(access, Host.ACCESS_REQUIRED);
         this.security = MeridianErrors.required(security, Host.SECURITY_REQUIRED);
@@ -82,6 +104,8 @@ public final class BodyCommandHandler<C> {
         this.recipes = MeridianErrors.required(recipes, Host.RECIPES_REQUIRED);
         this.environmentSource = MeridianErrors.required(environmentSource, Host.ENVIRONMENT_SOURCE_REQUIRED);
         this.actions = MeridianErrors.required(actions, MeridianErrors.Data.ACTION_CATALOG_REQUIRED);
+        this.openings = MeridianErrors.required(openings, MeridianErrors.Opening.RULE_ID_REQUIRED);
+        this.debugAccess = MeridianErrors.required(debugAccess, Host.ACCESS_REQUIRED);
     }
 
     ActionCatalog actionCatalog() {
@@ -90,10 +114,23 @@ public final class BodyCommandHandler<C> {
     }
 
     public byte[] handle(C trustedContext, byte[] payload) {
+        // 普通协议入口不接受客户端宣称命中；接触事件必须由可信宿主单独提交。
+        return handle(trustedContext, payload, false);
+    }
+
+    public byte[] handleCapturedQi(C trustedContext, byte[] payload) {
+        // 仅供已完成权威碰撞检查的宿主调用，仍经过身份、私有策略与原子事务。
+        return handle(trustedContext, payload, true);
+    }
+
+    private byte[] handle(C trustedContext, byte[] payload, boolean trustedCapture) {
         // 解析失败不进入业务异常分支，避免从不可信字节伪造关联 ID 或调用宿主。
         var request = MeridianProtocol.decodeRequest(payload);
         if (!request.hasBodyCommand()) {
             throw MeridianErrors.invalid(Host.COMMAND_ONLY);
+        }
+        if (request.getBodyCommand().hasCaptureQi() != trustedCapture) {
+            return failure(request.getRequestId(), MeridianMessages.FailureCode.ACCESS_DENIED);
         }
         if (trustedContext == null) {
             // 没有宿主认证上下文时不查询身体存在性，也不调用授权回调。
@@ -175,11 +212,15 @@ public final class BodyCommandHandler<C> {
         MeridianMessages.TimeAdvanceResult timeResult = null;
         BodyMessages.OrganRecipe recipeFact = null;
         MeridianMessages.OrganIntakeResult intakeFact = null;
+        MeridianMessages.QiCaptureResult captureFact = null;
         BodyMessages.ActionDefinition actionFact = null;
+        MeridianMessages.OpeningCommandResult openingFact = null;
         try {
             // 瞬时发运、加工启动和做功使用已结算时刻；摄入自身消费可信活动区间。
             if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue() || command.hasExertTissues()
-                    || command.hasStartAction() || command.hasStopAction()) {
+                    || command.hasCaptureQi()
+                    || command.hasStartAction() || command.hasStopAction()
+                    || command.hasStartMeridianOpening() || command.hasPauseMeridianOpening() || command.hasDebugQi()) {
                 requireActiveSettledTime(trustedContext, body);
             }
             // 先执行纯计算基础校验，私有策略无权跳过余额、死亡或版本上限约束。
@@ -234,6 +275,23 @@ public final class BodyCommandHandler<C> {
                     intakeFact = result.fact();
                     yield result.body();
                 }
+                case CAPTURE_QI -> {
+                    // 浓度和配方来自锁定来源与可信目录；请求不携带最终产量。
+                    var requested = command.getCaptureQi();
+                    var recipe = recipes.find(requested.getRecipeId(), requested.getRecipeVersion())
+                            .orElseThrow(() -> MeridianErrors.rejectIntake(MeridianMessages.FailureCode.RECIPE_NOT_FOUND));
+                    var plan = timeSource.resolve(trustedContext, body);
+                    String sourceId = environmentSource.resolve(trustedContext, body, plan)
+                            .orElseThrow(() -> MeridianErrors.rejectIntake(MeridianMessages.FailureCode.ENVIRONMENT_UNAVAILABLE));
+                    EnvironmentQiSource source = transaction.environmentSource(sourceId)
+                            .orElseThrow(() -> MeridianErrors.rejectIntake(MeridianMessages.FailureCode.ENVIRONMENT_UNAVAILABLE));
+                    if (!source.getSpace().getSourceId().equals(sourceId)) {
+                        throw MeridianErrors.inconsistent(Host.INTAKE_STAGE_MISMATCH);
+                    }
+                    QiCaptureExecution.Result result = QiCaptureExecution.calculate(body, requested, recipe, source);
+                    captureFact = result.fact();
+                    yield result.body();
+                }
                 case START_ACTION -> {
                     // 组织名单只能来自可信目录，动作开始不能追溯改变此前区间的恢复。
                     MeridianMessages.StartAction request = command.getStartAction();
@@ -242,6 +300,29 @@ public final class BodyCommandHandler<C> {
                     yield BodyActions.start(body, request.getInstanceId(), ActionProtobuf.fromDefinition(actionFact));
                 }
                 case STOP_ACTION -> BodyActions.stop(body, command.getStopAction().getInstanceId());
+                case DEBUG_QI -> dev.kizuna.meridian.core.QiDebugging.apply(body, command.getDebugQi());
+                case START_MERIDIAN_OPENING -> {
+                    // 执行参数来自精确目录版本，客户端只能选规则。
+                    var request = command.getStartMeridianOpening();
+                    var rule = openings.find(request.getRuleId(), request.getRuleVersion())
+                            .orElseThrow(() -> MeridianErrors.rejectIntake(MeridianMessages.FailureCode.OPENING_RULE_NOT_FOUND));
+                    var action = actions.find(rule.getActionId(), rule.getActionVersion())
+                            .orElseThrow(() -> MeridianErrors.rejectIntake(MeridianMessages.FailureCode.ACTION_NOT_FOUND));
+                    BodySnapshot started = OpeningRuntime.start(body, OpeningProtobuf.fromRule(rule), ActionProtobuf.fromDefinition(action));
+                    openingFact = MeridianMessages.OpeningCommandResult.newBuilder().setRule(rule).setAction(action)
+                            .setReleasedQi(BodyMessages.QiInventory.getDefaultInstance()).build();
+                    yield started;
+                }
+                case PAUSE_MERIDIAN_OPENING -> {
+                    // 暂停依据当前任务保存的事实，内容卸载后仍可释放超压并解除占用。
+                    var result = OpeningRuntime.pause(body, new Anatomy.MeridianId(command.getPauseMeridianOpening().getMeridianId()));
+                    var task = body.openingTask();
+                    var action = body.actions().stream().filter(item -> item.instanceId().equals(task.actionInstanceId())).findFirst().orElseThrow();
+                    openingFact = MeridianMessages.OpeningCommandResult.newBuilder().setRule(OpeningProtobuf.toRule(task.rule()))
+                            .setAction(ActionProtobuf.toDefinition(action.definition()))
+                            .setReleasedQi(BodyProtobuf.toInventory(result.releasedQi())).build();
+                    yield result.body();
+                }
                 case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
             };
         } catch (MeridianErrors.IntakeRejected rejected) {
@@ -285,9 +366,16 @@ public final class BodyCommandHandler<C> {
             // 保存原环境事实以支持幂等重试；不从当前窗口重建历史成功结果。
             receiptBuilder.setOrganIntake(intakeFact);
         }
+        if (captureFact != null) {
+            // 接触交换单独记录，恢复时不重放粒子，也不再次发放已经入账的产物。
+            receiptBuilder.setQiCapture(captureFact);
+        }
         if (actionFact != null) {
             // 重试与事务复算使用原定义，后续目录变更不能改变过去的启动事实。
             receiptBuilder.setActionDefinition(actionFact);
+        }
+        if (openingFact != null) {
+            receiptBuilder.setOpening(openingFact);
         }
         var receipt = receiptBuilder.build();
 
@@ -321,6 +409,9 @@ public final class BodyCommandHandler<C> {
 
     private Optional<String> authorize(C trustedContext, MeridianMessages.BodyCommand command) {
         // 宿主身份同样遵守持久化协议的文本上限；null 属于适配错误而非明确拒绝。
+        if (command.hasDebugQi() && !debugAccess.test(trustedContext)) {
+            return Optional.empty();
+        }
         var caller = MeridianErrors.required(access.authorize(trustedContext, command), Host.AUTH_RESULT_REQUIRED);
         if (caller.isPresent()) {
             var id = caller.get();

@@ -5,6 +5,7 @@ import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
 import dev.kizuna.meridian.protocol.pb.GatheringMessages.*;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.MeridianProtocol;
+import dev.kizuna.meridian.protocol.BodyProtobuf;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 
 import java.util.ArrayList;
@@ -29,8 +30,10 @@ final class GatheringChoices {
         return preview.build();
     }
 
-    static List<GatheringChoice> list(BodySnapshot body, OrganRecipeCatalog catalog, double supplyPerSecond) {
+    static List<GatheringChoice> list(dev.kizuna.meridian.core.BodySnapshot actual,
+                                      OrganRecipeCatalog catalog, double supplyPerSecond) {
         // 只呈现有摄入能力的器官和直接接入经脉的真实线路，不推断人体左右关系。
+        BodySnapshot body = BodyProtobuf.toMessage(actual);
         var choices = new ArrayList<GatheringChoice>();
         List<OrganRecipe> recipes = catalog.definitions();
         for (OrganDefinition organ : body.getStructure().getOrgansList()) {
@@ -52,7 +55,14 @@ final class GatheringChoices {
                 MeridianDefinition meridian = target.get();
                 MeridianState state = body.getMeridianStatesList().stream()
                         .filter(value -> value.getId().equals(meridian.getId())).findFirst().orElseThrow();
-                double freeCapacity = meridian.getLumenCapacity() - total(state.getLumenQi())
+                // 开脉临时额度同样约束实际运输；预览若仍按稳定容量会错误阻断持续吐纳。
+                double capacity = meridian.getLumenCapacity();
+                if (actual.openingTask() != null) {
+                    var definition = actual.structure().meridians().stream()
+                            .filter(value -> value.id().value().equals(meridian.getId())).findFirst().orElseThrow();
+                    capacity = actual.openingTask().capacity(definition);
+                }
+                double freeCapacity = capacity - total(state.getLumenQi())
                         - reserved(body, meridian.getPortsList());
                 for (OrganRecipe recipe : recipes) {
                     if (recipe.getOrganKind().equals(organ.getKind())

@@ -100,7 +100,13 @@ public final class Anatomy {
     /** 器官声明自身接口与可选摄入能力；转换产物由配方定义。 */
     public record OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
                                   double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond,
-                                  OrganIntakeCapability intake) {
+                                  OrganIntakeCapability intake, OrganEndurance endurance) {
+        public OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
+                               double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond,
+                               OrganIntakeCapability intake) {
+            // 没有声明独立耐力的器官保持原有加工能力。
+            this(id, displayName, kind, partId, maxHp, ports, qiCapacity, throughputPerSecond, intake, null);
+        }
         public OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
                                double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond) {
             // 未声明能力的器官只能使用已有缓存，不隐式获得从环境补元的能力。
@@ -124,6 +130,15 @@ public final class Anatomy {
         public OrganIntakeCapability {
             // 摄入与端口搬运是不同能力，附属包必须明确给出可运行的摄入速率。
             DataChecks.positive(maxQiPerSecond, "器官摄入速率");
+        }
+    }
+
+    public record OrganEndurance(double enduranceJoules, double maximumWatts, double recoveryHalfLifeSeconds) {
+        public OrganEndurance {
+            // 器官耐力与真元缓存无关，功率和恢复由生物附属明确配置。
+            DataChecks.positive(enduranceJoules, "器官耐力");
+            DataChecks.positive(maximumWatts, "器官功率");
+            DataChecks.nonNegative(recoveryHalfLifeSeconds, "器官恢复半衰期");
         }
     }
 
@@ -167,7 +182,13 @@ public final class Anatomy {
     }
 
     /** 有向连接；双向通路显式声明两条连接，阻力为非负相对系数，距离以米计。 */
-    public record Connection(ConnectionId id, PortId from, PortId to, double resistance, double distance) {
+    public record Connection(ConnectionId id, PortId from, PortId to, double resistance, double distance,
+                             PassiveQiFlow passiveQiFlow) {
+        public Connection(ConnectionId id, PortId from, PortId to, double resistance, double distance) {
+            // 仅主动运输的连接沿用简明构造方式，不自动获得被动出元权限。
+            this(id, from, to, resistance, distance, null);
+        }
+
         public Connection {
             // 同一端口自连没有运输意义，多端口形成的循环仍然允许。
             MeridianErrors.required(id, Data.CONNECTION_ID_REQUIRED);
@@ -178,6 +199,18 @@ public final class Anatomy {
             }
             DataChecks.nonNegative(resistance, "连接阻力");
             DataChecks.positive(distance, "连接距离");
+        }
+    }
+
+    public record PassiveQiFlow(double throughputPerSecond, double maximumBatchQi, double minimumBatchQi) {
+        public PassiveQiFlow {
+            // 内容明确指定速率与批次边界，最小批次让有限储量的自然扩散可以静止。
+            DataChecks.positive(throughputPerSecond, "自然扩散吞吐");
+            DataChecks.positive(maximumBatchQi, "自然扩散最大批次");
+            DataChecks.positive(minimumBatchQi, "自然扩散最小批次");
+            if (minimumBatchQi > maximumBatchQi) {
+                throw MeridianErrors.invalid(Data.PASSIVE_BATCH_RANGE);
+            }
         }
     }
 

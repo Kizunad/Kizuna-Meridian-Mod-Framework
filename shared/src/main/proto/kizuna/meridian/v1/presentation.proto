@@ -3,6 +3,7 @@ syntax = "proto3";
 package kizuna.meridian.v1;
 
 import "kizuna/meridian/v1/body.proto";
+import "kizuna/meridian/v1/operation_ui.proto";
 
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "PresentationMessages";
@@ -13,6 +14,13 @@ message BodyViewUpdate {
   int32 protocol_version = 1;
   BodySnapshot body = 2;
   string presentation_resource = 3; // namespace:path，相对于资源包 assets。
+  MeridianOpeningOptions opening = 4; // 可缺省；存在时替换此连接可见的开脉选项。
+  repeated MeridianOperationUpdate operations = 5; // 同一身体版本的只读操作卡，由对应内容包生成。
+}
+
+// 宿主提供可选择的内容定义；实际执行仍由权威目录、权限和身体条件校验。
+message MeridianOpeningOptions {
+  repeated MeridianOpeningRule rules = 1;
 }
 
 // 生物附属提供的只读展示资源，不属于身体账本或客户端变更命令。
@@ -25,6 +33,7 @@ message BodyPresentation {
   repeated PresentationLayer layers = 5;
   repeated BodyVisual visuals = 6;
   BreathingPresentation breathing = 7;
+  string default_layer_id = 8; // 初次检视显示的层；缺省时沿用首层。
 }
 
 message BreathingPresentation {
@@ -45,6 +54,13 @@ message ModelPoint {
 message ModelUv {
   float u = 1;
   float v = 2;
+}
+
+// 可选 Minecraft 外观适配：读取当前本地玩家的皮肤，不接受内容指定远程纹理。
+// 基础网格与 UV 使用 64×64 宽臂皮肤；窄臂变体共享同一三角面下标。
+message PlayerSkinAppearance {
+  repeated ModelPoint slim_vertices = 1;
+  repeated ModelUv slim_texture_uv = 2;
 }
 
 message PresentationLayer {
@@ -73,4 +89,6 @@ message BodyVisual {
   repeated ModelUv texture_uv = 10; // 使用贴图时数量必须等于 vertices，坐标为 [0,1]。
   string description = 11; // 内容包提供的用途与位置说明，不包含实时身体数值。
   string animation_bone = 12; // 可选：内容提供的动画挂点，UI 不推断人体坐标。
+  PlayerSkinAppearance player_skin = 13; // 存在时使用本地玩家皮肤；texture_resource 是离线兜底。
+  Realm minimum_realm = 14; // 展示的最低境界；未填写不筛选。权威操作条件由内容附属另行校验。
 }

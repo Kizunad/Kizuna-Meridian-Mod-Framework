@@ -10,10 +10,12 @@ import dev.kizuna.meridian.core.QiTransport;
 import dev.kizuna.meridian.core.QiAccounting;
 import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.OrganProcessing;
+import dev.kizuna.meridian.core.OpeningRuntime;
 import dev.kizuna.meridian.core.TissueCapabilities;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.error.MeridianErrors.Host;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
+import dev.kizuna.meridian.protocol.OpeningProtobuf;
 import dev.kizuna.meridian.protocol.MeridianProtocol;
 import dev.kizuna.meridian.protocol.TimeProtobuf;
 import dev.kizuna.meridian.protocol.TransportProtobuf;
@@ -42,8 +44,9 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
     public InMemoryBodyStore(List<BodySnapshot> snapshots, List<CommandReceipt> receipts) {
         // 无环境历史时可从空账启动；已有死亡释放或加工损耗必须一起恢复环境余额。
         this(snapshots, receipts, QiInventory.empty());
-        if (receipts.stream().anyMatch(receipt -> receipt.hasTimeAdvance()
-                && receipt.getTimeAdvance().getReleasedQi().getEntriesCount() > 0)) {
+        if (receipts.stream().anyMatch(receipt -> (receipt.hasTimeAdvance()
+                && receipt.getTimeAdvance().getReleasedQi().getEntriesCount() > 0)
+                || (receipt.hasOpening() && receipt.getOpening().getReleasedQi().getEntriesCount() > 0))) {
             throw MeridianErrors.invalid(Host.ENVIRONMENT_REQUIRED);
         }
     }
@@ -72,9 +75,10 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         }
         for (var receipt : List.copyOf(receipts)) {
             MeridianProtocol.validateReceipt(receipt);
-            if (receipt.hasOrganIntake()) {
+            if (receipt.hasOrganIntake() || receipt.hasQiCapture()) {
                 // 恢复必须连同来源当前库存与预算；回执只用于去重，绝不重演扣账。
-                var environmentReceipt = receipt.getOrganIntake().getEnvironment();
+                var environmentReceipt = receipt.hasQiCapture() ? receipt.getQiCapture().getEnvironment()
+                        : receipt.getOrganIntake().getEnvironment();
                 var source = this.sources.get(environmentReceipt.getExchange().getOffer().getSourceId());
                 if (source == null || source.getRevision() < environmentReceipt.getSourceRevision()) {
                     throw MeridianErrors.invalid(Host.ENVIRONMENT_REQUIRED);
@@ -269,6 +273,21 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                 }
                 nextSource = expected.source();
             }
+            if (receipt.hasQiCapture()) {
+                // 以锁定前的浓度、空间和原配方复算，不信任调用方传来的最终身体。
+                var fact = receipt.getQiCapture();
+                String sourceId = fact.getEnvironment().getExchange().getOffer().getSourceId();
+                EnvironmentQiSource source = sources.get(sourceId);
+                if (source == null) {
+                    throw MeridianErrors.inconsistent(Host.INTAKE_STAGE_MISMATCH);
+                }
+                var expected = QiCaptureExecution.calculate(original.snapshot(), receipt.getCommand().getCaptureQi(),
+                        fact.getRecipe(), source);
+                if (!next.equals(expected.body()) || !fact.equals(expected.fact())) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.QI_CAPTURE_FACT);
+                }
+                nextSource = expected.source();
+            }
             if (receipt.getCommand().hasStartOrganRecipe()) {
                 // 对照原始缓存与固定配方复算，避免伪造已扣除的输入或提前发放产物。
                 var expected = OrganProcessing.start(original.snapshot(),
@@ -292,6 +311,13 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                         .map(CapabilityProtobuf::fromExertion).toList();
                 if (!next.equals(TissueCapabilities.exertAll(original.snapshot(), loads))) {
                     throw MeridianErrors.inconsistent(Host.CAPABILITY_STAGE_MISMATCH);
+                }
+            }
+            if (receipt.getCommand().hasDebugQi()) {
+                // 管理员注入也重算剂量和预约，不能用调试回执包装任意身体改写。
+                var expected = dev.kizuna.meridian.core.QiDebugging.apply(original.snapshot(), receipt.getCommand().getDebugQi());
+                if (!expected.equals(next)) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.DEBUG_QI_MISMATCH);
                 }
             }
             if (receipt.getCommand().hasTransportQi()) {
@@ -328,6 +354,33 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                     // 普通到达和老化没有环境输出，直接复用环境账，避免无关的复制与合并。
                     nextEnvironment = QiAccounting.credit(stagedEnvironment, expected.releasedQi());
                 }
+            }
+            if (receipt.hasOpening()) {
+                // 同环境释放一起复算，防止伪造开脉成功、扩容或暂停时的超额回流。
+                var fact = receipt.getOpening();
+                BodySnapshot expectedBody;
+                QiInventory released = QiInventory.empty();
+                if (receipt.getCommand().hasStartMeridianOpening()) {
+                    expectedBody = OpeningRuntime.start(original.snapshot(),
+                            OpeningProtobuf.fromRule(fact.getRule()),
+                            ActionProtobuf.fromDefinition(fact.getAction()));
+                } else {
+                    var expected = OpeningRuntime.pause(original.snapshot(),
+                            new Anatomy.MeridianId(receipt.getCommand().getPauseMeridianOpening().getMeridianId()));
+                    expectedBody = expected.body();
+                    released = expected.releasedQi();
+                    var originalTask = original.snapshot().openingTask();
+                    var originalAction = original.snapshot().actions().stream()
+                            .filter(item -> item.instanceId().equals(originalTask.actionInstanceId())).findFirst().orElseThrow();
+                    if (!fact.getRule().equals(OpeningProtobuf.toRule(originalTask.rule()))
+                            || !fact.getAction().equals(ActionProtobuf.toDefinition(originalAction.definition()))) {
+                        throw MeridianErrors.inconsistent(MeridianErrors.Opening.RECEIPT);
+                    }
+                }
+                if (!next.equals(expectedBody) || !fact.getReleasedQi().equals(BodyProtobuf.toInventory(released))) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.Opening.RECEIPT);
+                }
+                nextEnvironment = QiAccounting.credit(nextEnvironment, released);
             }
             var updated = new HashMap<>(original.receipts());
             if (updated.putIfAbsent(key(receipt), receipt) != null) {

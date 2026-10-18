@@ -6,6 +6,7 @@ import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.BodyTimeAdvancement;
 import dev.kizuna.meridian.core.OrganIntake;
 import dev.kizuna.meridian.core.TissueCapabilities;
+import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.CapabilityProtobuf;
 import dev.kizuna.meridian.environment.EnvironmentAbsorption;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
@@ -50,13 +51,23 @@ final class OrganIntakeExecution {
             for (int index = 0; index < combinedTissues.size(); index++) {
                 Anatomy.TissueId tissueId = combinedTissues.get(index).id();
                 if (workingIds.contains(tissueId)) {
-                    combinedTissues.set(index, exertedStates.get(tissueId));
+                    // 时间推进已扣开脉费用；本次吐纳只叠加自己的增量，不能覆盖先前疲劳。
+                    AnatomyState.Tissue initial = body.tissueStates().get(index);
+                    AnatomyState.Tissue settled = combinedTissues.get(index);
+                    double additionalFatigue = exertedStates.get(tissueId).fatigue() - initial.fatigue();
+                    double combinedFatigue = settled.fatigue() + additionalFatigue;
+                    double fatigueLimit = body.structure().tissues().stream().filter(item -> item.id().equals(tissueId))
+                            .findFirst().orElseThrow().fatigueCapacity();
+                    if (combinedFatigue > fatigueLimit) {
+                        throw MeridianErrors.rejectIntake(FailureCode.TISSUE_LOAD_EXCEEDED);
+                    }
+                    combinedTissues.set(index, new AnatomyState.Tissue(tissueId, settled.hp(), combinedFatigue));
                 }
             }
             updatedBody = new BodySnapshot(updatedBody.schemaVersion(), updatedBody.id(), updatedBody.template(),
                     updatedBody.structure(), updatedBody.realm(), updatedBody.partStates(), combinedTissues,
                     updatedBody.organStates(), updatedBody.meridianStates(), updatedBody.transits(), updatedBody.vitality(),
-                    updatedBody.settledAt(), updatedBody.revision(), updatedBody.actions());
+                    updatedBody.settledAt(), updatedBody.revision(), updatedBody.actions(), updatedBody.openingTask());
         }
         var offer = EnvironmentAbsorption.offer(source, body.id().value(), BodyProtobuf.toTime(body.settledAt()), plan.getTarget());
         var exchange = EnvironmentQiExchange.newBuilder().setExchangeId("intake-" + result.body().revision())

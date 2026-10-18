@@ -47,15 +47,15 @@ public final class OrganIntake {
             throw MeridianErrors.rejectIntake(FailureCode.TIME_NOT_ADVANCED);
         }
 
-        // 区间内部的事件先由宿主拆段；末端到达和加工可随本次一起结算，寿尽必须单独处理。
+        // 寿尽必须单独处理；加工改变器官可用缓存，仍由宿主按完成边界拆段。
+        // 已预约的运输与自然扩散可以在区间内结算，不应切碎器官有效摄入时长。
         var deathBoundary = BodyTimeAdvancement.nextLifespanBoundary(body, plan.biologicalSecondsPerSimulationSecond());
-        var eventBoundary = BodyTimeAdvancement.nextEventBoundary(body,
-                plan.biologicalSecondsPerSimulationSecond(), plan.mode());
+        var completionBoundary = OrganProcessing.nextCompletionBoundary(body);
         boolean diesDuringIntake = deathBoundary.isPresent()
                 && deathBoundary.get().elapsedMillis() <= end.elapsedMillis();
-        boolean crossesEvent = eventBoundary.isPresent()
-                && eventBoundary.get().elapsedMillis() < end.elapsedMillis();
-        if (diesDuringIntake || crossesEvent) {
+        boolean crossesProcessing = completionBoundary.isPresent()
+                && completionBoundary.get().elapsedMillis() < end.elapsedMillis();
+        if (diesDuringIntake || crossesProcessing) {
             throw MeridianErrors.rejectIntake(FailureCode.PENDING_TIME_EVENT);
         }
 
@@ -81,31 +81,38 @@ public final class OrganIntake {
         }
 
         // 在途货物已预约目标空间，加工原料也占容量；摄入不能抢占这两部分空间。
-        var connections = DataChecks.index(body.structure().connections(), Anatomy.Connection::id, "连接");
-        double reservedQi = 0;
-        for (QiTransit transit : body.transits()) {
-            Anatomy.Connection route = connections.get(transit.connectionId());
-            QiAccounts.Endpoint target = accounts.endpoint(route.to());
-            if (target != null && target.id().equals(organId)) {
-                reservedQi += transit.cargo().totalQi();
-            }
-        }
-        AnatomyState.Organ organ = accounts.organ(organId);
-        double freeCapacity = definition.qiCapacity() - organ.occupiedQi() - reservedQi;
-        if (incoming.totalQi() > freeCapacity) {
-            throw MeridianErrors.rejectIntake(FailureCode.CAPACITY_EXCEEDED);
-        }
+        requireIntakeSpace(body, accounts, definition, incoming.totalQi());
 
         // 先结算既有事件，再归入本段摄入，避免未来收入改变起点处阻塞任务的结果。
         BodyTimeAdvancement.Result advanced = BodyTimeAdvancement.apply(body, plan, intervalUsedTissues);
         BodySnapshot settled = advanced.body();
         var settledAccounts = new QiAccounts(settled);
+        // 末端加工可能改变占容；重新核验实际库存与未到货预约后再入账，失败仍整笔回滚。
+        requireIntakeSpace(settled, settledAccounts, definition, incoming.totalQi());
         AnatomyState.Organ settledOrgan = settledAccounts.organ(organId);
         QiInventory buffer = QiAccounting.credit(settledOrgan.buffer(), incoming);
-        settledAccounts.replaceOrgan(new AnatomyState.Organ(organId, settledOrgan.hp(), buffer, settledOrgan.process()));
+        settledAccounts.replaceOrgan(new AnatomyState.Organ(organId, settledOrgan.hp(), buffer, settledOrgan.process(), settledOrgan.fatigueJoules()));
         var supplied = new BodySnapshot(settled.schemaVersion(), settled.id(), settled.template(), settled.structure(), settled.realm(),
                 settled.partStates(), settled.tissueStates(), settledAccounts.organs(), settled.meridianStates(), settled.transits(),
-                settled.vitality(), settled.settledAt(), settled.revision(), settled.actions());
+                settled.vitality(), settled.settledAt(), settled.revision(), settled.actions(), settled.openingTask());
+        supplied = OpeningRuntime.recordIntake(supplied, organId, incoming.totalQi());
         return new BodyTimeAdvancement.Result(supplied, false, advanced.releasedQi());
+    }
+
+    private static void requireIntakeSpace(BodySnapshot body, QiAccounts accounts,
+                                           Anatomy.OrganDefinition definition, double incomingQi) {
+        // 预约是从在途派生的容量额度，到货后由缓存接替占用，摄入不能挤占任一部分。
+        double reservedQi = 0;
+        for (QiTransit transit : body.transits()) {
+            Anatomy.Connection route = accounts.connection(transit.connectionId());
+            QiAccounts.Endpoint target = accounts.endpoint(route.to());
+            if (target != null && target.id().equals(definition.id())) {
+                reservedQi += transit.cargo().totalQi();
+            }
+        }
+        double freeCapacity = definition.qiCapacity() - accounts.organ(definition.id()).occupiedQi() - reservedQi;
+        if (incomingQi > freeCapacity) {
+            throw MeridianErrors.rejectIntake(FailureCode.CAPACITY_EXCEEDED);
+        }
     }
 }

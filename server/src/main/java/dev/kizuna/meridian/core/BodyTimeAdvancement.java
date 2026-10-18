@@ -42,6 +42,19 @@ public final class BodyTimeAdvancement {
     }
 
     public static Result apply(BodySnapshot body, Plan plan, Set<Anatomy.TissueId> intervalUsedTissues) {
+        // 开脉增加自己的事件边界，仍使用相同的寿命、运输、恢复和环境释放算子。
+        MeridianErrors.required(body, Data.BODY_REQUIRED);
+        MeridianErrors.required(plan, Data.TIME_PLAN_REQUIRED);
+        if (body.openingTask() != null && body.openingTask().active()) {
+            if (plan.mode() == Mode.LIFESPAN_ONLY) {
+                return OpeningRuntime.freeze(body, plan, intervalUsedTissues);
+            }
+            return OpeningRuntime.advance(body, plan, intervalUsedTissues);
+        }
+        return advanceInterval(body, plan, intervalUsedTissues);
+    }
+
+    static Result advanceInterval(BodySnapshot body, Plan plan, Set<Anatomy.TissueId> intervalUsedTissues) {
         // 1. 校验时间身份与身体状态；不同世代不能直接折算经历时长。
         MeridianErrors.required(body, Data.BODY_REQUIRED);
         MeridianErrors.required(plan, Data.TIME_PLAN_REQUIRED);
@@ -116,6 +129,7 @@ public final class BodyTimeAdvancement {
             organs = resourceResult.organs();
             transits = resourceResult.transits();
             releasedQi = resourceResult.released();
+            organs = OpeningEfforts.recover(body, organs, elapsedMillis);
         }
 
         // 4. 死亡释放全部余额；仅推进寿命的模式则把尚未完成的资源事件整体后移。
@@ -141,7 +155,7 @@ public final class BodyTimeAdvancement {
                 if (organ.process() != null) {
                     inventoriesToRelease.add(organ.process().recipe().input());
                 }
-                clearedOrgans.add(new AnatomyState.Organ(organ.id(), organ.hp(), QiInventory.empty(), null));
+                clearedOrgans.add(new AnatomyState.Organ(organ.id(), organ.hp(), QiInventory.empty(), null, organ.fatigueJoules()));
             }
             releasedQi = QiInventory.combine(inventoriesToRelease);
             meridians = List.copyOf(clearedMeridians);
@@ -177,7 +191,7 @@ public final class BodyTimeAdvancement {
                 }
                 long postponedCompletionMillis = process.completionMillis() + elapsedMillis;
                 var postponedProcess = new OrganProcess(process.recipe(), postponedCompletionMillis, false);
-                var postponedOrgan = new AnatomyState.Organ(organ.id(), organ.hp(), organ.buffer(), postponedProcess);
+                var postponedOrgan = new AnatomyState.Organ(organ.id(), organ.hp(), organ.buffer(), postponedProcess, organ.fatigueJoules());
                 postponedOrgans.add(postponedOrgan);
             }
             organs = List.copyOf(postponedOrgans);
@@ -198,7 +212,7 @@ public final class BodyTimeAdvancement {
                 vitality.spentLifespanSeconds(), died);
         var updatedBody = new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), tissues, organs, meridians, transits,
-                updatedVitality, settledAt, body.revision() + 1, died ? List.of() : body.actions());
+                updatedVitality, settledAt, body.revision() + 1, died ? List.of() : body.actions(), died ? null : body.openingTask());
         return new Result(updatedBody, died, releasedQi);
     }
 
@@ -232,7 +246,7 @@ public final class BodyTimeAdvancement {
     }
 
     public static Optional<TimeCursor> nextEventBoundary(BodySnapshot body, double agingRate, Mode mode) {
-        // 宿主只为最早的寿尽、运输到达或加工完成唤醒；冻结模式仅安排寿尽。
+        // 宿主只为寿尽、资源到达或可执行的自然扩散唤醒；冻结模式仅安排寿尽。
         MeridianErrors.required(mode, Data.TIME_MODE_REQUIRED);
         Optional<TimeCursor> lifespanBoundary = nextLifespanBoundary(body, agingRate);
         if (mode != Mode.ACTIVE) {
@@ -248,6 +262,16 @@ public final class BodyTimeAdvancement {
             if (arrivalBoundary.isEmpty() || completionMillis < arrivalBoundary.get().elapsedMillis()) {
                 resourceBoundary = completionBoundary;
             }
+        }
+        Optional<TimeCursor> diffusionBoundary = PassiveQiDiffusion.nextBoundary(body);
+        if (diffusionBoundary.isPresent()) {
+            // 资源变化后可同毫秒启动首批；最小批次阈值保证平衡状态不会不停自唤醒。
+            resourceBoundary = diffusionBoundary;
+        }
+        Optional<TimeCursor> openingBoundary = OpeningRuntime.nextBoundary(body);
+        if (openingBoundary.isPresent() && (resourceBoundary.isEmpty()
+                || openingBoundary.get().elapsedMillis() < resourceBoundary.get().elapsedMillis())) {
+            resourceBoundary = openingBoundary;
         }
         if (lifespanBoundary.isEmpty()) {
             return resourceBoundary;

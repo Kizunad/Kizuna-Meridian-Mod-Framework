@@ -214,13 +214,23 @@ public class OrganIntakeTest {
                 .setOpening(BodyMessages.MeridianOpening.newBuilder().setStage(BodyMessages.MeridianOpeningStage.UNOPENED).setProgress(0));
         var routed = BodyProtobuf.fromMessage(base.toBuilder().setStructure(structure).addMeridianStates(meridian)
                 .addTransits(BodyMessages.QiTransit.newBuilder().setId("reserved").setConnectionId("channel.organ")
-                        .setCargo(BodyProtobuf.toInventory(wood(3))).setThroughputPerSecond(1).setArrivalMillis(2000)
+                        .setCargo(BodyProtobuf.toInventory(wood(3))).setThroughputPerSecond(1).setArrivalMillis(1500)
                         .setStatus(BodyMessages.TransitStatus.MOVING)).build());
         assertRejected(routed, wood(2), FailureCode.CAPACITY_EXCEEDED);
         var store = store(List.of(routed));
         committed(handler(store, 1000, true).handle("owner", request("a", 0, "open-independent", wood(1))));
         assertEquals(MeridianOpening.Stage.UNOPENED, store.find(routed.id()).orElseThrow().meridianStates().get(0).opening().stage());
         assertEquals(routed.transits(), store.find(routed.id()).orElseThrow().transits());
+
+        // 摄入跨越内部运输到达时仍一次消费整个区间，预约由实际到货接替，双方账本保持守恒。
+        var crossing = store(List.of(routed));
+        committed(handler(crossing, 2000, true).handle("owner", request("a", 0, "cross-arrival", wood(1))));
+        BodySnapshot received = crossing.find(routed.id()).orElseThrow();
+        assertTrue(received.transits().isEmpty());
+        assertEquals(4, received.organQiTotal(), 0);
+        assertEquals(routed.totalQi() + 1, received.totalQi(), 1e-12);
+        assertEquals(99, sourceTotal(crossing), 0);
+        assertEquals(2000, received.settledAt().elapsedMillis());
 
         // 已进入加工账户的原料不能被摄入视作腾出的缓存空间。
         var withInput = base.toBuilder().setStructure(base.getStructure().toBuilder().setOrgans(0,

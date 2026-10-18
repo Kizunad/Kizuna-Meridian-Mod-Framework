@@ -151,6 +151,7 @@ message EnvironmentQiExchange {
   TimeCursor ended_at = 5; // [start, end) 在 offer 区间内；纯释放允许同一时刻。
   QiInventory absorbed_qi = 6; // 环境扣除、进入身体处理链的原始真元，逐种类不得超过 available_qi。
   QiInventory released_qi = 7; // 身体扣除、环境接收的真元；包括转换损耗，不可重复发放。
+  bool contact_capture = 8; // 可信接触事件的瞬时交换；按浓度采样，不占用持续摄入的时间预算。
 }
 
 // 身体、环境和回执原子提交后的持久化事实；读取和重放回执都不能再次转账。

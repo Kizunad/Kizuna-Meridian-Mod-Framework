@@ -54,13 +54,13 @@ public final class OrganProcessing {
         QiInventory remainingBuffer = QiAccounting.debit(organState.buffer(), recipe.input());
         long completionMillis = startMillis + recipe.durationMillis();
         var process = new OrganProcess(recipe, completionMillis, false);
-        var processingOrgan = new AnatomyState.Organ(organId, organState.hp(), remainingBuffer, process);
+        var processingOrgan = new AnatomyState.Organ(organId, organState.hp(), remainingBuffer, process, organState.fatigueJoules());
         accounts.replaceOrgan(processingOrgan);
 
         // 5. 一次启动只生成一份候选身体；实际发布仍由宿主事务决定。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), accounts.organs(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
     }
 
     static QiInventory completeDue(BodySnapshot body, QiAccounts accounts, long atMillis) {
@@ -75,7 +75,7 @@ public final class OrganProcessing {
             if (!accounts.organAvailable(organDefinition)) {
                 // 到期但失能时保留原料，只修改阻塞标记，不能当成已经完成。
                 var blockedProcess = new OrganProcess(process.recipe(), process.completionMillis(), true);
-                var blockedOrgan = new AnatomyState.Organ(organState.id(), organState.hp(), organState.buffer(), blockedProcess);
+                var blockedOrgan = new AnatomyState.Organ(organState.id(), organState.hp(), organState.buffer(), blockedProcess, organState.fatigueJoules());
                 accounts.replaceOrgan(blockedOrgan);
                 continue;
             }
@@ -93,7 +93,7 @@ public final class OrganProcessing {
             }
 
             // 清除加工记录才算完成；下一笔请求不能再兑现同一份输入。
-            var completedOrgan = new AnatomyState.Organ(organState.id(), organState.hp(), outputBuffer, null);
+            var completedOrgan = new AnatomyState.Organ(organState.id(), organState.hp(), outputBuffer, null, organState.fatigueJoules());
             accounts.replaceOrgan(completedOrgan);
         }
         return releasedQi;

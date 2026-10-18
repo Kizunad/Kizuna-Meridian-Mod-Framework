@@ -130,7 +130,7 @@ public final class TissueCapabilities {
         // 5. 返回完整候选身体，只替换组织状态并递增版本；实际提交仍由宿主事务完成。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), updatedTissues, body.organStates(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
     }
 
     public static BodySnapshot exertAll(BodySnapshot body, List<Exertion> loads) {
@@ -153,7 +153,7 @@ public final class TissueCapabilities {
         }
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), updated, body.organStates(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
     }
 
     private static Anatomy.TissueDefinition requireTissueDefinition(BodySnapshot body, Anatomy.TissueId tissueId) {

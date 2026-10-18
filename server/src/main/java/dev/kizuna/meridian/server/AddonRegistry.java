@@ -7,6 +7,9 @@ import dev.kizuna.meridian.protocol.AddonProtobuf;
 import dev.kizuna.meridian.protocol.MeridianProtocol;
 import dev.kizuna.meridian.protocol.pb.AddonMessages;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
+import dev.kizuna.meridian.core.OpeningRuntime;
+import dev.kizuna.meridian.protocol.OpeningProtobuf;
+import dev.kizuna.meridian.protocol.ActionProtobuf;
 
 import java.util.HashMap;
 import java.util.List;
@@ -25,7 +28,11 @@ public final class AddonRegistry {
     public static final String ORGAN_RECIPES = "meridian:organ_recipes_v1";
     public static final String ORGAN_INTAKE = "meridian:organ_intake_v1";
     public static final String TISSUE_RECOVERY = "meridian:tissue_recovery_v2";
+    public static final String PASSIVE_QI_FLOW = "meridian:passive_qi_flow_v1";
     public static final String ACTIONS = "meridian:actions_v1";
+    public static final String OPENING_DEFINITIONS = "meridian:opening_definitions_v1";
+    public static final String OPENING_RUNTIME = "meridian:opening_runtime_v1";
+    public static final String ORGAN_ENDURANCE = "meridian:organ_endurance_v1";
 
     private final Map<String, AddonMessages.AddonBundle> bundles;
     private final Map<String, AddonMessages.ContentSymbol> symbols;
@@ -33,12 +40,13 @@ public final class AddonRegistry {
     private final Map<DefinitionKey, BodyMessages.BodyTemplate> templates;
     private final OrganRecipeCatalog recipes;
     private final ActionCatalog actions;
+    private final MeridianOpeningCatalog openings;
 
     private AddonRegistry(Map<String, AddonMessages.AddonBundle> bundles,
                           Map<String, AddonMessages.ContentSymbol> symbols,
                           Map<String, AddonMessages.ContentDefinitionKind> definitionKinds,
                           Map<DefinitionKey, BodyMessages.BodyTemplate> templates,
-                          OrganRecipeCatalog recipes, ActionCatalog actions) {
+                          OrganRecipeCatalog recipes, ActionCatalog actions, MeridianOpeningCatalog openings) {
         // 只有全部校验完成才复制候选，调用方无法拿到或改写半成品目录。
         this.bundles = Map.copyOf(bundles);
         this.symbols = Map.copyOf(symbols);
@@ -46,6 +54,7 @@ public final class AddonRegistry {
         this.templates = Map.copyOf(templates);
         this.recipes = recipes;
         this.actions = actions;
+        this.openings = openings;
     }
 
     public static AddonRegistry load(AddonMessages.AddonRegistration registration) {
@@ -67,6 +76,7 @@ public final class AddonRegistry {
         var templates = new HashMap<DefinitionKey, BodyMessages.BodyTemplate>();
         var recipes = new HashMap<DefinitionKey, BodyMessages.OrganRecipe>();
         var actions = new HashMap<DefinitionKey, BodyMessages.ActionDefinition>();
+        var openings = new HashMap<DefinitionKey, BodyMessages.MeridianOpeningRule>();
         for (var bundle : bundles.values()) {
             String namespace = bundle.getManifest().getNamespace();
             for (var symbol : bundle.getSymbolsList()) {
@@ -97,6 +107,13 @@ public final class AddonRegistry {
                     throw MeridianErrors.rejectAddon(DUPLICATE_CONTENT, namespace, action.getId());
                 }
             }
+            for (var rule : bundle.getOpeningRulesList()) {
+                claimDefinition(namespace, rule.getId(), MERIDIAN_OPENING_RULE, symbols, definitionKinds);
+                var key = new DefinitionKey(rule.getId(), rule.getVersion());
+                if (openings.putIfAbsent(key, rule) != null) {
+                    throw MeridianErrors.rejectAddon(DUPLICATE_CONTENT, namespace, rule.getId());
+                }
+            }
         }
 
         // 组织、器官和属性均按登记种类解析，声明了依赖仍不能引用不存在的内容。
@@ -119,12 +136,21 @@ public final class AddonRegistry {
                     requireSymbol(manifest, qi.getAttribute(), QI_ATTRIBUTE, symbols);
                 }
             }
+            for (var rule : bundle.getOpeningRulesList()) {
+                for (var qi : rule.getMinimumLumenQi().getEntriesList()) {
+                    requireSymbol(manifest, qi.getAttribute(), QI_ATTRIBUTE, symbols);
+                }
+                requireAction(manifest, rule.getActionId(), rule.getActionVersion(), symbols, definitionKinds, actions);
+                OpeningRuntime.requireAction(OpeningProtobuf.fromRule(rule), ActionProtobuf.fromDefinition(
+                        actions.get(new DefinitionKey(rule.getActionId(), rule.getActionVersion()))), null);
+            }
         }
 
         // 配方投影沿用已有执行入口；此处成功也不触碰宿主存档或正在使用的旧注册表。
         var recipeCatalog = new OrganRecipeCatalog(List.copyOf(recipes.values()));
         var actionCatalog = new ActionCatalog(List.copyOf(actions.values()));
-        return new AddonRegistry(bundles, symbols, definitionKinds, templates, recipeCatalog, actionCatalog);
+        var openingCatalog = new MeridianOpeningCatalog(List.copyOf(openings.values()));
+        return new AddonRegistry(bundles, symbols, definitionKinds, templates, recipeCatalog, actionCatalog, openingCatalog);
     }
 
     public Optional<BodyMessages.BodyTemplate> findTemplate(String id, int version) {
@@ -149,6 +175,11 @@ public final class AddonRegistry {
     public ActionCatalog actions() {
         // 与配方目录一样交付给权威入口；登记动作本身不会启动玩家动作。
         return actions;
+    }
+
+    public MeridianOpeningCatalog openings() {
+        // 暴露经过包级校验的定义，查询不会启动动作或改变经脉进度。
+        return openings;
     }
 
     public AddonMessages.ContentAvailabilityReport inspectReferences(AddonMessages.ContentReferences references) {
@@ -177,6 +208,7 @@ public final class AddonRegistry {
             case BODY_TEMPLATE -> templates.containsKey(new DefinitionKey(reference.getId(), reference.getVersion()));
             case ORGAN_RECIPE -> recipes.find(reference.getId(), reference.getVersion()).isPresent();
             case ACTION -> actions.find(reference.getId(), reference.getVersion()).isPresent();
+            case MERIDIAN_OPENING_RULE -> openings.find(reference.getId(), reference.getVersion()).isPresent();
             default -> false; // 公开入口已拒绝未知枚举，保留穷尽分支满足生成枚举约束。
         };
         if (!installed) {
@@ -220,6 +252,32 @@ public final class AddonRegistry {
         }
         if (symbol.getKind() != expected) {
             throw MeridianErrors.rejectAddon(SYMBOL_KIND_MISMATCH, namespace, id);
+        }
+    }
+
+    private static void requireAction(AddonMessages.AddonManifest manifest, String id, int version,
+                                      Map<String, AddonMessages.ContentSymbol> symbols,
+                                      Map<String, AddonMessages.ContentDefinitionKind> definitionKinds,
+                                      Map<DefinitionKey, BodyMessages.ActionDefinition> actions) {
+        // 动作引用必须来自本包或显式直接依赖，间接安装不能替代声明。
+        String owner = AddonProtobuf.namespaceOf(id);
+        String namespace = manifest.getNamespace();
+        boolean declared = owner.equals(namespace) || manifest.getDependenciesList().stream()
+                .anyMatch(dependency -> dependency.getNamespace().equals(owner));
+        if (!declared) {
+            throw MeridianErrors.rejectAddon(UNDECLARED_DEPENDENCY, namespace, id);
+        }
+
+        // 区分身份缺失、种类错误与精确修订缺失，给内容作者明确的修正入口。
+        AddonMessages.ContentDefinitionKind kind = definitionKinds.get(id);
+        if (kind == null && !symbols.containsKey(id)) {
+            throw MeridianErrors.rejectAddon(DEFINITION_REFERENCE_MISSING, namespace, id);
+        }
+        if (kind != ACTION) {
+            throw MeridianErrors.rejectAddon(DEFINITION_REFERENCE_KIND_MISMATCH, namespace, id);
+        }
+        if (!actions.containsKey(new DefinitionKey(id, version))) {
+            throw MeridianErrors.rejectAddon(DEFINITION_REFERENCE_VERSION_MISSING, namespace, id);
         }
     }
 

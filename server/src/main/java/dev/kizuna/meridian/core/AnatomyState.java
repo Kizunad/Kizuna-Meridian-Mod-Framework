@@ -27,12 +27,17 @@ public final class AnatomyState {
         }
     }
 
-    public record Organ(Anatomy.OrganId id, double hp, QiInventory buffer, OrganProcess process) {
+    public record Organ(Anatomy.OrganId id, double hp, QiInventory buffer, OrganProcess process, double fatigueJoules) {
+        public Organ(Anatomy.OrganId id, double hp, QiInventory buffer, OrganProcess process) {
+            // 出生或没有历史负荷的器官以零疲劳初始化。
+            this(id, hp, buffer, process, 0);
+        }
         public Organ {
             // 缓存与加工输入是不同账户；空闲时 process 为 null，不能重复存放加工中的输入。
             MeridianErrors.required(id, Data.ORGAN_ID_REQUIRED);
             DataChecks.nonNegative(hp, "器官 HP");
             MeridianErrors.required(buffer, Data.QI_REQUIRED);
+            DataChecks.nonNegative(fatigueJoules, "器官疲劳");
         }
 
         public double occupiedQi() {

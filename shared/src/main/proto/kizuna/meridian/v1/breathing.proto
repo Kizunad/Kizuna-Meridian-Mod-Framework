@@ -13,6 +13,7 @@ message BreathingProfile {
   double attention_watts = 5;
   repeated string recipe_ids = 6;
   BreathingActionReference body_action = 7; // 可缺省；声明恢复能力的呼吸组织必须绑定已登记动作。
+  double particle_volume_blocks = 8; // 正数；每个成功接触粒子代表的环境体积，摄入量为浓度乘此值。
 }
 message BreathingActionReference {
   string id = 1;
@@ -53,8 +54,9 @@ message BreathingView {
   repeated BreathParticle particles = 10;
   int64 sequence = 11;
   string status = 12;
-  double absorbed_qi = 13;
-  FailureCode failure = 14; // 无失败时为 0；界面按公开类别显示原因。
+  double absorbed_qi = 13; // 当前连接累计摄入的原始灵气，不是炼化后的经脉余额。
+  FailureCode failure = 14; // 无失败时为 0；活动中也可提示摄入/配送暂时受阻，不代表呼吸已停止。
+  double stored_qi = 15; // 当前连接吐纳批次实际抵达经脉的累计产物；消耗后不回减。
 }
 // 真实三维局部坐标 [0,1]，入口为 (0.5,0.4,0.5)。旋转相机不改变粒子位置。
 // 这些粒子是摄入机会，不是环境账本中的可复制资源。

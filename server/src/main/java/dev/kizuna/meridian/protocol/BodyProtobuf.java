@@ -46,7 +46,7 @@ public final class BodyProtobuf {
 
     public static BodyMessages.BodySnapshot toMessage(BodySnapshot value) {
         // 仅映射唯一明细账本，不序列化可重新派生的真元总量、HP 比例和剩余寿命。
-        var message = BodyMessages.BodySnapshot.newBuilder()
+        var builder = BodyMessages.BodySnapshot.newBuilder()
                 .setSchemaVersion(value.schemaVersion()).setId(value.id().value())
                 .setTemplate(toReference(value.template())).setStructure(toStructure(value.structure()))
                 .setRealm(BodyMessages.Realm.valueOf(value.realm().name()))
@@ -57,7 +57,11 @@ public final class BodyProtobuf {
                 .addAllTransits(value.transits().stream().map(BodyProtobuf::toTransit).toList())
                 .setVitality(toVitality(value.vitality())).setSettledAt(toTime(value.settledAt()))
                 .setRevision(value.revision())
-                .addAllActions(value.actions().stream().map(ActionProtobuf::toActive).toList()).build();
+                .addAllActions(value.actions().stream().map(ActionProtobuf::toActive).toList());
+        if (value.openingTask() != null) {
+            builder.setOpeningTask(OpeningProtobuf.toTask(value.openingTask()));
+        }
+        var message = builder.build();
         ProtoWire.validate(message);
         return message;
     }
@@ -73,7 +77,8 @@ public final class BodyProtobuf {
                 value.getMeridianStatesList().stream().map(BodyProtobuf::fromMeridianState).toList(),
                 value.getTransitsList().stream().map(BodyProtobuf::fromTransit).toList(),
                 fromVitality(value.getVitality()), fromTime(value.getSettledAt()), value.getRevision(),
-                value.getActionsList().stream().map(ActionProtobuf::fromActive).toList());
+                value.getActionsList().stream().map(ActionProtobuf::fromActive).toList(),
+                value.hasOpeningTask() ? OpeningProtobuf.fromTask(value.getOpeningTask()) : null);
     }
 
     public static BodyMessages.BodyTemplate toMessage(BodyTemplate value) {
@@ -158,6 +163,12 @@ public final class BodyProtobuf {
             builder.setIntake(BodyMessages.OrganIntakeCapability.newBuilder()
                     .setMaxQiPerSecond(value.intake().maxQiPerSecond()));
         }
+        if (value.endurance() != null) {
+            builder.setEndurance(BodyMessages.OrganEndurance.newBuilder()
+                    .setEnduranceJoules(value.endurance().enduranceJoules())
+                    .setMaximumWatts(value.endurance().maximumWatts())
+                    .setRecoveryHalfLifeSeconds(value.endurance().recoveryHalfLifeSeconds()));
+        }
         return builder.build();
     }
 
@@ -167,7 +178,9 @@ public final class BodyProtobuf {
                 new DefinitionId(value.getKind()), new Anatomy.PartId(value.getPartId()), value.getMaxHp(),
                 value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
                 value.getQiCapacity(), value.getThroughputPerSecond(), value.hasIntake()
-                        ? new Anatomy.OrganIntakeCapability(value.getIntake().getMaxQiPerSecond()) : null);
+                        ? new Anatomy.OrganIntakeCapability(value.getIntake().getMaxQiPerSecond()) : null,
+                value.hasEndurance() ? new Anatomy.OrganEndurance(value.getEndurance().getEnduranceJoules(),
+                        value.getEndurance().getMaximumWatts(), value.getEndurance().getRecoveryHalfLifeSeconds()) : null);
     }
 
     private static BodyMessages.MeridianDefinition toMeridian(Anatomy.MeridianDefinition value) {
@@ -203,14 +216,27 @@ public final class BodyProtobuf {
 
     private static BodyMessages.Connection toConnection(Anatomy.Connection value) {
         // 双向通路保持两条显式有向边，不在通信时合并。
-        return BodyMessages.Connection.newBuilder().setId(value.id().value()).setFrom(value.from().value())
-                .setTo(value.to().value()).setResistance(value.resistance()).setDistance(value.distance()).build();
+        var message = BodyMessages.Connection.newBuilder().setId(value.id().value()).setFrom(value.from().value())
+                .setTo(value.to().value()).setResistance(value.resistance()).setDistance(value.distance());
+        if (value.passiveQiFlow() != null) {
+            Anatomy.PassiveQiFlow flow = value.passiveQiFlow();
+            message.setPassiveQiFlow(BodyMessages.PassiveQiFlow.newBuilder()
+                    .setThroughputPerSecond(flow.throughputPerSecond())
+                    .setMaximumBatchQi(flow.maximumBatchQi()).setMinimumBatchQi(flow.minimumBatchQi()));
+        }
+        return message.build();
     }
 
     private static Anatomy.Connection fromConnection(BodyMessages.Connection value) {
-        // 距离与阻力保留原单位，输送计算仍由未来执行器负责。
+        // 被动配置随实际构型保存，恢复时不会由模板重新赋予或撤销扩散权限。
+        Anatomy.PassiveQiFlow passiveFlow = null;
+        if (value.hasPassiveQiFlow()) {
+            BodyMessages.PassiveQiFlow flow = value.getPassiveQiFlow();
+            passiveFlow = new Anatomy.PassiveQiFlow(flow.getThroughputPerSecond(),
+                    flow.getMaximumBatchQi(), flow.getMinimumBatchQi());
+        }
         return new Anatomy.Connection(new Anatomy.ConnectionId(value.getId()), new Anatomy.PortId(value.getFrom()),
-                new Anatomy.PortId(value.getTo()), value.getResistance(), value.getDistance());
+                new Anatomy.PortId(value.getTo()), value.getResistance(), value.getDistance(), passiveFlow);
     }
 
     private static BodyMessages.PartState toPartState(AnatomyState.Part value) {
@@ -237,7 +263,7 @@ public final class BodyProtobuf {
     private static BodyMessages.OrganState toOrganState(AnatomyState.Organ value) {
         // 空闲状态不带加工记录；启动后的配方事实和原料账户必须一起存档。
         var builder = BodyMessages.OrganState.newBuilder().setId(value.id().value()).setHp(value.hp())
-                .setBuffer(toInventory(value.buffer()));
+                .setBuffer(toInventory(value.buffer())).setFatigueJoules(value.fatigueJoules());
         if (value.process() != null) {
             builder.setProcess(CapabilityProtobuf.toProcess(value.process()));
         }
@@ -254,7 +280,7 @@ public final class BodyProtobuf {
         if (value.hasProcess()) {
             process = CapabilityProtobuf.fromProcess(value.getProcess());
         }
-        return new AnatomyState.Organ(organId, value.getHp(), buffer, process);
+        return new AnatomyState.Organ(organId, value.getHp(), buffer, process, value.getFatigueJoules());
     }
 
     public static BodyMessages.QiInventory toInventory(QiInventory value) {

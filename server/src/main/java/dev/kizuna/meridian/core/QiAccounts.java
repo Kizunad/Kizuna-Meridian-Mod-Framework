@@ -13,6 +13,7 @@ final class QiAccounts {
     private final Map<Anatomy.MeridianId, MeridianState> meridians;
     private final Map<Anatomy.OrganId, AnatomyState.Organ> organs;
     private final Map<Anatomy.PartId, AnatomyState.Part> parts;
+    private final Map<Anatomy.ConnectionId, Anatomy.Connection> connections;
 
     QiAccounts(BodySnapshot body) {
         // 不同模块的 record ID 类型保留身份空间，器官和经脉同名也不会串账。
@@ -20,8 +21,10 @@ final class QiAccounts {
         meridians = DataChecks.index(body.meridianStates(), MeridianState::id, "经脉状态");
         organs = DataChecks.index(body.organStates(), AnatomyState.Organ::id, "器官状态");
         parts = DataChecks.index(body.partStates(), AnatomyState.Part::id, "部位状态");
+        connections = DataChecks.index(body.structure().connections(), Anatomy.Connection::id, "连接");
         for (var definition : body.structure().meridians()) {
-            var endpoint = new Endpoint(definition.id(), definition.lumenCapacity(), definition.throughputPerSecond(), null);
+            double capacity = body.openingTask() == null ? definition.lumenCapacity() : body.openingTask().capacity(definition);
+            var endpoint = new Endpoint(definition.id(), capacity, definition.throughputPerSecond(), null);
             definition.ports().forEach(port -> ports.put(port.id(), endpoint));
         }
         for (var definition : body.structure().organs()) {
@@ -33,6 +36,11 @@ final class QiAccounts {
     Endpoint endpoint(Anatomy.PortId port) {
         // 组织尚没有真元缓存；返回 null 让执行器明确拒绝未实现的账户类型。
         return ports.get(port);
+    }
+
+    Anatomy.Connection connection(Anatomy.ConnectionId id) {
+        // 同次事件内复用线路索引，批次预约检查不反复扫描完整构型。
+        return connections.get(id);
     }
 
     boolean available(Endpoint endpoint) {
@@ -67,13 +75,23 @@ final class QiAccounts {
             MeridianState meridianState = meridians.get(id);
             var updatedMeridian = new MeridianState(id, inventory, meridianState.wallQi(),
                     meridianState.fatigue(), meridianState.condition(), meridianState.opening());
-            meridians.put(id, updatedMeridian);
+            replaceMeridian(updatedMeridian);
         } else {
             Anatomy.OrganId id = (Anatomy.OrganId) endpoint.id();
             AnatomyState.Organ organState = organs.get(id);
-            var updatedOrgan = new AnatomyState.Organ(id, organState.hp(), inventory, organState.process());
+            var updatedOrgan = new AnatomyState.Organ(id, organState.hp(), inventory, organState.process(), organState.fatigueJoules());
             organs.put(id, updatedOrgan);
         }
+    }
+
+    MeridianState meridian(Anatomy.MeridianId id) {
+        // 维持费用读取同次事件中的内腔余额，兼容没有传输端口的经脉。
+        return meridians.get(id);
+    }
+
+    void replaceMeridian(MeridianState state) {
+        // 与器官加工相同，只更新这次候选计算中的唯一模块状态。
+        meridians.put(state.id(), state);
     }
 
     AnatomyState.Organ organ(Anatomy.OrganId id) {

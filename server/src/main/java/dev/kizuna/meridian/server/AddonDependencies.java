@@ -47,6 +47,12 @@ final class AddonDependencies {
             if (declaresIntake) {
                 requireCapability(capabilities, namespace, AddonRegistry.ORGAN_INTAKE);
             }
+            boolean declaresOrganEndurance = bundle.getTemplatesList().stream()
+                    .flatMap(template -> template.getStructure().getOrgansList().stream())
+                    .anyMatch(organ -> organ.hasEndurance());
+            if (declaresOrganEndurance) {
+                requireCapability(capabilities, namespace, AddonRegistry.ORGAN_ENDURANCE);
+            }
             boolean declaresRecovery = bundle.getTemplatesList().stream()
                     .flatMap(template -> template.getStructure().getTissuesList().stream())
                     .anyMatch(tissue -> tissue.getRecoveryHalfLifeSeconds() > 0);
@@ -54,8 +60,19 @@ final class AddonDependencies {
                 // 其他语言核心也须显式支持恢复规则，不能只读取字段却忽略其运行含义。
                 requireCapability(capabilities, namespace, AddonRegistry.TISSUE_RECOVERY);
             }
+            boolean declaresPassiveFlow = bundle.getTemplatesList().stream()
+                    .flatMap(template -> template.getStructure().getConnectionsList().stream())
+                    .anyMatch(connection -> connection.hasPassiveQiFlow());
+            if (declaresPassiveFlow) {
+                // 宿主必须执行自然输送，避免能读模板却把全身储元静默退回局部储存。
+                requireCapability(capabilities, namespace, AddonRegistry.PASSIVE_QI_FLOW);
+            }
             if (bundle.getActionsCount() > 0) {
                 requireCapability(capabilities, namespace, AddonRegistry.ACTIONS);
+            }
+            if (bundle.getOpeningRulesCount() > 0) {
+                // 此能力只承诺理解并登记开拓定义，不表示已具备进度推进算子。
+                requireCapability(capabilities, namespace, AddonRegistry.OPENING_DEFINITIONS);
             }
 
             for (var dependency : manifest.getDependenciesList()) {

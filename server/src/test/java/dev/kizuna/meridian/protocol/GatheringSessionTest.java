@@ -104,4 +104,72 @@ public class GatheringSessionTest {
         return dev.kizuna.meridian.protocol.pb.BodyMessages.QiInventory.newBuilder()
                 .addEntries(Qi.newBuilder().setPhase(QiPhase.FREE).setAttribute(attribute).setAmount(amount)).build();
     }
+
+    @Test
+    public void contactsShareOneTimestampUseLiveConcentrationAndPersistAtomically() {
+        // 非人体过滤器在零经过时间接收多颗，验证剂量不再绑定 250 ms 或器官每秒上限。
+        var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.AWAKENING));
+        TimeCursor now = original.getSettledAt().toBuilder().setElapsedMillis(0).build();
+        var structure = original.getStructure().toBuilder().setOrgans(0, original.getStructure().getOrgans(0).toBuilder()
+                .setIntake(OrganIntakeCapability.newBuilder().setMaxQiPerSecond(.001)));
+        var initial = BodyProtobuf.fromMessage(original.toBuilder().setStructure(structure)
+                .setSettledAt(now).setRevision(0).clearTransits().build());
+        var source = EnvironmentAbsorption.initialize(EnvironmentSpace.newBuilder().setProtocolVersion(1)
+                        .setSourceId("sample:contact").setKind(EnvironmentSpaceKind.REGION_BACKGROUND).setVolumeBlocks(100).build(),
+                BodyProtobuf.fromInventory(qi("addon:mist", 100)), now, now.toBuilder().setElapsedMillis(10000).build(),
+                new EnvironmentQiRules(EnvironmentConfigLoader.defaults()));
+        var recipe = OrganRecipe.newBuilder().setId("sample:contact_refine").setVersion(1).setOrganKind("sample:filter")
+                .setInput(qi("addon:mist", .05)).setOutput(qi("meridian:none", .01)).setDurationMillis(100)
+                .setMinimumRealm(dev.kizuna.meridian.protocol.pb.BodyMessages.Realm.AWAKENING).build();
+        var store = new InMemoryBodyStore(List.of(initial), List.of(), QiInventory.empty(), List.of(source));
+        BodyTimeSource<String> clock = (caller, body) -> TimeAdvancePlan.newBuilder().setTarget(now)
+                .setMode(TimeAdvanceMode.ACTIVE).setBiologicalSecondsPerSimulationSecond(1).build();
+        var handler = new BodyCommandHandler<String>((caller, command) -> Optional.of(caller),
+                (caller, command, body) -> true, clock, store, (caller, receipt, before, after) -> { },
+                new OrganRecipeCatalog(List.of(recipe)), (caller, body, plan) -> Optional.of("sample:contact"));
+        var capture = CaptureQi.newBuilder().setOrganId("filter").setRecipeId(recipe.getId()).setRecipeVersion(1)
+                .setSampleVolumeBlocks(1);
+        var request = RequestEnvelope.newBuilder().setProtocolVersion(1).setRequestId("contact-0")
+                .setBodyCommand(BodyCommand.newBuilder().setBodyId(initial.id().value()).setExpectedRevision(0).setCaptureQi(capture));
+
+        // 即使宿主普通授权宽松，网络入口仍拒绝玩家伪造接触；可信入口才可扣环境库存。
+        assertEquals(FailureCode.ACCESS_DENIED, MeridianProtocol.decodeResponse(handler.handle("owner", request.build().toByteArray()))
+                .getFailure().getCode());
+        assertEquals(initial, store.find(initial.id()).orElseThrow());
+        double expectedOutput = 0;
+        for (int index = 0; index < 3; index++) {
+            double concentration = BodyProtobuf.fromInventory(store.environmentSource("sample:contact").orElseThrow().getInventory())
+                    .totalQi() / 100;
+            expectedOutput += concentration * .2;
+            request.setRequestId("contact-" + index).setBodyCommand(request.getBodyCommand().toBuilder().setExpectedRevision(index));
+            var response = MeridianProtocol.decodeResponse(handler.handleCapturedQi("owner", request.build().toByteArray()));
+            assertTrue(response.toString(), response.hasCommandCommitted());
+            assertEquals(expectedOutput, store.find(initial.id()).orElseThrow().organStates().get(0).buffer().totalQi(), 1e-10);
+        }
+        var body = store.find(initial.id()).orElseThrow();
+        var remaining = store.environmentSource("sample:contact").orElseThrow();
+        assertEquals(now, BodyProtobuf.toTime(body.settledAt()));
+        assertEquals(0, remaining.getUsageCount());
+        assertEquals(initial.totalQi() + 100, body.totalQi() + BodyProtobuf.fromInventory(remaining.getInventory()).totalQi(), 1e-9);
+
+        // 同一请求重放与存档恢复不能多领一次，来源版本与真实库存随回执一起保存。
+        assertTrue(MeridianProtocol.decodeResponse(handler.handleCapturedQi("owner", request.build().toByteArray())).hasCommandCommitted());
+        assertEquals(body, store.find(initial.id()).orElseThrow());
+        var restored = new InMemoryBodyStore(List.of(body), store.receipts(), store.environmentQi(), List.of(remaining));
+        assertEquals(body, restored.find(initial.id()).orElseThrow());
+        assertEquals(remaining, restored.environmentSource("sample:contact").orElseThrow());
+
+        // 高浓度或大体积遇到缓存上限只收可保存部分，满载后拒绝且两边账本均不变化。
+        request.setRequestId("fill-contact").setBodyCommand(request.getBodyCommand().toBuilder()
+                .setExpectedRevision(body.revision()).setCaptureQi(capture.setSampleVolumeBlocks(10000)));
+        assertTrue(MeridianProtocol.decodeResponse(handler.handleCapturedQi("owner", request.build().toByteArray())).hasCommandCommitted());
+        var full = store.find(initial.id()).orElseThrow();
+        assertEquals(20, full.organStates().get(0).buffer().totalQi(), 1e-9);
+        var fullSource = store.environmentSource("sample:contact").orElseThrow();
+        request.setRequestId("blocked-contact").setBodyCommand(request.getBodyCommand().toBuilder().setExpectedRevision(full.revision()));
+        assertEquals(FailureCode.CAPACITY_EXCEEDED,
+                MeridianProtocol.decodeResponse(handler.handleCapturedQi("owner", request.build().toByteArray())).getFailure().getCode());
+        assertEquals(full, store.find(initial.id()).orElseThrow());
+        assertEquals(fullSource, store.environmentSource("sample:contact").orElseThrow());
+    }
 }

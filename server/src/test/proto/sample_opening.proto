@@ -1,0 +1,9 @@
+syntax = "proto3";
+package sample.opening;
+option java_package = "dev.kizuna.meridian.fixture.pb";
+option java_outer_classname = "SampleOpeningMessages";
+message SampleOpeningConditions {
+  int64 duration_millis = 1;
+  bool strict = 2;
+  bool requires_intake = 3;
+}

@@ -88,6 +88,10 @@ public final class MeridianProtocol {
         if (receipt.hasOrganIntake()) {
             IntakeProtobuf.validateResult(receipt.getCommand(), receipt.getOrganIntake());
         }
+        ProtoWire.require(receipt.hasQiCapture() == receipt.getCommand().hasCaptureQi(), MeridianErrors.QI_CAPTURE_FACT);
+        if (receipt.hasQiCapture()) {
+            CaptureProtobuf.validateResult(receipt.getCommand(), receipt.getQiCapture());
+        }
         // 启动动作固定所用定义；结束动作只需实例 ID，不携带另一份占用事实。
         ProtoWire.require(receipt.hasActionDefinition() == receipt.getCommand().hasStartAction(),
                 MeridianErrors.Data.ACTION_RECEIPT_MISMATCH);
@@ -96,6 +100,23 @@ public final class MeridianProtocol {
             var requested = receipt.getCommand().getStartAction();
             ProtoWire.require(definition.id().value().equals(requested.getActionId())
                             && definition.version() == requested.getActionVersion(), MeridianErrors.Data.ACTION_RECEIPT_MISMATCH);
+        }
+        // 开脉开始/暂停固定规则、动作和释放，不能夹带在其他类型回执中。
+        boolean openingCommand = receipt.getCommand().hasStartMeridianOpening() || receipt.getCommand().hasPauseMeridianOpening();
+        ProtoWire.require(receipt.hasOpening() == openingCommand, MeridianErrors.Opening.RECEIPT);
+        if (openingCommand) {
+            var fact = receipt.getOpening();
+            var rule = OpeningProtobuf.fromRule(fact.getRule());
+            dev.kizuna.meridian.core.OpeningRuntime.requireAction(rule, ActionProtobuf.fromDefinition(fact.getAction()), null);
+            BodyProtobuf.fromInventory(fact.getReleasedQi());
+            if (receipt.getCommand().hasStartMeridianOpening()) {
+                var requested = receipt.getCommand().getStartMeridianOpening();
+                ProtoWire.require(rule.id().value().equals(requested.getRuleId()) && rule.version() == requested.getRuleVersion()
+                        && fact.getReleasedQi().getEntriesCount() == 0, MeridianErrors.Opening.RECEIPT);
+            } else {
+                ProtoWire.require(rule.targetMeridianId().value().equals(receipt.getCommand().getPauseMeridianOpening().getMeridianId()),
+                        MeridianErrors.Opening.RECEIPT);
+            }
         }
     }
 
@@ -159,8 +180,16 @@ public final class MeridianProtocol {
                 loads.forEach(CapabilityProtobuf::fromExertion);
             }
             case INTAKE_QI -> IntakeProtobuf.validateRequest(command.getIntakeQi());
+            case CAPTURE_QI -> CaptureProtobuf.validateRequest(command.getCaptureQi());
             case START_ACTION -> ActionProtobuf.validateStart(command.getStartAction());
             case STOP_ACTION -> ActionProtobuf.validateInstanceId(command.getStopAction().getInstanceId());
+            case START_MERIDIAN_OPENING -> {
+                // 开脉请求不接收自报库存、时钟或成功进度。
+                new DefinitionId(command.getStartMeridianOpening().getRuleId());
+                ProtoWire.require(command.getStartMeridianOpening().getRuleVersion() > 0, MeridianErrors.Opening.VERSION);
+            }
+            case PAUSE_MERIDIAN_OPENING -> new Anatomy.MeridianId(command.getPauseMeridianOpening().getMeridianId());
+            case DEBUG_QI -> dev.kizuna.meridian.core.QiDebugging.validate(command.getDebugQi());
             case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
         }
     }

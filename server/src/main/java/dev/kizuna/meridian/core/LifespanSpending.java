@@ -42,6 +42,6 @@ public final class LifespanSpending {
         // 所有规则通过后返回新快照，原快照始终保持不变。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), body.organStates(), body.meridianStates(), body.transits(),
-                updated, body.settledAt(), body.revision() + 1, body.actions());
+                updated, body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
     }
 }

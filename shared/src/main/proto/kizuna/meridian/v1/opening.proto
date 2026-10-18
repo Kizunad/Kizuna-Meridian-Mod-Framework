@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "OpeningMessages";
+
+// 规则和运行快照在 body.proto，保留相同 Protobuf 全名以避免循环导入。
+// 独立意图可由宿主转为 BodyCommand，复用授权、revision 和请求去重。
+message MeridianOpeningRequest {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  string body_id = 3;
+  optional int64 expected_revision = 4; // 必填，0 也显式编码。
+  oneof operation {
+    StartMeridianOpening start = 10;
+    PauseMeridianOpening pause = 11;
+  }
+}
+
+message StartMeridianOpening {
+  string rule_id = 1;
+  int32 rule_version = 2;
+}
+
+message PauseMeridianOpening {
+  string meridian_id = 1; // 暂停此脉任务；是否保留适应时间由规则 continuous_hold 决定。
+}

@@ -5,6 +5,8 @@ package kizuna.meridian.v1;
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "BodyMessages";
 
+import "google/protobuf/any.proto";
+
 // 字段编号与枚举值属于跨语言契约，不依赖 Java ordinal；删除时必须 reserved。
 // optional 数值/布尔字段必须显式提供，合法的 0/false 不等于缺失。
 // 单值消息默认必填；OrganState.process 空闲时缺省，OrganDefinition.intake 无摄入能力时缺省。
@@ -106,6 +108,13 @@ message OrganDefinition {
   double qi_capacity = 7; // 缓存与加工中输入共同占用，元。
   double throughput_per_second = 8; // 端口收发共享吞吐，元/秒。
   OrganIntakeCapability intake = 9; // 可缺省：没有环境摄入能力。实际改造参数随构型保存。
+  OrganEndurance endurance = 10; // 可缺省：不具备独立做功预算。
+}
+
+message OrganEndurance {
+  double endurance_joules = 1;
+  double maximum_watts = 2;
+  double recovery_half_life_seconds = 3; // 无动作占用时疲劳指数衰减，0 禁用。
 }
 
 message OrganIntakeCapability {
@@ -137,6 +146,14 @@ message Connection {
   string to = 3;
   optional double resistance = 4;
   double distance = 5; // 米
+  PassiveQiFlow passive_qi_flow = 6; // 可缺省：仅主动运输；声明时两端必须是不同经脉。
+}
+
+// 可信构型定义的自然扩散；未开脉也能流动，客户端不能通过运输请求开启此权限。
+message PassiveQiFlow {
+  double throughput_per_second = 1; // 元/模拟秒，仍受两端共享吞吐限制。
+  double maximum_batch_qi = 2; // 单批最多搬运的元数。
+  double minimum_batch_qi = 3; // 小于此值停止调度，防止接近平衡后无限空转。
 }
 
 message PartState {
@@ -155,6 +172,7 @@ message OrganState {
   optional double hp = 2;
   QiInventory buffer = 3;
   OrganProcess process = 4; // 可缺省：当前没有加工任务。
+  double fatigue_joules = 5; // 器官独立疲劳，不与控制组织的精力混账。
 }
 
 // 可信内容定义；客户端只能提交配方 ID 与版本，不能提交这些参数。
@@ -242,6 +260,7 @@ message BodySnapshot {
   TimeCursor settled_at = 12;
   optional int64 revision = 13;
   repeated ActiveAction actions = 14; // 同时执行的动作实例；定义固定，跨动作的组织占用取并集。
+  OpeningTask opening_task = 15; // 可缺省；保留最近任务结果，只有准备/维持状态享有临时增压权限。
   // 全身真元和剩余寿命由明细派生，不传另一份可修改总账。
 }
 
@@ -258,4 +277,70 @@ message ActiveAction {
   string instance_id = 1;
   ActionDefinition definition = 2; // 启动时固定完整定义，缺包后仍能正确占用与结束。
   int64 started_millis = 3;
+}
+
+// 内容定义与运行中的固定规则共用类型；客户端只能选择规则身份。
+message MeridianOpeningRule {
+  string id = 1;
+  int32 version = 2;
+  string display_name = 3;
+  string target_meridian_id = 4;
+  reserved 5, 7, 8, 11, 12, 14, 19;
+  reserved "required_open_meridian_ids", "minimum_resilience", "required_active_millis",
+      "minimum_body_lumen_fraction", "sequence", "intakes", "strict_lumen_threshold";
+  QiInventory minimum_lumen_qi = 6; // 引导目标及维持费用的明细权重；满足条件与否由策略裁定。
+  string action_id = 9;
+  int32 action_version = 10;
+  repeated OpeningEffort efforts = 13;
+  bool continuous_hold = 15;
+  double lumen_capacity_gain = 16; // 完成后一次性增加的稳定容量，不生成真元。
+  double guidance_qi_per_second = 17; // 0 禁用专用引导；仍共享实际端口吞吐。
+  double guidance_batch_qi = 18;
+  double hold_qi_per_second = 20; // 仅适应计时期间消耗目标内腔，按门槛明细比例扣除。
+  double guidance_buffer_qi = 21; // 目标脉在门槛上方的补充余量，降至一半时补足。
+  string policy_id = 22; // 可信附属策略身份；框架不提供默认开脉条件。
+  google.protobuf.Any policy_config = 23; // 附属自己的 Protobuf 条件；框架只保存，不解释。
+}
+
+message OpeningPressureLimit {
+  string meridian_id = 1;
+  double qi = 2; // 参与组门槛及该脉临时额度；不是余额。
+}
+
+message OpeningEffort {
+  oneof module {
+    string tissue_id = 1;
+    string organ_id = 3;
+  }
+  double watts = 2;
+}
+
+message OpeningIntakeSample {
+  string organ_id = 1;
+  int64 at_millis = 2;
+  double qi = 3; // 仅来自成功提交的环境摄入。
+}
+
+enum OpeningTaskStatus {
+  OPENING_TASK_STATUS_UNSPECIFIED = 0;
+  OPENING_PREPARING = 1;
+  OPENING_HOLDING = 2;
+  OPENING_PAUSED = 3;
+  OPENING_EXHAUSTED = 4;
+  OPENING_DAMAGED = 5;
+  OPENING_COMPLETED = 6;
+}
+
+message OpeningTask {
+  MeridianOpeningRule rule = 1; // 固定启动规则，缺包后仍可正确推进和清理。
+  string action_instance_id = 2;
+  repeated OpeningPressureLimit participants = 3;
+  int64 required_millis = 4;
+  double target_stable_capacity = 5;
+  int64 started_millis = 6;
+  int64 held_millis = 7;
+  OpeningTaskStatus status = 8;
+  repeated OpeningIntakeSample intake_samples = 9;
+  repeated string observed_organ_ids = 10;
+  int64 receipt_window_millis = 11;
 }

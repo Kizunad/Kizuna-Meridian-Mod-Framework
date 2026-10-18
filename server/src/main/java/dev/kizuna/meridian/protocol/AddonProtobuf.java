@@ -84,6 +84,9 @@ public final class AddonProtobuf {
         for (var action : bundle.getActionsList()) {
             ActionProtobuf.fromDefinition(action);
         }
+        for (var rule : bundle.getOpeningRulesList()) {
+            OpeningProtobuf.fromRule(rule);
+        }
     }
 
     public static byte[] encodeReferences(AddonMessages.ContentReferences references) {

@@ -16,8 +16,17 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
                            List<MeridianState> meridianStates,
                            List<QiTransit> transits,
                            VitalityState vitality, TimeCursor settledAt, long revision,
-                           List<BodyAction.Active> actions) {
+                           List<BodyAction.Active> actions, OpeningTask openingTask) {
     public static final int CURRENT_SCHEMA_VERSION = 2;
+
+    public BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference template, BodyStructure structure,
+                        Realm realm, List<AnatomyState.Part> partStates, List<AnatomyState.Tissue> tissueStates,
+                        List<AnatomyState.Organ> organStates, List<MeridianState> meridianStates, List<QiTransit> transits,
+                        VitalityState vitality, TimeCursor settledAt, long revision, List<BodyAction.Active> actions) {
+        // 初次创建身体时没有开脉任务，状态变更须显式传递既有任务。
+        this(schemaVersion, id, template, structure, realm, partStates, tissueStates, organStates,
+                meridianStates, transits, vitality, settledAt, revision, actions, null);
+    }
 
     public BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference template, BodyStructure structure,
                         Realm realm, List<AnatomyState.Part> partStates, List<AnatomyState.Tissue> tissueStates,
@@ -76,6 +85,8 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         }
         for (var state : organStates) {
             Anatomy.OrganDefinition definition = organs.get(state.id());
+            double enduranceLimit = definition.endurance() == null ? 0 : definition.endurance().enduranceJoules();
+            DataChecks.atMost(state.fatigueJoules(), enduranceLimit, "器官疲劳");
             DataChecks.atMost(state.hp(), definition.maxHp(), "器官 HP");
             DataChecks.atMost(state.occupiedQi(), definition.qiCapacity(), "器官真元");
             if (state.process() != null) {
@@ -93,9 +104,15 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         }
         for (var state : meridianStates) {
             Anatomy.MeridianDefinition definition = meridians.get(state.id());
-            DataChecks.atMost(state.lumenQi().totalQi(), definition.lumenCapacity(), "内腔真元");
+            double lumenLimit = openingTask == null ? definition.lumenCapacity() : openingTask.capacity(definition);
+            DataChecks.atMost(state.lumenQi().totalQi(), lumenLimit, "内腔真元");
             DataChecks.atMost(state.wallQi().totalQi(), definition.wallCapacity(), "外壁真元");
             DataChecks.atMost(state.fatigue(), definition.fatigueCapacity(), "经脉疲劳");
+        }
+
+        // 临时超压必须能追溯到同一任务与动作，不能靠上传一张额度表提高容量。
+        if (openingTask != null) {
+            OpeningRuntime.validateTask(openingTask, structure, meridianStates, actions, settledAt, vitality);
         }
 
         // 运输中记录必须指向未来；已到达但受阻的货物保留在途归属，不回填源账户。

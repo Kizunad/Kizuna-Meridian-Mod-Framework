@@ -2,6 +2,9 @@ package dev.kizuna.meridian.server;
 
 import dev.kizuna.meridian.core.BodyId;
 import dev.kizuna.meridian.core.BodySnapshot;
+import dev.kizuna.meridian.core.Anatomy;
+import dev.kizuna.meridian.core.BodyTimeAdvancement;
+import dev.kizuna.meridian.core.QiTransport;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
 import dev.kizuna.meridian.protocol.GatheringProtobuf;
@@ -41,6 +44,7 @@ public final class GatheringSession<C> implements AutoCloseable {
     private int commandSequence;
     private boolean closed;
     private BreathingDriver<C> breathing;
+    private BreathingDelivery<C> breathingDelivery;
 
     public GatheringSession(C context, BodyId bodyId, BodyCommandHandler<C> commands, BodySnapshotReader bodies,
                             BodyReadPolicy<C> access, BodyTimeSource<C> time,
@@ -90,9 +94,14 @@ public final class GatheringSession<C> implements AutoCloseable {
         BodyMessages.BodySnapshot body = BodyProtobuf.toMessage(actual);
         GatheringEnvironment preview = GatheringChoices.environment(environment.apply(actual));
         var result = GatheringView.newBuilder().setBody(body).setEnvironment(preview).setProgress(progress)
-                .addAllChoices(GatheringChoices.list(body, recipes, preview.getSupplyPerSecond()));
+                .addAllChoices(GatheringChoices.list(actual, recipes, preview.getSupplyPerSecond()));
         if (breathing != null) {
-            result.setBreathing(breathing.view(actual));
+            var breath = breathing.view(actual).toBuilder();
+            if (breath.getFailure() == FAILURE_CODE_UNSPECIFIED) {
+                // 摄入中止原因优先；配送拥堵沿同一公开失败码提示，活动标记仍由呼吸控制决定。
+                breath.setFailure(breathingDelivery.failure());
+            }
+            result.setBreathing(breath);
         }
         return result.build();
     }
@@ -103,6 +112,7 @@ public final class GatheringSession<C> implements AutoCloseable {
             throw rejectGathering(GATHERING_BUSY);
         }
         breathing = new BreathingDriver<>(this, profile, read(), recipes, commands.actionCatalog());
+        breathingDelivery = new BreathingDelivery<>(this, profile);
     }
 
     public void synchronizeBodyRevision() {
@@ -231,6 +241,9 @@ public final class GatheringSession<C> implements AutoCloseable {
         boolean changed = advanceGathering();
         if (breathing != null) {
             changed |= breathing.advance();
+            if (operationId != null) {
+                changed |= breathingDelivery.advance();
+            }
         }
         return changed;
     }
@@ -278,15 +291,21 @@ public final class GatheringSession<C> implements AutoCloseable {
                     // 宿主可能已为其他动作推进到本时刻；加工事实直接读取，避免再次空推进。
                     settleManual();
                     BodyMessages.BodySnapshot current = BodyProtobuf.toMessage(read());
-                    double organRate = current.getStructure().getOrgansList().stream()
-                            .filter(value -> value.getId().equals(choice.getOrganId())).findFirst().orElseThrow().getThroughputPerSecond();
-                    double targetRate = current.getStructure().getMeridiansList().stream()
-                            .filter(value -> value.getId().equals(choice.getTargetMeridianId())).findFirst().orElseThrow().getThroughputPerSecond();
+                    // 肺等入口与自然扩散共享收发吞吐；占满时保留产物，等真实到达事件释放预约。
+                    BodySnapshot settledBody = read();
+                    double availableRate = QiTransport.availableThroughputPerSecond(settledBody,
+                            new Anatomy.ConnectionId(choice.getConnectionId()));
+                    if (availableRate <= 0) {
+                        long retryMillis = QiTransport.nextArrivalBoundary(settledBody)
+                                .orElseThrow(() -> rejectGathering(ROUTE_UNAVAILABLE)).elapsedMillis();
+                        stage(GatheringStage.REFINING, settledBody.settledAt().elapsedMillis(), retryMillis);
+                        break;
+                    }
                     java.util.Set<String> existingTransits = current.getTransitsList().stream()
                             .map(BodyMessages.QiTransit::getId).collect(java.util.stream.Collectors.toSet());
                     execute(BodyCommand.newBuilder().setTransportQi(TransportQi.newBuilder()
                             .setConnectionId(choice.getConnectionId()).setCargo(choice.getRecipe().getOutput())
-                            .setThroughputPerSecond(Math.min(organRate, targetRate))));
+                            .setThroughputPerSecond(availableRate)));
                     BodySnapshot dispatched = read();
                     var transit = dispatched.transits().stream().filter(value -> !existingTransits.contains(value.id()))
                             .findFirst().orElseThrow();
@@ -326,7 +345,14 @@ public final class GatheringSession<C> implements AutoCloseable {
         command.setBodyId(bodyId.value()).setExpectedRevision(body.revision());
         RequestEnvelope request = RequestEnvelope.newBuilder().setProtocolVersion(1)
                 .setRequestId(operationId + "/" + commandSequence++).setBodyCommand(command).build();
-        ResponseEnvelope response = MeridianProtocol.decodeResponse(commands.handle(context, request.toByteArray()));
+        byte[] responseBytes;
+        if (command.hasCaptureQi()) {
+            // 只有服务端气流确认命中后才走这个入口，客户端始终只提交呼吸方向。
+            responseBytes = commands.handleCapturedQi(context, request.toByteArray());
+        } else {
+            responseBytes = commands.handle(context, request.toByteArray());
+        }
+        ResponseEnvelope response = MeridianProtocol.decodeResponse(responseBytes);
         if (response.hasFailure()) {
             throw rejectGathering(response.getFailure().getCode());
         }
@@ -350,13 +376,15 @@ public final class GatheringSession<C> implements AutoCloseable {
 
     public long nextBoundaryMillis() {
         // 宿主据此安排一次唤醒，不需要逐帧调用身体算子。
+        long boundary = progress.getNextBoundaryMillis();
         if (breathing != null && breathing.nextBoundaryMillis() != 0) {
-            if (progress.getNextBoundaryMillis() == 0) {
-                return breathing.nextBoundaryMillis();
-            }
-            return Math.min(progress.getNextBoundaryMillis(), breathing.nextBoundaryMillis());
+            boundary = boundary == 0 ? breathing.nextBoundaryMillis() : Math.min(boundary, breathing.nextBoundaryMillis());
         }
-        return progress.getNextBoundaryMillis();
+        if (breathingDelivery != null && breathingDelivery.nextBoundaryMillis() != 0) {
+            long delivery = breathingDelivery.nextBoundaryMillis();
+            boundary = boundary == 0 ? delivery : Math.min(boundary, delivery);
+        }
+        return boundary;
     }
 
     long now() {
@@ -385,8 +413,14 @@ public final class GatheringSession<C> implements AutoCloseable {
     }
 
     void settleManual() {
-        // 同毫秒无需空提交；其余时间仍复用寿命、器官加工和在途的统一推进。
-        if (read().settledAt().elapsedMillis() != now()) {
+        // 同毫秒若新资源能触发扩散也须结算；平衡状态不创建空提交。
+        BodySnapshot body = read();
+        long nowMillis = now();
+        TimeAdvancePlan plan = time.resolve(context, body);
+        boolean eventDue = BodyTimeAdvancement.nextEventBoundary(body,
+                        plan.getBiologicalSecondsPerSimulationSecond(), BodyTimeAdvancement.Mode.ACTIVE)
+                .map(boundary -> boundary.elapsedMillis() <= nowMillis).orElse(false);
+        if (body.settledAt().elapsedMillis() != nowMillis || eventDue) {
             execute(BodyCommand.newBuilder().setAdvanceTime(AdvanceTime.getDefaultInstance()));
         }
     }
@@ -406,34 +440,21 @@ public final class GatheringSession<C> implements AutoCloseable {
         }
     }
 
-    boolean canCaptureInterval(long maximumMillis) {
-        // 摄入仅使用本次主动操作的短区间；停气与环境换窗前的闲置时间先单独结清。
-        BodySnapshot body = read();
-        long fromMillis = body.settledAt().elapsedMillis();
-        long untilMillis = now();
-        Optional<EnvironmentQiSource> source = environment.apply(body);
-        return untilMillis > fromMillis && untilMillis - fromMillis <= maximumMillis && source.isPresent()
-                && source.get().getValidFrom().getElapsedMillis() <= fromMillis
-                && source.get().getValidUntil().getElapsedMillis() >= untilMillis;
+    double capture(GatheringChoice selected, double sampleVolumeBlocks) {
+        // 一个命中就是一笔接触事件，同一毫秒允许多个命中，旧货物仍可同时在途。
+        double before = read().totalQi();
+        execute(BodyCommand.newBuilder().setCaptureQi(CaptureQi.newBuilder().setOrganId(selected.getOrganId())
+                .setRecipeId(selected.getRecipe().getId()).setRecipeVersion(selected.getRecipe().getVersion())
+                .setSampleVolumeBlocks(sampleVolumeBlocks)));
+        double storedOutput = read().totalQi() - before;
+        double efficiency = GatheringChoices.total(selected.getRecipe().getOutput())
+                / GatheringChoices.total(selected.getRecipe().getInput());
+        return storedOutput / efficiency;
     }
 
-    boolean capture(GatheringChoice selected, ExertTissues loads) {
-        // 场景命中只是摄入候选；实际剂量仍经过环境原子扣账与器官能力校验。
-        if (progress.getNextBoundaryMillis() != 0 || read().settledAt().elapsedMillis() >= now()) {
-            return false;
-        }
-        preflight(view(), selected);
-        choice = selected;
-        execute(BodyCommand.newBuilder().setIntakeQi(IntakeQi.newBuilder()
-                .setOrganId(choice.getOrganId()).setQi(choice.getRecipe().getInput()).addAllLoads(loads.getLoadsList())));
-        execute(BodyCommand.newBuilder().setStartOrganRecipe(StartOrganRecipe.newBuilder()
-                .setOrganId(choice.getOrganId()).setRecipeId(choice.getRecipe().getId())
-                .setRecipeVersion(choice.getRecipe().getVersion())));
-        var current = BodyProtobuf.toMessage(read());
-        var organ = current.getOrganStatesList().stream()
-                .filter(value -> value.getId().equals(choice.getOrganId())).findFirst().orElseThrow();
-        stage(GatheringStage.REFINING, current.getSettledAt().getElapsedMillis(), organ.getProcess().getCompletionMillis());
-        return true;
+    void recordBreathingDelivery(double amount) {
+        // 入脉统计只来自已完成运输，肺缓存与在途不会提前显示为经脉收货。
+        breathing.recordStoredQi(amount);
     }
 
     @Override

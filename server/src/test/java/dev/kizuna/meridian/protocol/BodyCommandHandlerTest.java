@@ -25,6 +25,49 @@ import static org.junit.Assert.*;
 
 public class BodyCommandHandlerTest {
     @Test
+    public void debugQiIsOptInAtomicReservedAndReplayable() {
+        // 广泛授权的旧宿主仍默认拒绝调试；开启后也不能抢占在途容量或重复注入。
+        var message = BodyProtobuf.toMessage(body());
+        BodySnapshot initial = BodyProtobuf.fromMessage(message.toBuilder().setMeridianStates(0,
+                message.getMeridianStates(0).toBuilder().setCondition(
+                        dev.kizuna.meridian.protocol.pb.BodyMessages.MeridianCondition.INTACT)).build());
+        var store = store(initial);
+        var fill = MeridianMessages.DebugQi.newBuilder().setMode(MeridianMessages.DebugQiMode.FILL_LUMENS).build();
+        var request = MeridianMessages.RequestEnvelope.newBuilder().setProtocolVersion(1).setRequestId("debug-fill")
+                .setBodyCommand(MeridianMessages.BodyCommand.newBuilder().setBodyId(initial.id().value())
+                        .setExpectedRevision(0).setDebugQi(fill)).build();
+        byte[] wire = MeridianProtocol.encodeRequest(request);
+        assertFailure(handler(store).handle("player", wire), MeridianMessages.FailureCode.ACCESS_DENIED);
+        var allowed = new BodyCommandHandler<String>((context, command) -> Optional.of(context),
+                (context, command, current) -> true,
+                (context, current) -> MeridianMessages.TimeAdvancePlan.newBuilder().setTarget(BodyProtobuf.toTime(current.settledAt()))
+                        .setMode(MeridianMessages.TimeAdvanceMode.ACTIVE).setBiologicalSecondsPerSimulationSecond(1).build(),
+                store, (context, receipt, before, after) -> { /* 测试不产生外部审计。 */ },
+                new dev.kizuna.meridian.server.OrganRecipeCatalog(List.of()), (context, current, plan) -> Optional.empty(),
+                new dev.kizuna.meridian.server.ActionCatalog(List.of()), new dev.kizuna.meridian.server.MeridianOpeningCatalog(List.of()),
+                context -> context.equals("admin"));
+        assertFailure(allowed.handle("player", wire), MeridianMessages.FailureCode.ACCESS_DENIED);
+        byte[] response = allowed.handle("admin", wire);
+        assertTrue(MeridianProtocol.decodeResponse(response).hasCommandCommitted());
+        assertArrayEquals(response, allowed.handle("admin", wire));
+        BodySnapshot filled = store.find(initial.id()).orElseThrow();
+        assertEquals(100 - initial.transitQiTotal(), filled.lumenQiTotal(), 1e-12);
+        assertEquals(initial.transits(), filled.transits());
+        assertEquals(initial.wallQiTotal(), filled.wallQiTotal(), 0);
+        assertEquals(initial.meridianStates().get(0).opening(), filled.meridianStates().get(0).opening());
+        assertEquals(1, store.receipts().size());
+        MeridianProtocol.decodeReceipt(MeridianProtocol.encodeReceipt(store.receipts().get(0)));
+
+        // 全笔拒绝超容量，状态和回执保持原样；显式剂量语义通过真实 wire 校验。
+        var overflow = request.toBuilder().setRequestId("overflow").setBodyCommand(request.getBodyCommand().toBuilder()
+                .setExpectedRevision(filled.revision()).setDebugQi(MeridianMessages.DebugQi.newBuilder()
+                        .setMode(MeridianMessages.DebugQiMode.INJECT_FOR_DIFFUSION).setMeridianId("channel").setAmount(1))).build();
+        assertFailure(allowed.handle("admin", MeridianProtocol.encodeRequest(overflow)), MeridianMessages.FailureCode.CAPACITY_EXCEEDED);
+        assertEquals(filled, store.find(initial.id()).orElseThrow());
+        assertEquals(1, store.receipts().size());
+    }
+
+    @Test
     public void spendingChangesOnlyLifespanAndRevisionAndSurvivesReceiptRestore() {
         // 通过正式线协议观察完整状态；重建处理器与存储后重试仍只能扣一次。
         var initial = body();

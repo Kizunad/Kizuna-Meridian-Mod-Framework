@@ -88,6 +88,15 @@ public final class EnvironmentAbsorption {
         // 原始吸收先扣真实库存；同笔加工释放不能为这次摄入垫资。
         QiInventory absorbed = BodyProtobuf.fromInventory(exchange.getAbsorbedQi());
         QiInventory remaining = QiAccounting.debit(BodyProtobuf.fromInventory(source.getInventory()), absorbed);
+        if (exchange.getContactCapture()) {
+            // 接触摄入只扣实际库存；保留原有持续摄入用量，不能借新事件重置旧预算。
+            EnvironmentProtobuf.validateExchange(exchange);
+            QiInventory updated = QiAccounting.credit(remaining, BodyProtobuf.fromInventory(exchange.getReleasedQi()));
+            EnvironmentQiSource result = source.toBuilder().setRevision(source.getRevision() + 1)
+                    .setInventory(BodyProtobuf.toInventory(updated)).build();
+            EnvironmentProtobuf.validateSource(result);
+            return result;
+        }
         long durationMillis = exchange.getEndedAt().getElapsedMillis() - exchange.getStartedAt().getElapsedMillis();
         double requestedRate = absorbed.totalQi() / (durationMillis / 1000.0);
         if (!Double.isFinite(requestedRate) || requestedRate <= 0) {

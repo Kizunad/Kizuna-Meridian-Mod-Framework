@@ -75,6 +75,66 @@ public class AddonRegistryTest {
     }
 
     @Test
+    public void openingRulesResolveActionsAndDiagnoseMissingContent() {
+        // 开拓包引用生物包的动作，整批注册与精确引用诊断不依赖包输入顺序。
+        var species = species().toBuilder().addActions(openingAction()).build();
+        var arts = techniques().toBuilder().addOpeningRules(openingRule()).build();
+        var request = registration(arts, species).toBuilder().setHost(host()
+                .addCapabilities(AddonRegistry.ACTIONS).addCapabilities(AddonRegistry.OPENING_DEFINITIONS)).build();
+        var registry = AddonRegistry.load(AddonProtobuf.decodeRegistration(AddonProtobuf.encodeRegistration(request)));
+        assertEquals(openingRule(), registry.openings().find("arts:open_ring", 1).orElseThrow());
+        assertEquals(registry.openings().find("arts:open_ring", 1), AddonRegistry.load(request.toBuilder()
+                .clearBundles().addBundles(species).addBundles(arts).build()).openings().find("arts:open_ring", 1));
+        assertTrue(registry.openings().find("arts:open_ring", 2).isEmpty());
+        var references = references(reference(MERIDIAN_OPENING_RULE, "arts:open_ring", 1),
+                reference(MERIDIAN_OPENING_RULE, "arts:open_ring", 2), reference(MERIDIAN_OPENING_RULE, "arts:absent", 1));
+        assertEquals(List.of(AVAILABLE, DEFINITION_VERSION_MISSING, DEFINITION_MISSING), registry.inspectReferences(references)
+                .getEntriesList().stream().map(AddonMessages.ContentAvailability::getStatus).toList());
+        assertEquals(ADDON_MISSING, AddonRegistry.load(registration()).inspectReferences(references).getEntries(0).getStatus());
+    }
+
+    @Test
+    public void openingRegistrationChecksCapabilitiesOwnershipAndExactDirectDependencies() {
+        // 定义支持独立于进度执行；能力缺失和重复修订都必须在发布目录前拒绝。
+        var species = species().toBuilder().addActions(openingAction()).build();
+        var arts = techniques().toBuilder().addOpeningRules(openingRule()).build();
+        var host = host().addCapabilities(AddonRegistry.ACTIONS);
+        rejected(registration(species, arts).toBuilder().setHost(host).build(),
+                CAPABILITY_MISSING, "arts", AddonRegistry.OPENING_DEFINITIONS);
+        var request = registration(species, arts).toBuilder()
+                .setHost(host.addCapabilities(AddonRegistry.OPENING_DEFINITIONS)).build();
+        rejected(request.toBuilder().setBundles(1, arts.toBuilder().addOpeningRules(openingRule())).build(),
+                DUPLICATE_CONTENT, "arts", "arts:open_ring");
+        rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
+                        openingRule().toBuilder().setId("sample:open_ring"))).build(),
+                NAMESPACE_MISMATCH, "arts", "sample:open_ring");
+
+        // 动作身份、类型和修订分别诊断，自定义门槛属性也须登记正确类型。
+        rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
+                        openingRule().toBuilder().setActionId("sample:absent"))).build(),
+                DEFINITION_REFERENCE_MISSING, "arts", "sample:absent");
+        rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
+                        openingRule().toBuilder().setActionId("sample:tendril"))).build(),
+                DEFINITION_REFERENCE_KIND_MISMATCH, "arts", "sample:tendril");
+        rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
+                        openingRule().toBuilder().setActionId("sample:muscle"))).build(),
+                DEFINITION_REFERENCE_KIND_MISMATCH, "arts", "sample:muscle");
+        rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
+                        openingRule().toBuilder().setActionVersion(2))).build(),
+                DEFINITION_REFERENCE_VERSION_MISSING, "arts", "sample:focus");
+        rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
+                        openingRule().toBuilder().setMinimumLumenQi(qi("sample:missing_qi", 1)))).build(),
+                SYMBOL_MISSING, "arts", "sample:missing_qi");
+
+        // 即使依赖通过中间包带入，也不能隐式引用动作；去掉配方隔离这一检查。
+        var middle = bundle("middle").toBuilder().setManifest(manifest("middle").addDependencies(dependency("sample"))).build();
+        var indirect = bundle("arts").toBuilder().setManifest(manifest("arts").addDependencies(dependency("middle")))
+                .addOpeningRules(openingRule()).build();
+        rejected(request.toBuilder().clearBundles().addBundles(species).addBundles(middle).addBundles(indirect).build(),
+                UNDECLARED_DEPENDENCY, "arts", "sample:focus");
+    }
+
+    @Test
     public void dependenciesVersionsAndHostCapabilitiesMustAllBeSatisfied() {
         // 缺直接依赖和版本不符整批拒绝，诊断提供包和关联目标。
         rejected(registration(techniques()), DEPENDENCY_MISSING, "arts", "sample");
@@ -113,6 +173,21 @@ public class AddonRegistryTest {
         var supportedRecovery = registration(withRecovery).toBuilder()
                 .setHost(host().addCapabilities(AddonRegistry.TISSUE_RECOVERY)).build();
         assertNotNull(AddonRegistry.load(supportedRecovery));
+
+        // 模板实际声明自然流动时，宿主必须支持它；清单漏报不能静默忽略生理规则。
+        var firstMeridian = template.getStructure().getMeridians(0);
+        var secondMeridian = firstMeridian.toBuilder().setId("second").clearPorts()
+                .addPorts(BodyMessages.Port.newBuilder().setId("second.in")
+                        .setDirection(BodyMessages.PortDirection.INPUT));
+        var passiveConnection = BodyMessages.Connection.newBuilder().setId("passive.link")
+                .setFrom("channel.out").setTo("second.in").setResistance(0).setDistance(.1)
+                .setPassiveQiFlow(BodyMessages.PassiveQiFlow.newBuilder().setThroughputPerSecond(.5)
+                        .setMaximumBatchQi(.25).setMinimumBatchQi(.001));
+        var passiveContent = species().toBuilder().setTemplates(0, template.toBuilder().setStructure(
+                template.getStructure().toBuilder().addMeridians(secondMeridian).addConnections(passiveConnection))).build();
+        rejected(registration(passiveContent), CAPABILITY_MISSING, "sample", AddonRegistry.PASSIVE_QI_FLOW);
+        assertNotNull(AddonRegistry.load(registration(passiveContent).toBuilder()
+                .setHost(host().addCapabilities(AddonRegistry.PASSIVE_QI_FLOW)).build()));
     }
 
     @Test
@@ -268,6 +343,21 @@ public class AddonRegistryTest {
         return BodyMessages.OrganRecipe.newBuilder().setId("arts:refine").setVersion(1).setOrganKind("sample:filter")
                 .setInput(qi("meridian:wood", 4)).setOutput(qi("meridian:none", 3)).setDurationMillis(2000)
                 .setMinimumRealm(BodyMessages.Realm.AWAKENING).build();
+    }
+
+    private static BodyMessages.ActionDefinition openingAction() {
+        // 生物包为开拓提供占用内容；动作身份可由另一个附属规则精确引用。
+        return BodyMessages.ActionDefinition.newBuilder().setId("sample:focus").setVersion(1)
+                .setDisplayName("环脉引导").addTissueIds("tendril").addOrganIds("filter").build();
+    }
+
+    private static BodyMessages.MeridianOpeningRule openingRule() {
+        // 首脉前置为空，门槛只读取目标内腔，不另外复制一份待开拓真元。
+        return BodyMessages.MeridianOpeningRule.newBuilder().setId("arts:open_ring").setVersion(1)
+                .setDisplayName("环脉适应").setTargetMeridianId("channel")
+                .setMinimumLumenQi(qi("meridian:none", 3))
+                .setPolicyId("sample:opening").setPolicyConfig(SampleOpeningPolicy.configuration(5000, false, false))
+                .setActionId("sample:focus").setActionVersion(1).build();
     }
 
     private static BodyMessages.QiInventory qi(String attribute, double amount) {

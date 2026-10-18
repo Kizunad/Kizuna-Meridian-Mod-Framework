@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "OpeningPolicyMessages";
+
+import "kizuna/meridian/v1/body.proto";
+import "kizuna/meridian/v1/protocol.proto";
+
+// 仅由可信宿主调用已安装的附属策略；玩家意图不能上传策略或裁定结果。
+message OpeningPolicyRequest {
+  int32 protocol_version = 1;
+  BodySnapshot body = 2;
+  MeridianOpeningRule rule = 3;
+  OpeningPolicyPhase phase = 4;
+  int64 interval_millis = 5; // 检查旧余额支付维持费用后，条件是否仍连续满足。
+}
+
+enum OpeningPolicyPhase {
+  OPENING_POLICY_PHASE_UNSPECIFIED = 0;
+  PREPARE_OPENING = 1;
+  CHECK_OPENING = 2;
+}
+
+message OpeningPolicyDecision {
+  int32 protocol_version = 1;
+  FailureCode rejection = 2;
+  bool ready = 3;
+  repeated OpeningPressureLimit participants = 4;
+  int64 required_millis = 5;
+  double target_stable_capacity = 6;
+  optional int64 next_check_delay_millis = 7; // 必须为正；缺省表示只等待其他身体事件。
+  repeated string observed_organ_ids = 8; // 仅订阅成功提交的真实摄入收据。
+  int64 receipt_window_millis = 9; // 收据保存窗口，不新增资源账户。
+}

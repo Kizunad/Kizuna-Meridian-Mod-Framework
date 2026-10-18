@@ -4,6 +4,8 @@
 
 ## 唯一协议来源与构建
 
+接触摄入 `BodyCommand.capture_qi = 22` 只允许可信宿主在确认粒子接触后调用 `handleCapturedQi`。普通 `handle` 即使收到合法 Protobuf 且宿主普通授权放行，也返回 `ACCESS_DENIED`；不得把可信入口直接注册到玩家网络通道。命令引用器官、配方版本和宿主配置的采样体积，实际剂量由锁定环境浓度计算；`CommandReceipt.qi_capture = 10` 保存配方及瞬时环境交换。相同请求重放不会再次扣账或发放产物。
+
 按照 Kizuna 各框架的惯例，跨模组、跨语言和宿主边界使用 `.proto` 定义消息，通过 `protoc` 生成类型。这里不再使用 TypeBox → JSON Schema 方案，也不手工维护一套 JSON 协议。
 
 | 源码 | 内容 |
@@ -62,6 +64,8 @@ python3 "scripts/wiki.py" check
 | `ContentReferences` / `ContentAvailabilityReport` | 宿主保存引用及查询当前目录可用性 | 精确 ID/种类/版本、状态与列表边界；不授予执行权限，不自动迁移 |
 | 独立 `TimeAdvancePlan` 字节 | 可信宿主内部事实，不是客户端请求分支 | 目标游标、显式有限非负倍率、推进模式 |
 | `BodyCommand.intake_qi` / `CommandReceipt.organ_intake` | 摄入意图 / 可信计划与环境提交事实 | 器官 ID、正数原始明细；成功推进年龄与游标，并与环境原子交换 |
+| `BodyCommand.start_meridian_opening = 19` / `pause_meridian_opening = 20` | 开脉启停意图 | 从目录解析固定规则/动作；当前游标、权限、版本、资源及重复请求校验 |
+| `CommandReceipt.opening = 9` / `BodySnapshot.opening_task = 15` | 启停事务事实 / 保存的任务 | 完整规则、动作、参与组、时间、状态、真实摄入证据及释放；事务复算核对 |
 | 独立 `GatheringRequest` / `GatheringResponse` | 授权会话上的单轮聚气操作与展示 | 有界解码、请求版本、目标身份、预期 revision、真实配方与线路；每个资源步骤复用原有命令处理器 |
 | 独立 `EnvironmentQiOffer` / `EnvironmentQiExchange` / `EnvironmentQiReceipt` / `EnvironmentQiSource` 字节 | 可信宿主与权威身体实现之间的环境事实及来源存档 | 来源/身体身份、版本、有效期、毛额/速率、共享预算及提交版本；详见[环境契约](Environment-Qi.md) |
 | `ResponseEnvelope.body_snapshot` | 权威宿主 → 有权读取完整身体的调用方 | 完整身体与所有模块、账户、版本、时序的核心校验 |
@@ -118,6 +122,10 @@ EOF
 身体 schema 2 新增必填 `MeridianState.opening = 6`，其消息为 `MeridianOpening { stage = 1; progress = 2; }`。阶段编号是 `UNOPENED = 1`、`IN_PROGRESS = 2`、`OPENED = 3`；进度声明为 `optional double`，合法的零也须显式提供。缺失或未知阶段、非有限进度及阶段与进度不符均拒绝，具体规则见[开拓数据](Data-Definitions.md)。固定字节与快照整体回归保护字段编号、零值存在性及逐脉状态；协议没有直接设置开拓进度的客户端请求。
 
 摄入新增 `OrganDefinition.intake = 9`、`BodyCommand.intake_qi = 15`、`CommandReceipt.organ_intake = 7`，失败码 `29–33` 分别为 `INTAKE_UNSUPPORTED`、`ENVIRONMENT_UNAVAILABLE`、`ENVIRONMENT_REVISION_CONFLICT`、`ENVIRONMENT_INTERVAL_INVALID`、`ENVIRONMENT_BUDGET_EXCEEDED`。身体 schema 仍为 2，线协议仍为开发中的 v1；旧消息未声明摄入能力时含义明确，携带新字段的消息需要同步契约包，旧严格解码器会拒绝。既有死亡、模块失能、容量、吞吐、时钟和数值边界复用原失败码。
+
+开脉扩展新增可缺省 `OrganDefinition.endurance = 10`、`OrganState.fatigue_joules = 5` 和 `BodySnapshot.opening_task = 15`；未声明器官耐力时疲劳须为零。`CommandReceipt.opening` 仅开脉启停命令携带，普通时间推进产生的完成或中止释放仍归 `time_advance`。开脉规则已移至 `body.proto` 供任务内嵌，生成 Java 类型属于 `BodyMessages`，Protobuf 全名与原字段号保留。失败码 `40–44` 为 `OPENING_RULE_NOT_FOUND`、`OPENING_BUSY`、`MERIDIAN_ALREADY_OPENED`、`OPENING_REQUIREMENTS_UNMET`、`OPENING_NOT_ACTIVE`。客户端无上传摄入证据、临时额度或完成标记的入口；字段细节见[开脉契约](Meridian-Opening.md)。
+
+`MeridianOpeningRule` 保留 `hold_qi_per_second = 20` 与 `guidance_buffer_qi = 21`，新增 `policy_id = 22 / policy_config = 23`。旧条件字段 `5、7、8、11、12、14、19` 及名称 reserved，人体条件改由 Human 自己的 Protobuf 提供；框架只保存 Any 并通过 `opening_policy.proto` 请求可信策略裁定。`OpeningPolicyDecision` 返回参与计划、条件结果与下一检查边界，核心再校验引用和资源边界。新失败码 `OPENING_POLICY_UNAVAILABLE = 45` 表示执行器缺失；已保存活动任务遇到缺策略会安全暂停并释放临时超额。客户端不能上传策略或裁定，仍只选择可信规则；权威时间推进回执保存凝聚耗散的环境释放。
 
 ## 已实现的只读请求处理
 
@@ -250,6 +258,18 @@ EOF
 当前只使用整个身体的 `revision`；编辑配置的独立 revision 将随编辑器实现。宿主负责限流，不能让无界请求消耗资源。死亡真元释放已有内存事务参考；材料和其他世界输出后续同样需要纳入原子边界，不能在审计回调里执行这些副作用。
 
 ## 私有反作弊接口
+
+### 管理员真元调试
+
+`BodyCommand.debug_qi` 是独立授权的调试意图，定义在 `protocol.proto`。普通 `BodyCommandHandler` 构造器默认拒绝；宿主须显式提供 `debugAccess` 谓词，普通授权和提交前策略仍继续检查。身体读写权限不能自动视为调试许可。
+
+`FILL_LUMENS` 空目标表示全身内腔补满；指定经脉可给期望总量，省略则补至当前额度，只补不减。`INJECT_FOR_DIFFUSION` 指定经脉及新增量，后续由既有事件调度沿真实连接扩散。均只新增游离态无属性真元，保留外壁、伤势、开拓和既有属性明细，扣除所有入向预约后校验容量；活动开脉使用临时额度。超量、无效或受损目标整笔拒绝。
+
+命令经过同一 revision、去重、私有策略、事务重算和回执持久化。调试明确创造资源，不扣环境库存、不添加 `OpeningIntakeSample`，不能作为持续环境摄入证明，也不直接开启经脉。Human 的 Minecraft 入口要求权限等级 2，核心不依赖 Minecraft 或人体 ID。
+
+### 通用操作卡契约
+
+`operation_ui.proto` 定义 `MeridianOperationUpdate/View/Meter` 和 `MeridianOperationRequest`。展示消息声明目标、阶段、归一化进度与操作入口；请求只提交身份、操作精确版本、目标、预期身体 revision 和动作 ID。UI Addon 按命名空间绑定路由，宿主自行授权和执行所属附属的动作。这些消息不包含脚本，不会让 `BodyCommandHandler` 自动执行未知操作。
 
 | 接口与状态 | 输入 | 输出与限制 |
 |---|---|---|

@@ -138,7 +138,11 @@ public final class EnvironmentProtobuf {
             throw MeridianErrors.invalid(Protocol.ENVIRONMENT_ABSORPTION, exception);
         }
 
-        if (!absorbedQi.entries().isEmpty()) {
+        if (exchange.getContactCapture()) {
+            // 接触事件由权威碰撞入口授权；瞬时交换不伪造一段持续摄入时长。
+            ProtoWire.require(startedAt.equals(endedAt) && !absorbedQi.entries().isEmpty(),
+                    MeridianErrors.QI_CAPTURE_FACT);
+        } else if (!absorbedQi.entries().isEmpty()) {
             // 先用整数毫秒求差，再换算模拟秒；生物老化倍率不改变环境供给速度。
             long durationMillis = endedAt.elapsedMillis() - startedAt.elapsedMillis();
             double durationSeconds = durationMillis / 1000.0;

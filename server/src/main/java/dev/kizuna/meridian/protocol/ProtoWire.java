@@ -57,6 +57,11 @@ final class ProtoWire {
         }
 
         for (var field : message.getDescriptorForType().getFields()) {
+            // 全身 fill 明确使用空目标；其他调试模式仍由命令专用校验要求指定经脉。
+            if (field.getFullName().equals("kizuna.meridian.v1.DebugQi.meridian_id")
+                    && ((String) message.getField(field)).isEmpty()) {
+                continue;
+            }
             // oneof 的其他分支必须跳过；optional 标量产生的 synthetic oneof 仍须检查。
             if (field.getRealContainingOneof() != null && !message.hasField(field)) {
                 continue;
@@ -65,10 +70,17 @@ final class ProtoWire {
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_recipe")
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.organ_intake")
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.action_definition")
+                    || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.opening")
+                    || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.qi_capture")
+                    || field.getFullName().equals("kizuna.meridian.v1.BodySnapshot.opening_task")
+                    || field.getFullName().equals("kizuna.meridian.v1.OrganDefinition.endurance")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganDefinition.intake")
+                    || field.getFullName().equals("kizuna.meridian.v1.Connection.passive_qi_flow")
                     || field.getFullName().equals("kizuna.meridian.v1.BreathingProfile.body_action")
+                    || field.getFullName().equals("kizuna.meridian.v1.OpeningPolicyDecision.next_check_delay_millis")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganState.process")
-                    || field.getFullName().equals("kizuna.meridian.v1.BreathControl.aim_z")) && !message.hasField(field)) {
+                    || field.getFullName().equals("kizuna.meridian.v1.BreathControl.aim_z")
+                    || field.getFullName().equals("kizuna.meridian.v1.DebugQi.amount")) && !message.hasField(field)) {
                 // 仅跳过契约明确允许省略的字段；吐纳深度由执行方补为入口所在平面。
                 continue;
             }
@@ -100,8 +112,14 @@ final class ProtoWire {
             }
             case ENUM -> {
                 var enumeration = (Descriptors.EnumValueDescriptor) value;
-                require(enumeration.getIndex() >= 0 && enumeration.getNumber() != 0,
+                boolean optionalRejection = field.getFullName().equals("kizuna.meridian.v1.OpeningPolicyDecision.rejection");
+                require(enumeration.getIndex() >= 0 && (enumeration.getNumber() != 0 || optionalRejection),
                         Protocol.invalidEnum(field.getFullName()));
+            }
+            case BYTE_STRING -> {
+                // Any 的内部 schema 归声明策略校验；外层仍受整包字节数和字段数量限制。
+                require(field.getFullName().equals("google.protobuf.Any.value"),
+                        Protocol.unsupportedFieldType(field.getFullName()));
             }
             case DOUBLE -> require(Double.isFinite((double) value) && (double) value >= 0,
                     Protocol.invalidNumber(field.getFullName()));
