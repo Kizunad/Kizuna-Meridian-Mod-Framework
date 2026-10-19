@@ -62,6 +62,7 @@ message BodyCommand {
     HealBody heal_body = 24;
     RestoreFatigue restore_fatigue = 25;
     ConfirmBodyDeath confirm_body_death = 26; // 仅可信宿主确认外部死亡，不能由客户端上报。
+    SetPartHealthLimits set_part_health_limits = 27;
   }
 }
 

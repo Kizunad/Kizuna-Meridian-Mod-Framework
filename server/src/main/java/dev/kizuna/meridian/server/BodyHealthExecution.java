@@ -42,6 +42,7 @@ final class BodyHealthExecution {
         }
         var candidate = BodyProtobuf.toMessage(body).toBuilder().setRevision(body.revision() + 1);
         boolean died = false;
+        boolean deathPrevented = false;
 
         // 只修改命令或固定处理结果显式列出的账户；相邻组织、部位没有隐式连带变化。
         switch (command.getOperationCase()) {
@@ -58,6 +59,20 @@ final class BodyHealthExecution {
                     changeHp(candidate, loss.getTarget(), loss.getHp(), false);
                 }
                 died = resolution.getLethal();
+                if (command.getDamageBody().hasDeathProtection()) {
+                    // 即使没有致死也校验完整保命方案，不能把非法账户藏在未执行的分支。
+                    for (Healing floor : command.getDamageBody().getDeathProtection().getMinimumHpList()) {
+                        double maximum = maximumHp(candidate.getStructure(), floor.getTarget());
+                        if (floor.getHp() > maximum) {
+                            throw MeridianErrors.rejectHealth(FailureCode.CAPACITY_EXCEEDED);
+                        }
+                        if (died) {
+                            restoreMinimumHp(candidate, floor);
+                        }
+                    }
+                    deathPrevented = died;
+                    died = false;
+                }
             }
             case HEAL_BODY -> {
                 for (Healing dose : command.getHealBody().getDosesList()) {
@@ -67,6 +82,21 @@ final class BodyHealthExecution {
             case RESTORE_FATIGUE -> {
                 for (FatigueRelief dose : command.getRestoreFatigue().getDosesList()) {
                     restoreFatigue(candidate, dose);
+                }
+            }
+            case SET_PART_HEALTH_LIMITS -> {
+                for (PartHealthLimit limit : command.getSetPartHealthLimits().getLimitsList()) {
+                    var definition = candidate.getStructure().getPartsList().stream()
+                            .filter(part -> part.getId().equals(limit.getPartId())).findFirst()
+                            .orElseThrow(() -> MeridianErrors.rejectHealth(FailureCode.MODULE_NOT_FOUND));
+                    var structure = candidate.getStructure().toBuilder();
+                    structure.setParts(structure.getPartsList().indexOf(definition), definition.toBuilder().setMaxHp(limit.getMaxHp()));
+                    candidate.setStructure(structure);
+                    // 扩大上限不白送 HP；效果移除时，超出新上限的存量直接裁剪。
+                    PartState state = candidate.getPartStatesList().stream()
+                            .filter(part -> part.getId().equals(limit.getPartId())).findFirst().orElseThrow();
+                    candidate.setPartStates(candidate.getPartStatesList().indexOf(state),
+                            state.toBuilder().setHp(Math.min(state.getHp(), limit.getMaxHp())));
                 }
             }
             default -> throw MeridianErrors.invalid(MeridianErrors.Health.REQUEST);
@@ -89,12 +119,33 @@ final class BodyHealthExecution {
             released = interrupted.releasedQi();
         }
 
-        var fact = HealthResult.newBuilder().setDied(died).setReleasedQi(BodyProtobuf.toInventory(released));
+        var fact = HealthResult.newBuilder().setDied(died).setDeathPrevented(deathPrevented)
+                .setReleasedQi(BodyProtobuf.toInventory(released));
         if (command.hasDamageBody()) {
             // 固定原处理结果；事务复算和恢复不依赖 Addon 当前版本或随机数。
             fact.setDamageResolution(resolution);
         }
         return new Result(updated, fact.build());
+    }
+
+    private static void restoreMinimumHp(BodyMessages.BodySnapshot.Builder body, Healing floor) {
+        // 只有活体本次即将致死的事务可执行；这是防止死亡，并非复活已有死体。
+        HealthTarget target = floor.getTarget();
+        double current = switch (target.getModuleCase()) {
+            case PART_ID -> body.getPartStatesList().stream()
+                    .filter(state -> state.getId().equals(target.getPartId()))
+                    .findFirst().orElseThrow().getHp();
+            case TISSUE_ID -> body.getTissueStatesList().stream()
+                    .filter(state -> state.getId().equals(target.getTissueId()))
+                    .findFirst().orElseThrow().getHp();
+            case ORGAN_ID -> body.getOrganStatesList().stream()
+                    .filter(state -> state.getId().equals(target.getOrganId()))
+                    .findFirst().orElseThrow().getHp();
+            case MODULE_NOT_SET -> throw MeridianErrors.invalid(MeridianErrors.Health.REQUEST);
+        };
+        if (current < floor.getHp()) {
+            changeHp(body, target, floor.getHp() - current, true);
+        }
     }
 
     private static void changeHp(BodyMessages.BodySnapshot.Builder body,

@@ -4,6 +4,7 @@ package kizuna.meridian.v1;
 
 import "kizuna/meridian/v1/body.proto";
 import "kizuna/meridian/v1/protocol.proto";
+import "kizuna/meridian/v1/health.proto";
 
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "HealthHostMessages";
@@ -27,4 +28,26 @@ message HealthHostResponse {
     BodySnapshot body = 11; // 查询或成功操作后的当前快照；成功重试也返回当前快照。
     RequestFailure failure = 12; // 已认领身体的宿主拒绝后，调用方不得尝试另一套账本。
   }
+  HealthResult health = 13; // 可缺省；成功效果的固定回执事实，查询不携带。
+}
+
+// 可信伤害接线在扣血前读取效果方案，提交后才通知附属消耗其效果资源。
+message DamageIntegrationContext {
+  string subject_id = 1;
+  BodySnapshot body = 2;
+  DamageBody damage = 3; // 已固定部位和最终非护甲减伤后的身体 HP 剂量。
+  bool bypasses_death_protection = 4;
+}
+
+message DamageIntegrationPlan {
+  optional bool handled = 1; // false 表示不认领；同一次伤害最多一个集成方认领。
+  double remaining_damage_hp = 2;
+  DeathProtection death_protection = 3; // 可缺省，且不能用于绕过来源的保命禁用标记。
+}
+
+message DamageIntegrationCommit {
+  DamageIntegrationContext context = 1;
+  DamageIntegrationPlan plan = 2;
+  BodySnapshot body = 3; // HP 已提交；完全吸收时为未变更的原身体。
+  bool death_prevented = 4;
 }

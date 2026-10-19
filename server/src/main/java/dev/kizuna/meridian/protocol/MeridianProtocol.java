@@ -195,7 +195,7 @@ public final class MeridianProtocol {
             }
             case PAUSE_MERIDIAN_OPENING -> new Anatomy.MeridianId(command.getPauseMeridianOpening().getMeridianId());
             case DEBUG_QI -> dev.kizuna.meridian.core.QiDebugging.validate(command.getDebugQi());
-            case DAMAGE_BODY, HEAL_BODY, RESTORE_FATIGUE, CONFIRM_BODY_DEATH -> HealthProtobuf.validateCommand(command);
+            case DAMAGE_BODY, HEAL_BODY, RESTORE_FATIGUE, CONFIRM_BODY_DEATH, SET_PART_HEALTH_LIMITS -> HealthProtobuf.validateCommand(command);
             case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
         }
     }

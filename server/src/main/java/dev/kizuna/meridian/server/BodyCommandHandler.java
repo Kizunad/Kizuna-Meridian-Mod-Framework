@@ -335,7 +335,7 @@ public final class BodyCommandHandler<C> {
                 }
                 case STOP_ACTION -> BodyActions.stop(body, command.getStopAction().getInstanceId());
                 case DEBUG_QI -> dev.kizuna.meridian.core.QiDebugging.apply(body, command.getDebugQi());
-                case DAMAGE_BODY, HEAL_BODY, RESTORE_FATIGUE, CONFIRM_BODY_DEATH -> {
+                case DAMAGE_BODY, HEAL_BODY, RESTORE_FATIGUE, CONFIRM_BODY_DEATH, SET_PART_HEALTH_LIMITS -> {
                     HealthMessages.DamageResolution resolution = null;
                     if (command.hasDamageBody()) {
                         // 死体不能重新选点或调用伤害策略，避免把无候选误报为模块失能。

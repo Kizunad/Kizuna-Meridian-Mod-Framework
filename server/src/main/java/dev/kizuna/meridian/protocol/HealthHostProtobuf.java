@@ -54,6 +54,8 @@ public final class HealthHostProtobuf {
         // unbound 与失败含义不同：只有未绑定允许继续寻找其他执行方。
         ProtoWire.validate(response);
         require(response.getProtocolVersion() == 1);
+        // 固定效果事实必须与成功身体一起返回，拒绝或未绑定不能夹带保命凭据。
+        require(!response.hasHealth() || response.hasBody());
         if (response.hasUnbound()) {
             require(response.getUnbound());
         } else if (response.hasBody()) {

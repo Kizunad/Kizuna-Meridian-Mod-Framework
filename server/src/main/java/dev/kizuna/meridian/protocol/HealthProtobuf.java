@@ -18,7 +18,7 @@ public final class HealthProtobuf {
     public static boolean isHealthCommand(BodyCommand command) {
         // 宿主可信入口与回执都使用同一操作集合，避免新操作漏过默认拒绝。
         return command.hasDamageBody() || command.hasHealBody() || command.hasRestoreFatigue()
-                || command.hasConfirmBodyDeath();
+                || command.hasConfirmBodyDeath() || command.hasSetPartHealthLimits();
     }
 
     public static void validateCommand(BodyCommand command) {
@@ -27,10 +27,19 @@ public final class HealthProtobuf {
         switch (command.getOperationCase()) {
             case DAMAGE_BODY -> validateDamage(command.getDamageBody());
             case CONFIRM_BODY_DEATH -> new DefinitionId(command.getConfirmBodyDeath().getSourceId());
+            case SET_PART_HEALTH_LIMITS -> {
+                var request = command.getSetPartHealthLimits();
+                new DefinitionId(request.getSourceId());
+                require(request.getLimitsCount() > 0 && request.getLimitsCount() <= 256);
+                for (PartHealthLimit limit : request.getLimitsList()) {
+                    new Anatomy.PartId(limit.getPartId());
+                    require(targets.add(limit.getPartId()) && positive(limit.getMaxHp()));
+                }
+            }
             case HEAL_BODY -> {
                 HealBody request = command.getHealBody();
                 new DefinitionId(request.getSourceId());
-                require(request.getDosesCount() > 0 && request.getDosesCount() <= 32);
+                require(request.getDosesCount() > 0 && request.getDosesCount() <= 256);
                 for (Healing dose : request.getDosesList()) {
                     validateTarget(dose.getTarget());
                     require(targets.add(dose.getTarget()));
@@ -77,6 +86,20 @@ public final class HealthProtobuf {
         require(request.getKind() != DamageKind.DAMAGE_KIND_UNSPECIFIED
                 && request.getKind() != DamageKind.UNRECOGNIZED);
         require(positive(request.getDamageHp()));
+        if (request.hasDeathProtection()) {
+            validateProtection(request.getDeathProtection());
+        }
+    }
+
+    public static void validateProtection(DeathProtection protection) {
+        // 保命是一次致死伤害的受控下限，不允许空方案或对同一账户重复加血。
+        new DefinitionId(protection.getSourceId());
+        require(protection.getMinimumHpCount() > 0 && protection.getMinimumHpCount() <= 256);
+        var targets = new HashSet<HealthTarget>();
+        for (Healing floor : protection.getMinimumHpList()) {
+            validateTarget(floor.getTarget());
+            require(targets.add(floor.getTarget()) && positive(floor.getHp()));
+        }
     }
 
     public static byte[] encodeContext(DamageContext context) {
@@ -130,9 +153,11 @@ public final class HealthProtobuf {
         ProtoWire.require(result.hasDamageResolution() == command.hasDamageBody(), MeridianErrors.Health.RECEIPT);
         if (command.hasDamageBody()) {
             validateResolution(result.getDamageResolution());
-            ProtoWire.require(result.getDied() == result.getDamageResolution().getLethal(), MeridianErrors.Health.RECEIPT);
+            boolean prevented = result.getDamageResolution().getLethal() && command.getDamageBody().hasDeathProtection();
+            ProtoWire.require(result.getDeathPrevented() == prevented
+                    && result.getDied() == (result.getDamageResolution().getLethal() && !prevented), MeridianErrors.Health.RECEIPT);
         } else {
-            ProtoWire.require(result.getDied() == command.hasConfirmBodyDeath(), MeridianErrors.Health.RECEIPT);
+            ProtoWire.require(!result.getDeathPrevented() && result.getDied() == command.hasConfirmBodyDeath(), MeridianErrors.Health.RECEIPT);
         }
     }
 

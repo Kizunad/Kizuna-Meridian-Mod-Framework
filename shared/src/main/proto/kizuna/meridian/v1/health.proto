@@ -28,6 +28,24 @@ message DamageBody {
   HealthTarget hit = 3; // 可省略；默认处理器从尚有 HP 的部位中等概率选取。
   string damage_type = 4; // namespace:path，描述具体伤害，如 minecraft:fall。
   DamageKind kind = 5; // 必须为已知非零分类；默认处理器对各分类采用相同扣血规则。
+  DeathProtection death_protection = 6; // 可缺省；可信宿主确认的单次保命，不复活已死身体。
+}
+
+// 只有本次伤害被策略判为致死时，才在同一事务中将这些账户恢复至指定下限。
+message DeathProtection {
+  string source_id = 1;
+  repeated Healing minimum_hp = 2;
+}
+
+// 可信临时效果调整实际部位上限；撤销、叠加与基础值追踪归提供效果的宿主。
+message SetPartHealthLimits {
+  string source_id = 1;
+  repeated PartHealthLimit limits = 2;
+}
+
+message PartHealthLimit {
+  string part_id = 1;
+  double max_hp = 2;
 }
 
 // 跨语言宿主可将此消息交给任何语言实现的 Addon，替换框架默认处理器。
@@ -48,7 +66,7 @@ message HpLoss {
 
 message HealBody {
   string source_id = 1;
-  repeated Healing doses = 2; // 1..32 个唯一目标；治疗局部不会同时修复所属部位。
+  repeated Healing doses = 2; // 1..256 个唯一目标；治疗局部不会同时修复所属部位。
 }
 
 message Healing {
@@ -79,4 +97,5 @@ message HealthResult {
   optional bool died = 1;
   QiInventory released_qi = 2; // 死亡或中止增压释放，与身体及回执原子入环境账。
   DamageResolution damage_resolution = 3; // 仅伤害必填，固定可信 Addon 的处理结果以供事务复核。
+  bool death_prevented = 4; // 先阻止本次死亡清账，宿主再落实已经确认的保命物品副作用。
 }

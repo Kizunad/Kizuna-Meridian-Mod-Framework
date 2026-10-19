@@ -19,6 +19,54 @@ import static org.junit.Assert.*;
 /** 整体回归：附属伤害裁决、独立账户、主动恢复与原子清账共用正式协议。 */
 public class BodyHealthTest {
     @Test
+    public void deathProtectionAndTemporaryLimitsCommitAtomicallyAndReplay() {
+        // 致死伤害与保命下限一次提交；不先死亡清账，也不在重试时重新消费效果。
+        BodySnapshot initial = body();
+        var store = new InMemoryBodyStore(List.of(initial), List.of());
+        var handler = handler(store, payload -> resolution(true, loss(part(), 1000)), true);
+        var protectedDamage = damage();
+        protectedDamage.setDamageBody(protectedDamage.getDamageBody().toBuilder().setDeathProtection(
+                DeathProtection.newBuilder().setSourceId("sample:totem")
+                        .addMinimumHp(Healing.newBuilder().setTarget(part()).setHp(25))));
+        byte[] request = request("totem", 0, protectedDamage);
+        byte[] response = handler.handleHealthEffect("host", request);
+        assertTrue(MeridianProtocol.decodeResponse(response).hasCommandCommitted());
+        BodySnapshot saved = store.find(initial.id()).orElseThrow();
+        assertFalse(saved.vitality().dead());
+        assertEquals(25, saved.partStates().get(0).hp(), 0);
+        assertEquals(initial.totalQi(), saved.totalQi(), 0);
+        assertEquals(0, store.environmentQi().totalQi(), 0);
+        assertTrue(store.receipts().get(0).getHealth().getDeathPrevented());
+        var protectedCommand = MeridianProtocol.decodeRequest(request).getBodyCommand();
+        var protectedFact = store.receipts().get(0).getHealth();
+        assertThrows(IllegalArgumentException.class, () -> HealthProtobuf.validateResult(
+                protectedCommand, protectedFact.toBuilder().setDeathPrevented(false).build()));
+        assertThrows(IllegalArgumentException.class, () -> HealthHostProtobuf.encodeResponse(
+                HealthHostResponse.newBuilder().setProtocolVersion(1).setRequestId("bad-fact")
+                        .setUnbound(true).setHealth(protectedFact).build()));
+        assertArrayEquals(response, handler.handleHealthEffect("host", request));
+        assertEquals(1, store.receipts().size());
+
+        // 提高部位上限不送 HP，撤销上限裁剪存量；非法批次完整回滚。
+        var limits = BodyCommand.newBuilder().setSetPartHealthLimits(SetPartHealthLimits.newBuilder()
+                .setSourceId("sample:boost").addLimits(PartHealthLimit.newBuilder().setPartId(part().getPartId()).setMaxHp(200)));
+        assertTrue(MeridianProtocol.decodeResponse(handler.handleHealthEffect("host", request("boost", 1, limits)))
+                .hasCommandCommitted());
+        assertEquals(25, store.find(initial.id()).orElseThrow().partStates().get(0).hp(), 0);
+        assertEquals(200, store.find(initial.id()).orElseThrow().structure().parts().get(0).maxHp(), 0);
+        limits.setSetPartHealthLimits(limits.getSetPartHealthLimits().toBuilder()
+                .setLimits(0, PartHealthLimit.newBuilder().setPartId(part().getPartId()).setMaxHp(20)));
+        assertTrue(MeridianProtocol.decodeResponse(handler.handleHealthEffect("host", request("remove", 2, limits)))
+                .hasCommandCommitted());
+        assertEquals(20, store.find(initial.id()).orElseThrow().partStates().get(0).hp(), 0);
+        BodySnapshot beforeInvalid = store.find(initial.id()).orElseThrow();
+        limits.setSetPartHealthLimits(limits.getSetPartHealthLimits().toBuilder()
+                .addLimits(PartHealthLimit.newBuilder().setPartId("missing").setMaxHp(10)));
+        failure(handler.handleHealthEffect("host", request("invalid-limits", 3, limits)), FailureCode.MODULE_NOT_FOUND);
+        assertEquals(beforeInvalid, store.find(initial.id()).orElseThrow());
+    }
+
+    @Test
     public void externalDeathKeepsInjuriesAndReleasesQiOnlyOnceAcrossHostProtocol() {
         // 原版死亡不是另一次身体伤害，局部 HP 必须原样保存且只清算一次资源。
         BodySnapshot initial = body();
