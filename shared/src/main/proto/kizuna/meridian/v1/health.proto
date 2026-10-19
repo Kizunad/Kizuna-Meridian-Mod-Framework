@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "HealthMessages";
+
+// 描述致伤机制；五行等元素来源由 damage_type 细分，不与伤害机制混为一类。
+enum DamageKind {
+  DAMAGE_KIND_UNSPECIFIED = 0;
+  BLUNT = 1; // 钝击、碰撞、挤压。
+  CUTTING = 2;
+  PIERCING = 3;
+  HEAT = 4;
+  COLD = 5;
+  ELECTRIC = 6;
+  CORROSIVE = 7;
+  TOXIC = 8;
+  CUSTOM = 9; // 附属通过 damage_type 声明的其他机制。
+}
+
+// 仅可信宿主确认的效果；source_id 用于追溯，不作为授权凭证。
+message DamageBody {
+  string source_id = 1; // namespace:path
+  double damage_hp = 2; // 正数伤害输入；具体减伤、分配与死亡规则归可信 Addon。
+  HealthTarget hit = 3; // 可省略；默认处理器从尚有 HP 的部位中等概率选取。
+  string damage_type = 4; // namespace:path，描述具体伤害，如 minecraft:fall。
+  DamageKind kind = 5; // 必须为已知非零分类；默认处理器对各分类采用相同扣血规则。
+}
+
+// 跨语言宿主可将此消息交给任何语言实现的 Addon，替换框架默认处理器。
+message DamageContext {
+  BodySnapshot body = 1;
+  DamageBody damage = 2;
+}
+
+message DamageResolution {
+  repeated HpLoss losses = 1; // 0..64 个唯一目标，空列表可表示完全免疫。
+  optional bool lethal = 2; // 由 Addon 判死；框架负责死亡清账，不能直接覆盖身体快照。
+}
+
+message HpLoss {
+  HealthTarget target = 1;
+  double hp = 2; // 正数；只影响显式目标，是否连带影响部位由 Addon 决定。
+}
+
+message HealBody {
+  string source_id = 1;
+  repeated Healing doses = 2; // 1..32 个唯一目标；治疗局部不会同时修复所属部位。
+}
+
+message Healing {
+  HealthTarget target = 1;
+  double hp = 2; // 正数，超过上限的部分无效，不转移到别的目标。
+}
+
+message RestoreFatigue {
+  string source_id = 1;
+  repeated FatigueRelief doses = 2; // 1..32 个唯一目标；主动恢复不受动作占用限制。
+}
+
+// 宿主已确认实体死亡；保留伤势，只执行一次通用死亡清账。
+message ConfirmBodyDeath {
+  string source_id = 1;
+}
+
+message FatigueRelief {
+  oneof module {
+    string tissue_id = 1;
+    string organ_id = 2;
+    string meridian_id = 3;
+  }
+  double amount = 4; // 组织/经脉为定义的疲劳单位，器官为焦耳；最低减至 0。
+}
+
+message HealthResult {
+  optional bool died = 1;
+  QiInventory released_qi = 2; // 死亡或中止增压释放，与身体及回执原子入环境账。
+  DamageResolution damage_resolution = 3; // 仅伤害必填，固定可信 Addon 的处理结果以供事务复核。
+}

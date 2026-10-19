@@ -6,6 +6,7 @@
 - [身体数据、寿命与存档](Body-and-Persistence.md)
 - [组织耐力与精力恢复](Tissue-Recovery.md)
 - [身体动作与模块占用](Actions.md)
+- [伤害、治疗与主动恢复](Health-Effects.md)
 - [经脉与真元](Meridian-and-Qi.md)
 - [单脉开拓定义](Meridian-Opening.md)
 - [一次聚气与宿主编排](Gathering.md)

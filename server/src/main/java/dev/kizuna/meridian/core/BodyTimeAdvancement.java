@@ -134,33 +134,12 @@ public final class BodyTimeAdvancement {
 
         // 4. 死亡释放全部余额；仅推进寿命的模式则把尚未完成的资源事件整体后移。
         if (died) {
-            // 所有账户来源各取一次；已完成加工的损耗和死亡释放共同进入环境。
-            var inventoriesToRelease = new ArrayList<QiInventory>();
-            inventoriesToRelease.add(releasedQi);
-            // 清账只释放真元，保留死亡身体原有的开拓与损伤事实。
-            var clearedMeridians = new ArrayList<MeridianState>();
-            for (var meridian : meridians) {
-                inventoriesToRelease.add(meridian.lumenQi());
-                inventoriesToRelease.add(meridian.wallQi());
-                clearedMeridians.add(new MeridianState(meridian.id(), QiInventory.empty(), QiInventory.empty(),
-                        meridian.fatigue(), meridian.condition(), meridian.opening()));
-            }
-            for (var transit : transits) {
-                inventoriesToRelease.add(transit.cargo());
-            }
-            var clearedOrgans = new ArrayList<AnatomyState.Organ>();
-            for (var organ : organs) {
-                // 未完成加工只释放输入，不同时发放预计输出。
-                inventoriesToRelease.add(organ.buffer());
-                if (organ.process() != null) {
-                    inventoriesToRelease.add(organ.process().recipe().input());
-                }
-                clearedOrgans.add(new AnatomyState.Organ(organ.id(), organ.hp(), QiInventory.empty(), null, organ.fatigueJoules()));
-            }
-            releasedQi = QiInventory.combine(inventoriesToRelease);
-            meridians = List.copyOf(clearedMeridians);
+            // 寿尽与伤害死亡共用唯一清账规则，已完成加工的损耗另计一次。
+            BodyDeath.Released death = BodyDeath.release(meridians, organs, transits);
+            releasedQi = QiInventory.combine(List.of(releasedQi, death.qi()));
+            meridians = death.meridians();
             transits = List.of();
-            organs = List.copyOf(clearedOrgans);
+            organs = death.organs();
         } else if (plan.mode() == Mode.LIFESPAN_ONLY) {
             // 冻结运输意味着剩余路程时间不减少；到达时刻随游标一起平移，不会在恢复时瞬间到货。
             var postponedTransits = new ArrayList<QiTransit>();

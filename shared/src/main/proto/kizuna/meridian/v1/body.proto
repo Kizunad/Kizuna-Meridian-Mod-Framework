@@ -72,6 +72,15 @@ message BodyStructure {
   repeated Connection connections = 5;
 }
 
+// 选择独立 HP 账户；伤害分配、连带损伤与致死规则由生物 Addon 提供。
+message HealthTarget {
+  oneof module {
+    string part_id = 1;
+    string tissue_id = 2;
+    string organ_id = 3;
+  }
+}
+
 message PartDefinition {
   string id = 1;
   string display_name = 2;

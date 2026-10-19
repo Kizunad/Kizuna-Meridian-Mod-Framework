@@ -5,6 +5,7 @@ package kizuna.meridian.v1;
 import "kizuna/meridian/v1/body.proto";
 import "kizuna/meridian/v1/environment.proto";
 import "kizuna/meridian/v1/opening.proto";
+import "kizuna/meridian/v1/health.proto";
 
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "MeridianMessages";
@@ -57,6 +58,10 @@ message BodyCommand {
     PauseMeridianOpening pause_meridian_opening = 20;
     DebugQi debug_qi = 21; // 默认拒绝；可信宿主须另行开启管理员调试授权。
     CaptureQi capture_qi = 22; // 仅可信命中入口；普通网络命令入口拒绝。
+    DamageBody damage_body = 23; // 以下效果只允许可信宿主入口提交。
+    HealBody heal_body = 24;
+    RestoreFatigue restore_fatigue = 25;
+    ConfirmBodyDeath confirm_body_death = 26; // 仅可信宿主确认外部死亡，不能由客户端上报。
   }
 }
 
@@ -184,6 +189,7 @@ message CommandReceipt {
   ActionDefinition action_definition = 8; // 仅 start_action 必填，保存可信目录解析的定义。
   OpeningCommandResult opening = 9; // 仅开脉开始/暂停必填；释放与身体原子提交。
   QiCaptureResult qi_capture = 10; // 仅 capture_qi 必填；保存环境扣账与所用配方。
+  HealthResult health = 11; // 仅伤害、治疗、主动恢复必填；重试不重复作用。
 }
 
 message OpeningCommandResult {
@@ -254,4 +260,5 @@ enum FailureCode {
   OPENING_REQUIREMENTS_UNMET = 43;
   OPENING_NOT_ACTIVE = 44;
   OPENING_POLICY_UNAVAILABLE = 45;
+  DAMAGE_HANDLER_UNAVAILABLE = 46;
 }

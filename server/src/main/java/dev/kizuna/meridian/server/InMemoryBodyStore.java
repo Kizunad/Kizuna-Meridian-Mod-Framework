@@ -46,7 +46,8 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         this(snapshots, receipts, QiInventory.empty());
         if (receipts.stream().anyMatch(receipt -> (receipt.hasTimeAdvance()
                 && receipt.getTimeAdvance().getReleasedQi().getEntriesCount() > 0)
-                || (receipt.hasOpening() && receipt.getOpening().getReleasedQi().getEntriesCount() > 0))) {
+                || (receipt.hasOpening() && receipt.getOpening().getReleasedQi().getEntriesCount() > 0)
+                || (receipt.hasHealth() && receipt.getHealth().getReleasedQi().getEntriesCount() > 0))) {
             throw MeridianErrors.invalid(Host.ENVIRONMENT_REQUIRED);
         }
     }
@@ -258,6 +259,17 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             }
             var nextEnvironment = stagedEnvironment;
             EnvironmentQiSource nextSource = null;
+            if (receipt.hasHealth()) {
+                // 使用已固定的附属处理结果复算，不再次调用可能已卸载或升级的伤害实现。
+                var fact = receipt.getHealth();
+                var expected = BodyHealthExecution.calculate(original.snapshot(), receipt.getCommand(),
+                        fact.hasDamageResolution() ? fact.getDamageResolution() : null);
+                if (!next.equals(expected.body()) || !fact.equals(expected.fact())) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.Health.STAGE);
+                }
+                QiInventory released = BodyProtobuf.fromInventory(expected.fact().getReleasedQi());
+                nextEnvironment = QiAccounting.credit(nextEnvironment, released);
+            }
             if (receipt.hasOrganIntake()) {
                 // 从锁定的旧来源和旧身体复算，不能只检查总数相等便信任任意入账。
                 var fact = receipt.getOrganIntake();

@@ -12,12 +12,16 @@
 |---|---|
 | `shared/src/main/proto/kizuna/meridian/v1/body.proto` | 模板、实际构型、独立部位/组织/器官/经脉、端口与连接、六境、真元明细、寿命、时间游标和完整快照 |
 | `shared/src/main/proto/kizuna/meridian/v1/protocol.proto` | 查询、寿元支出/时间结算/运输意图、内部可信时间计划、成功结果、持久化回执和公开拒绝类别 |
+| `shared/src/main/proto/kizuna/meridian/v1/health.proto` | 伤害上下文与 Addon 裁定、独立 HP 治疗、主动疲劳恢复及健康回执 |
+| `shared/src/main/proto/kizuna/meridian/v1/health_host.proto` | 可信身份到权威身体的查询及健康效果交换，明确区分未绑定与拒绝 |
 | `shared/src/main/proto/kizuna/meridian/v1/environment.proto` | 可信环境供给、候选吸收/释放交换和双账户提交回执 |
 | `shared/src/main/proto/kizuna/meridian/v1/addon.proto` | 可信附属清单、宿主能力、依赖、模板/配方注册、内容引用及缺包诊断 |
 | `shared/src/main/proto/kizuna/meridian/v1/gathering.proto` / `breathing.proto` | 聚气查询、单轮启动、手动吸呼、可信生物呼吸能力及只读投影；详见[聚气编排](Gathering.md) |
 | `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` / `EnvironmentMessages` / `AddonMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
 | `BodyProtobuf` | 核心模板/快照与生成类型双向转换、独立二进制编解码 |
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
+| `HealthMessages` / `HealthProtobuf` / `server.BodyDamageHandler` | protoc 生成健康消息、有界编解码与纯伤害计算装配接口 |
+| `HealthHostMessages` / `HealthHostProtobuf` / `server.BodyHealthHost` | 可信跨附属查询与健康意图交换，复用核心命令与失败码 |
 | `TimeProtobuf` / `server.BodyTimeSource<C>` | 可信时间计划的编解码、结果校验；宿主提供目标、倍率与模式 |
 | `EnvironmentProtobuf` | 环境供给、交换及回执的编解码；版本、区间、逐类额度和合计速率校验 |
 | `IntakeProtobuf` / `core.OrganIntake` / `environment.EnvironmentAbsorption` | 通用器官摄入、环境真实扣账与共享区间预算；可信来源由 `BodyEnvironmentSource` 提供 |
@@ -126,6 +130,10 @@ EOF
 开脉扩展新增可缺省 `OrganDefinition.endurance = 10`、`OrganState.fatigue_joules = 5` 和 `BodySnapshot.opening_task = 15`；未声明器官耐力时疲劳须为零。`CommandReceipt.opening` 仅开脉启停命令携带，普通时间推进产生的完成或中止释放仍归 `time_advance`。开脉规则已移至 `body.proto` 供任务内嵌，生成 Java 类型属于 `BodyMessages`，Protobuf 全名与原字段号保留。失败码 `40–44` 为 `OPENING_RULE_NOT_FOUND`、`OPENING_BUSY`、`MERIDIAN_ALREADY_OPENED`、`OPENING_REQUIREMENTS_UNMET`、`OPENING_NOT_ACTIVE`。客户端无上传摄入证据、临时额度或完成标记的入口；字段细节见[开脉契约](Meridian-Opening.md)。
 
 `MeridianOpeningRule` 保留 `hold_qi_per_second = 20` 与 `guidance_buffer_qi = 21`，新增 `policy_id = 22 / policy_config = 23`。旧条件字段 `5、7、8、11、12、14、19` 及名称 reserved，人体条件改由 Human 自己的 Protobuf 提供；框架只保存 Any 并通过 `opening_policy.proto` 请求可信策略裁定。`OpeningPolicyDecision` 返回参与计划、条件结果与下一检查边界，核心再校验引用和资源边界。新失败码 `OPENING_POLICY_UNAVAILABLE = 45` 表示执行器缺失；已保存活动任务遇到缺策略会安全暂停并释放临时超额。客户端不能上传策略或裁定，仍只选择可信规则；权威时间推进回执保存凝聚耗散的环境释放。
+
+健康扩展为 `BodyCommand.damage_body = 23 / heal_body = 24 / restore_fatigue = 25`、`CommandReceipt.health = 11`，失败码 `DAMAGE_HANDLER_UNAVAILABLE = 46`。三种命令仅可信 `handleHealthEffect` 接受，普通 `handle` 默认拒绝。`DamageBody.kind = 5` 为必填非零致伤分类，`hit = 3` 可省略并由策略选点；原字段号不变，开发中 v1 的旧伤害请求须同步分类字段。默认处理器等概率命中存活部位，只在全部部位归零时判死；Addon 可完整替换该策略。固定 `DamageResolution` 保存实际目标与判死结果，框架验证及提交，重试不重新随机。已装配策略拒绝时不改用默认策略。治疗与恢复也不得由客户端自报剂量。完整边界与重试语义见[伤害、治疗与主动恢复](Health-Effects.md)。
+
+`BodyCommand.confirm_body_death = 26` 同样只接受可信健康入口：宿主确认外部死亡后标记死态、释放真元并保留局部伤势，不经过伤害策略。`health_host.proto` 的查询与效果交换要求协议版本、关联 ID、唯一宿主与实际身体绑定；明确失败不能视作未绑定。它不定义玩家自报伤害网络包，也不提供复活命令。
 
 ## 已实现的只读请求处理
 

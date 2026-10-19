@@ -89,6 +89,14 @@ public final class OpeningRuntime {
         return new BodyTimeAdvancement.Result(revision(stopped.body(), body.revision() + 1), false, stopped.releasedQi());
     }
 
+    public static BodyTimeAdvancement.Result interruptUnavailable(BodySnapshot body) {
+        // 伤害使任务所占模块失能时立即撤销增压；本次版本已由外层健康事务递增。
+        if (body.openingTask() != null && body.openingTask().active() && !modulesAvailable(body)) {
+            return finish(body, OpeningTask.Status.DAMAGED);
+        }
+        return new BodyTimeAdvancement.Result(body, false, QiInventory.empty());
+    }
+
     static BodyTimeAdvancement.Result advance(BodySnapshot original, BodyTimeAdvancement.Plan plan,
                                               Set<Anatomy.TissueId> intervalUsedTissues) {
         // 可信时间校验在普通算子统一完成；反向时间和异世代不能进入事件循环。

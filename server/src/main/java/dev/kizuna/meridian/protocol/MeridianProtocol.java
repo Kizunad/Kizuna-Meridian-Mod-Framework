@@ -92,6 +92,11 @@ public final class MeridianProtocol {
         if (receipt.hasQiCapture()) {
             CaptureProtobuf.validateResult(receipt.getCommand(), receipt.getQiCapture());
         }
+        // 健康操作只有可信宿主能发起；保存固定结果后才可在不重调 Addon 的情况下恢复。
+        ProtoWire.require(receipt.hasHealth() == HealthProtobuf.isHealthCommand(receipt.getCommand()), MeridianErrors.Health.RECEIPT);
+        if (receipt.hasHealth()) {
+            HealthProtobuf.validateResult(receipt.getCommand(), receipt.getHealth());
+        }
         // 启动动作固定所用定义；结束动作只需实例 ID，不携带另一份占用事实。
         ProtoWire.require(receipt.hasActionDefinition() == receipt.getCommand().hasStartAction(),
                 MeridianErrors.Data.ACTION_RECEIPT_MISMATCH);
@@ -190,6 +195,7 @@ public final class MeridianProtocol {
             }
             case PAUSE_MERIDIAN_OPENING -> new Anatomy.MeridianId(command.getPauseMeridianOpening().getMeridianId());
             case DEBUG_QI -> dev.kizuna.meridian.core.QiDebugging.validate(command.getDebugQi());
+            case DAMAGE_BODY, HEAL_BODY, RESTORE_FATIGUE, CONFIRM_BODY_DEATH -> HealthProtobuf.validateCommand(command);
             case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
         }
     }

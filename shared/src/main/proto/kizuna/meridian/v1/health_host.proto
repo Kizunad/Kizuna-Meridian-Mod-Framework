@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/body.proto";
+import "kizuna/meridian/v1/protocol.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "HealthHostMessages";
+
+// 可信宿主的进程内交换；subject_id 由游戏适配提供，不能直接暴露为客户端通道。
+message HealthHostRequest {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  string subject_id = 3;
+  oneof operation {
+    bool inspect = 10; // 必须为 true，读取当前绑定的权威身体。
+    RequestEnvelope effect = 11; // 只允许健康命令，内外 request_id 必须一致。
+  }
+}
+
+message HealthHostResponse {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  oneof result {
+    bool unbound = 10; // 必须为 true；本宿主没有管理该身份，可继续寻找其他宿主。
+    BodySnapshot body = 11; // 查询或成功操作后的当前快照；成功重试也返回当前快照。
+    RequestFailure failure = 12; // 已认领身体的宿主拒绝后，调用方不得尝试另一套账本。
+  }
+}

@@ -39,6 +39,8 @@ public interface BodyTransactionStore {
          * 加工启动须验证缓存扣除与固定配方/输入账户；做功须验证对应组织能力和疲劳变化。
          * 摄入须重算器官与时间变化、真实来源扣账及共享区间预算；身体、来源和两类回执同时发布。
          * organ_intake 的 released_qi 只入选定来源，不得再入普通时间命令的默认释放账户。
+         * 健康效果须按固定 damage_resolution 或治疗/恢复剂量复算；释放、死亡状态和回执原子提交。
+         * 伤害算法只能在可信 Addon 处理器执行一次，事务复核不得重新调用伤害处理器。
          * 暂存并非已经提交；回调后续失败时不能保留任一项。不得从回调泄露事务对象。
          */
         void stage(BodySnapshot next, CommandReceipt receipt);

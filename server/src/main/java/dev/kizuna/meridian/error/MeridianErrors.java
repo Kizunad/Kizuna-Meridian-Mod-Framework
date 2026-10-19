@@ -15,6 +15,39 @@ public final class MeridianErrors {
     public static final String INVALID_TISSUE_LOADS = "组织负载必须包含 1 至 32 个不同组织";
     public static final String INVALID_BREATHING = "吐纳配置必须引用有效器官、组织与配方，参数须有限且为正";
 
+    public static final class Health {
+        public static final String REQUEST = "健康操作的来源、目标、剂量或批次数量无效";
+        public static final String RESOLUTION = "伤害处理结果需要有限正数损失、唯一目标及显式死亡判断";
+        public static final String RECEIPT = "健康回执与命令或伤害处理结果不一致";
+        public static final String STAGE = "健康变更与原身体、固定处理结果或释放明细不一致";
+        public static final String HANDLER = "伤害处理接口不能为空";
+        public static final String HOST_EXCHANGE = "健康宿主交换的版本、请求身份或操作无效";
+
+        private Health() {
+            // 伤害策略归附属，框架只集中定义协议与提交约束的诊断。
+        }
+    }
+
+    public static HealthRejected rejectHealth(FailureCode code) {
+        // 通用健康操作直接复用线协议失败码，不建立另一套错误枚举。
+        return new HealthRejected(code);
+    }
+
+    public static final class HealthRejected extends RuntimeException {
+        private final FailureCode code;
+
+        private HealthRejected(FailureCode code) {
+            // 业务拒绝可回传固定类别，宿主或 Addon 异常仍按内部错误处理。
+            super(required(code, Health.REQUEST).name());
+            this.code = code;
+        }
+
+        public FailureCode code() {
+            // 请求处理器只读取稳定失败码，不解析错误文本。
+            return code;
+        }
+    }
+
     public static GatheringRejected rejectGathering(FailureCode code) {
         // 聚气编排直接保留线协议失败码，不解析底层错误文案。
         return new GatheringRejected(code);

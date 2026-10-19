@@ -2,6 +2,10 @@ package dev.kizuna.meridian.protocol;
 
 import dev.kizuna.meridian.core.*;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageBody;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageKind;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageResolution;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.HpLoss;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.*;
 import dev.kizuna.meridian.protocol.pb.OpeningMessages;
 import dev.kizuna.meridian.server.*;
@@ -233,6 +237,45 @@ public class OpeningRuntimeTest {
         assertEquals(started.totalQi(), death.releasedQi().totalQi(), 1e-9);
         assertTrue(death.body().actions().isEmpty());
         assertNull(death.body().openingTask());
+    }
+
+    @Test
+    public void organDamageInterruptsPressureAndCommitsReleaseWithHealthEffect() {
+        // 先形成真实在途与临时超压，伤害事件必须立即撤销任务，不能等下一次时间推进。
+        var longRule = rule().toBuilder().setPolicyConfig(SampleOpeningPolicy.configuration(10000, false, false)).build();
+        BodySnapshot started = OpeningRuntime.start(body(), OpeningProtobuf.fromRule(longRule), ActionProtobuf.fromDefinition(action()));
+        BodySnapshot pressurized = BodyTimeAdvancement.apply(started, plan(2100)).body();
+        assertTrue(pressurized.meridianStates().get(0).lumenQi().totalQi() > 2);
+        var store = new InMemoryBodyStore(List.of(pressurized), List.of());
+        var handler = new BodyCommandHandler<String>((caller, command) -> Optional.of(caller),
+                (caller, command, current) -> true,
+                (caller, current) -> TimeAdvancePlan.newBuilder().setTarget(BodyProtobuf.toTime(current.settledAt()))
+                        .setMode(TimeAdvanceMode.ACTIVE).setBiologicalSecondsPerSimulationSecond(0).build(), store,
+                (caller, receipt, before, after) -> { /* 只检查原子结果。 */ }, new OrganRecipeCatalog(List.of()),
+                (caller, current, time) -> Optional.empty(), new ActionCatalog(List.of(action())),
+                new MeridianOpeningCatalog(List.of(longRule)), caller -> false,
+                payload -> HealthProtobuf.encodeResolution(DamageResolution
+                        .newBuilder().setLethal(false).addLosses(HpLoss
+                                .newBuilder().setTarget(BodyMessages.HealthTarget.newBuilder().setOrganId("filter")).setHp(30)).build()));
+        var damage = BodyCommand.newBuilder().setDamageBody(DamageBody
+                .newBuilder().setSourceId("sample:attack").setDamageType("sample:impact").setDamageHp(30)
+                .setKind(DamageKind.BLUNT)
+                .setHit(BodyMessages.HealthTarget.newBuilder().setOrganId("filter")));
+        byte[] request = request(store, "interrupt", damage);
+        byte[] response = handler.handleHealthEffect("owner", request);
+        assertTrue(MeridianProtocol.decodeResponse(response).hasCommandCommitted());
+
+        // 本次健康操作只增加一次版本，释放与身体同事务提交，重试不得重复清账。
+        BodySnapshot interrupted = current(store);
+        assertEquals(OpeningTask.Status.DAMAGED, interrupted.openingTask().status());
+        assertTrue(interrupted.actions().isEmpty());
+        assertEquals(pressurized.revision() + 1, interrupted.revision());
+        assertEquals(2, interrupted.structure().meridians().get(0).lumenCapacity(), 0);
+        assertEquals(2, interrupted.meridianStates().get(0).lumenQi().totalQi(), 1e-9);
+        assertTrue(store.environmentQi().totalQi() > 0);
+        assertEquals(pressurized.totalQi(), interrupted.totalQi() + store.environmentQi().totalQi(), 1e-9);
+        assertArrayEquals(response, handler.handleHealthEffect("owner", request));
+        assertEquals(interrupted, current(store));
     }
 
     private static BodySnapshot body() {
