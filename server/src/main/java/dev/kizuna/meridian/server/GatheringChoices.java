@@ -55,14 +55,9 @@ final class GatheringChoices {
                 MeridianDefinition meridian = target.get();
                 MeridianState state = body.getMeridianStatesList().stream()
                         .filter(value -> value.getId().equals(meridian.getId())).findFirst().orElseThrow();
-                // 开脉临时额度同样约束实际运输；预览若仍按稳定容量会错误阻断持续吐纳。
-                double capacity = meridian.getLumenCapacity();
-                if (actual.openingTask() != null) {
-                    var definition = actual.structure().meridians().stream()
-                            .filter(value -> value.id().value().equals(meridian.getId())).findFirst().orElseThrow();
-                    capacity = actual.openingTask().capacity(definition);
-                }
-                double freeCapacity = capacity - total(state.getLumenQi())
+                // 开脉和普通摄入使用同一稳定空间，预览只扣实际体积和预约。
+                double capacity = meridian.getLumenVolume();
+                double freeCapacity = capacity - dev.kizuna.meridian.protocol.QiDensity.volume(state.getLumenQi())
                         - reserved(body, meridian.getPortsList());
                 for (OrganRecipe recipe : recipes) {
                     if (recipe.getOrganKind().equals(organ.getKind())
@@ -73,7 +68,7 @@ final class GatheringChoices {
                         }
                         choices.add(GatheringChoice.newBuilder().setOrganId(organ.getId()).setRecipe(recipe)
                                 .setConnectionId(connection.getId()).setTargetMeridianId(meridian.getId())
-                                .setTargetRemainingQi(Math.max(0, freeCapacity))
+                                .setTargetRemainingVolume(Math.max(0, freeCapacity))
                                 .setIntakePerSecond(Math.min(supplyPerSecond, organ.getIntake().getMaxQiPerSecond()))
                                 .build());
                     }
@@ -89,7 +84,7 @@ final class GatheringChoices {
         List<String> inbound = body.getStructure().getConnectionsList().stream()
                 .filter(connection -> portIds.contains(connection.getTo())).map(Connection::getId).toList();
         return body.getTransitsList().stream().filter(transit -> inbound.contains(transit.getConnectionId()))
-                .mapToDouble(transit -> total(transit.getCargo())).sum();
+                .mapToDouble(transit -> dev.kizuna.meridian.protocol.QiDensity.volume(transit.getCargo())).sum();
     }
 
     static double total(QiInventory inventory) {

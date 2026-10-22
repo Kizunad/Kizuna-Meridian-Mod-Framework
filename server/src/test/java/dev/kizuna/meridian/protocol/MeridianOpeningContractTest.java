@@ -16,12 +16,10 @@ public class MeridianOpeningContractTest {
     public void nonHumanRulesPreserveMixedQiAndExactActionReferences() {
         // 引导明细可以混相；条件是不透明的附属 Protobuf，不由框架解释。
         var first = rule();
-        var later = first.toBuilder().setTargetMeridianId("outer.ring")
-                .setMinimumLumenQi(first.getMinimumLumenQi().toBuilder().addEntries(BodyMessages.Qi.newBuilder()
-                        .setPhase(BodyMessages.QiPhase.GAS).setAttribute("sample:mist").setAmount(2))).build();
+        var later = first.toBuilder().setTargetMeridianId("outer.ring").build();
         var extended = later.toBuilder().setContinuousHold(true)
-                .setLumenCapacityGain(2).setGuidanceQiPerSecond(1).setGuidanceBatchQi(.25)
-                .setHoldQiPerSecond(.1).setGuidanceBufferQi(.2)
+                .setLumenVolumeGain(2).setGuidanceQiPerSecond(1).setGuidanceBatchQi(.25)
+                .setHoldQiPerSecond(.1)
                 .addEfforts(BodyMessages.OpeningEffort.newBuilder().setOrganId("filter").setWatts(2))
                 .addEfforts(BodyMessages.OpeningEffort.newBuilder().setTissueId("control").setWatts(.5)).build();
         for (var valid : List.of(first, later, extended)) {
@@ -41,21 +39,13 @@ public class MeridianOpeningContractTest {
                 valid.toBuilder().setTargetMeridianId("Upper Ring").build(),
                 valid.toBuilder().clearPolicyId().build(),
                 valid.toBuilder().clearPolicyConfig().build(),
-                valid.toBuilder().clearMinimumLumenQi().build(),
-                valid.toBuilder().setMinimumLumenQi(BodyMessages.QiInventory.getDefaultInstance()).build(),
-                valid.toBuilder().setMinimumLumenQi(valid.getMinimumLumenQi().toBuilder()
-                        .addEntries(valid.getMinimumLumenQi().getEntries(0))).build(),
                 valid.toBuilder().addEfforts(BodyMessages.OpeningEffort.newBuilder()
                         .setTissueId("attention").setWatts(0)).build(),
                 valid.toBuilder().setGuidanceQiPerSecond(1).build(),
                 valid.toBuilder().setHoldQiPerSecond(-1).build(),
                 valid.toBuilder().setHoldQiPerSecond(Double.NaN).build(),
-                valid.toBuilder().setGuidanceBufferQi(.2).build(),
                 valid.toBuilder().setGuidanceQiPerSecond(1).setGuidanceBatchQi(.25)
-                        .setGuidanceBufferQi(Double.POSITIVE_INFINITY).build(),
-                valid.toBuilder().setGuidanceQiPerSecond(1).setGuidanceBatchQi(Double.MAX_VALUE)
-                        .setMinimumLumenQi(BodyMessages.QiInventory.newBuilder().addEntries(BodyMessages.Qi.newBuilder()
-                                .setPhase(BodyMessages.QiPhase.FREE).setAttribute("meridian:none").setAmount(Double.MAX_VALUE))).build(),
+                        .setGuidanceBatchQi(Double.POSITIVE_INFINITY).build(),
                 valid.toBuilder().setUnknownFields(unknown()).build())) {
             assertThrows(IllegalArgumentException.class, () -> OpeningProtobuf.decodeRule(invalid.toByteArray()));
             assertThrows(IllegalArgumentException.class, () -> OpeningProtobuf.fromRule(invalid));
@@ -91,8 +81,6 @@ public class MeridianOpeningContractTest {
         // 使用环状非人构型和短规则，数值仅用于整体契约保护，不是 Human 默认值。
         return BodyMessages.MeridianOpeningRule.newBuilder().setId("sample:open_ring").setVersion(2)
                 .setDisplayName("环脉适应").setTargetMeridianId("channel")
-                .setMinimumLumenQi(BodyMessages.QiInventory.newBuilder().addEntries(BodyMessages.Qi.newBuilder()
-                        .setPhase(BodyMessages.QiPhase.FREE).setAttribute("meridian:none").setAmount(3)))
                 .setPolicyId("sample:opening").setPolicyConfig(SampleOpeningPolicy.configuration(5000, false, false))
                 .setActionId("sample:focus").setActionVersion(7).build();
     }

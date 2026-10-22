@@ -30,6 +30,8 @@ final class BreathingDriver<C> {
     private final Random random = new Random();
     private BreathControl control = BreathControl.newBuilder().setAction(HOLD).setAimX(.5).setAimY(.4).build();
     private boolean active;
+    private boolean automatic;
+    private BreathAction automaticAction = INHALE;
     private long updatedMillis;
     private long leaseMillis;
     private long boundaryMillis;
@@ -95,6 +97,19 @@ final class BreathingDriver<C> {
         } else {
             valid &= !needsAction;
         }
+        if (profile.hasAutomatic()) {
+            // 自动能力必须有独立动作，避免免收费却继续占用精力、阻止其恢复。
+            var automaticProfile = profile.getAutomatic();
+            var reference = automaticProfile.getBodyAction();
+            var definition = actions.find(reference.getId(), reference.getVersion()).orElse(null);
+            valid &= positive(automaticProfile.getMinimumStaminaRatio()) && automaticProfile.getMinimumStaminaRatio() <= 1
+                    && positive(automaticProfile.getCaptureEfficiency()) && automaticProfile.getCaptureEfficiency() < 1;
+            valid &= definition != null;
+            if (definition != null) {
+                valid &= definition.getTissueIdsList().equals(List.of(profile.getRespiratoryTissueId()))
+                        && new HashSet<>(definition.getOrganIdsList()).equals(organs);
+            }
+        }
         var recipeIds = new HashSet<String>();
         for (String id : profile.getRecipeIdsList()) {
             valid &= recipeIds.add(id) && recipes.definitions().stream().anyMatch(recipe -> recipe.getId().equals(id));
@@ -125,6 +140,15 @@ final class BreathingDriver<C> {
             throw MeridianErrors.rejectGathering(REQUEST_ID_CONFLICT);
         }
         long now = session.now();
+        boolean changesMode = requested.getAction() == BEGIN_BREATHING || requested.getAction() == SET_AUTOMATIC_BREATHING;
+        if (changesMode && requested.getAutomatic()) {
+            if (!profile.hasAutomatic()) {
+                throw MeridianErrors.rejectGathering(INTAKE_UNSUPPORTED);
+            }
+            if (view(session.read()).getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
+                throw MeridianErrors.rejectGathering(MODULE_UNAVAILABLE);
+            }
+        }
         if (active && requested.getAction() == control.getAction()
                 && (requested.getAction() == INHALE || requested.getAction() == EXHALE || requested.getAction() == HOLD)) {
             // 持续输入只刷新瞄准与租约；按键续期不能把 250 ms 摄入窗口切碎成网络包间隔。
@@ -141,7 +165,8 @@ final class BreathingDriver<C> {
             }
             session.beginManual();
             BreathingView before = view(session.read());
-            if (before.getCapacityLiters() <= 0 || Math.min(before.getStaminaRatio(), before.getAttentionRatio()) <= 0) {
+            if (before.getCapacityLiters() <= 0 || before.getStaminaRatio() <= 0
+                    || !requested.getAutomatic() && before.getAttentionRatio() <= 0) {
                 throw MeridianErrors.rejectGathering(MODULE_UNAVAILABLE);
             }
             active = true;
@@ -153,9 +178,19 @@ final class BreathingDriver<C> {
         } else if (!active) {
             throw MeridianErrors.rejectGathering(INVALID_REQUEST);
         }
+        if (changesMode) {
+            // 先结清旧模式，再切换占用；自动吸呼只由实际空气边界选择方向。
+            if (requested.getAutomatic()
+                    && view(session.read()).getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
+                throw MeridianErrors.rejectGathering(MODULE_UNAVAILABLE);
+            }
+            updateBodyAction(false);
+            automatic = requested.getAutomatic();
+            automaticAction = airLiters >= view(session.read()).getCapacityLiters() ? EXHALE : INHALE;
+        }
         // 按新输入切换后续区间的占用；此前气流已经由 step 按旧输入结清。
         BreathingView current = view(session.read());
-        boolean usesBody = active && ((requested.getAction() == INHALE && airLiters < current.getCapacityLiters())
+        boolean usesBody = active && (automatic || (requested.getAction() == INHALE && airLiters < current.getCapacityLiters())
                 || (requested.getAction() == EXHALE && airLiters > 0));
         updateBodyAction(usesBody);
         // 只有占用提交成功才接受新气流输入，失败后继续沿用旧控制状态。
@@ -192,7 +227,7 @@ final class BreathingDriver<C> {
         if (seconds == 0) {
             return;
         }
-        if (now > leaseMillis) {
+        if (!automatic && now > leaseMillis) {
             stop();
             status = "操作已暂停";
             return;
@@ -206,7 +241,17 @@ final class BreathingDriver<C> {
             status = "呼吸器官无法工作";
             return;
         }
-        BreathAction action = control.getAction();
+        if (automatic && before.getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
+            stop();
+            status = "呼吸耐力低于自动停止线，请休息后重新开始";
+            return;
+        }
+        if (automatic && airLiters >= before.getCapacityLiters()) {
+            automaticAction = EXHALE;
+        } else if (automatic && airLiters <= 0) {
+            automaticAction = INHALE;
+        }
+        BreathAction action = automatic ? automaticAction : control.getAction();
         boolean inhaling = action == INHALE && airLiters < before.getCapacityLiters();
         boolean exhaling = action == EXHALE && airLiters > 0;
         if (!inhaling && !exhaling) {
@@ -227,8 +272,8 @@ final class BreathingDriver<C> {
         Anatomy.TissueCapacity attention = available(body, profile.getAttentionTissueId());
         double respiratoryWatts = Math.min(profile.getRespiratoryWatts(), respiratory.burstWatts());
         double attentionWatts = Math.min(profile.getAttentionWatts(), attention.burstWatts());
-        if (Math.min(respiratoryWatts, attentionWatts) < .001
-                || Math.min(respiratory.enduranceJoules(), attention.enduranceJoules()) < .001) {
+        if (respiratoryWatts < .001 || respiratory.enduranceJoules() < .001
+                || !automatic && (attentionWatts < .001 || attention.enduranceJoules() < .001)) {
             stop();
             status = "耐力或精力耗尽";
             return;
@@ -236,12 +281,15 @@ final class BreathingDriver<C> {
         double airRoom = inhaling ? before.getCapacityLiters() - airLiters : airLiters;
         seconds = Math.min(seconds, airRoom / before.getAirflowLitersPerSecond());
         seconds = Math.min(seconds, respiratory.enduranceJoules() / respiratoryWatts);
-        seconds = Math.min(seconds, attention.enduranceJoules() / attentionWatts);
+        if (!automatic) {
+            seconds = Math.min(seconds, attention.enduranceJoules() / attentionWatts);
+        }
 
         // 每段呼吸做功只支付一次；同段多颗接触独立入账，不再按捕获次数重复收取疲劳。
-        ExertTissues loads = ExertTissues.newBuilder()
-                .addLoads(load(profile.getRespiratoryTissueId(), respiratoryWatts, seconds))
-                .addLoads(load(profile.getAttentionTissueId(), attentionWatts, seconds)).build();
+        var loads = ExertTissues.newBuilder().addLoads(load(profile.getRespiratoryTissueId(), respiratoryWatts, seconds));
+        if (!automatic) {
+            loads.addLoads(load(profile.getAttentionTissueId(), attentionWatts, seconds));
+        }
         BreathAction effectiveAction = inhaling ? INHALE : EXHALE;
         session.settleManual();
         session.execute(BodyCommand.newBuilder().setExertTissues(loads));
@@ -249,10 +297,13 @@ final class BreathingDriver<C> {
         double airChange = before.getAirflowLitersPerSecond() * seconds;
         airLiters = Math.max(0, Math.min(before.getCapacityLiters(), airLiters + (inhaling ? airChange : -airChange)));
         // 满吸或排空后解除占用，后续暂停时间可以恢复，不把整个打开窗口过程当成做功。
-        updateBodyAction(inhaling ? airLiters < before.getCapacityLiters() : airLiters > 0);
+        updateBodyAction(automatic || (inhaling ? airLiters < before.getCapacityLiters() : airLiters > 0));
         status = inhaling ? "吸气 · 引导空间气流汇入口鼻" : "呼气 · 引导空间气流向外扩散";
         BreathingView after = view(session.read());
-        if (Math.min(after.getStaminaRatio(), after.getAttentionRatio()) < .00001) {
+        if (automatic && after.getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
+            stop();
+            status = "呼吸耐力低于自动停止线，请休息后重新开始";
+        } else if (after.getStaminaRatio() < .00001 || !automatic && after.getAttentionRatio() < .00001) {
             stop();
             status = "耐力或精力耗尽";
         }
@@ -273,9 +324,10 @@ final class BreathingDriver<C> {
         suction += ((inhaling ? 1 : 0) - suction) * flowResponse;
         blowing += ((action == EXHALE ? 1 : 0) - blowing) * flowResponse;
         if (action == INHALE || action == EXHALE) {
-            double dx = control.getAimX() - .5;
-            double dy = control.getAimY() - .4;
-            double dz = (control.hasAimZ() ? control.getAimZ() : .5) - .5;
+            // 自动采用固定正前方引导，同样经过气流积分与真实入口碰撞。
+            double dx = automatic ? 0 : control.getAimX() - .5;
+            double dy = automatic ? 0 : control.getAimY() - .4;
+            double dz = automatic ? 1 : (control.hasAimZ() ? control.getAimZ() : .5) - .5;
             double length = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (length < .001) {
                 dz = 1;
@@ -375,12 +427,16 @@ final class BreathingDriver<C> {
             for (GatheringChoice choice : choices) {
                 if (!choice.getOrganId().equals(organId) || !profile.getRecipeIdsList().contains(choice.getRecipe().getId())
                         || choice.getRecipe().getInput().getEntriesCount() != 1
-                        || choice.getRecipe().getInput().getEntries(0).getPhase() != QiPhase.FREE
+                        || dev.kizuna.meridian.protocol.QiDensity.phase(choice.getRecipe().getInput().getEntries(0).getDensity()) != QiPhase.FREE
                         || !choice.getRecipe().getInput().getEntries(0).getAttribute().equals(attribute)) {
                     continue;
                 }
                 try {
-                    absorbedQi += session.capture(choice, profile.getParticleVolumeBlocks());
+                    double samplingVolume = profile.getParticleVolumeBlocks();
+                    if (automatic) {
+                        samplingVolume *= profile.getAutomatic().getCaptureEfficiency();
+                    }
+                    absorbedQi += session.capture(choice, samplingVolume);
                     lastOrgan = (organIndex + 1) % profile.getOrgansCount();
                     failure = FAILURE_CODE_UNSPECIFIED;
                     return true;
@@ -414,10 +470,10 @@ final class BreathingDriver<C> {
                 .map(GatheringChoice::getRecipe)
                 .filter(recipe -> recipe.getInput().getEntriesCount() == 1)
                 .map(recipe -> recipe.getInput().getEntries(0))
-                .filter(qi -> qi.getPhase() == QiPhase.FREE)
+                .filter(qi -> dev.kizuna.meridian.protocol.QiDensity.phase(qi.getDensity()) == QiPhase.FREE)
                 .map(Qi::getAttribute).distinct().toList();
         List<Qi> inventory = view.getEnvironment().getQi().getEntriesList().stream()
-                .filter(qi -> qi.getPhase() == QiPhase.FREE && qi.getAmount() > 0)
+                .filter(qi -> dev.kizuna.meridian.protocol.QiDensity.phase(qi.getDensity()) == QiPhase.FREE && qi.getAmount() > 0)
                 .filter(qi -> attributes.contains(qi.getAttribute())).toList();
         List<String> availableAttributes = inventory.stream().map(Qi::getAttribute).toList();
 
@@ -481,10 +537,14 @@ final class BreathingDriver<C> {
             capacity += entry.getAirCapacityLiters() * health;
             airflow += entry.getAirflowLitersPerSecond() * health;
         }
-        return BreathingView.newBuilder().setAvailable(true).setActive(active).setAction(control.getAction())
+        return BreathingView.newBuilder().setAvailable(true).setActive(active)
+                .setAction(automatic && active ? automaticAction : control.getAction()).setAutomatic(automatic)
                 .setAirLiters(Math.min(airLiters, capacity)).setCapacityLiters(capacity).setAirflowLitersPerSecond(airflow)
                 .setStaminaRatio(ratio(body, profile.getRespiratoryTissueId()))
                 .setAttentionRatio(ratio(body, profile.getAttentionTissueId()))
+                // 自动参数来自可信内容声明，客户端只显示并不能提交覆盖值。
+                .setAutomaticMinimumStaminaRatio(profile.getAutomatic().getMinimumStaminaRatio())
+                .setAutomaticCaptureEfficiency(profile.getAutomatic().getCaptureEfficiency())
                 .addAllOrganIds(profile.getOrgansList().stream().map(BreathingOrgan::getOrganId).toList())
                 .addAllParticles(particles).setSequence(control.getSequence()).setStatus(status).setAbsorbedQi(absorbedQi)
                 .setStoredQi(storedQi)
@@ -506,6 +566,7 @@ final class BreathingDriver<C> {
         // 先结束占用再停调度；提交失败保留重试机会，不能遗留没有唤醒的活动实例。
         updateBodyAction(false);
         active = false;
+        automatic = false;
         suction = 0;
         blowing = 0;
         boundaryMillis = 0;
@@ -525,8 +586,9 @@ final class BreathingDriver<C> {
         }
         session.settleManual();
         String instanceId = UUID.randomUUID().toString();
+        var reference = automatic ? profile.getAutomatic().getBodyAction() : profile.getBodyAction();
         session.execute(BodyCommand.newBuilder().setStartAction(StartAction.newBuilder().setInstanceId(instanceId)
-                .setActionId(profile.getBodyAction().getId()).setActionVersion(profile.getBodyAction().getVersion())));
+                .setActionId(reference.getId()).setActionVersion(reference.getVersion())));
         bodyActionInstance = instanceId;
     }
 }

@@ -57,7 +57,10 @@ message DamageContext {
 message DamageResolution {
   repeated HpLoss losses = 1; // 0..64 个唯一目标，空列表可表示完全免疫。
   optional bool lethal = 2; // 由 Addon 判死；框架负责死亡清账，不能直接覆盖身体快照。
+  repeated MeridianInjury meridian_injuries = 3; // 经脉没有 HP，用渗漏/断裂状态表示损伤。
 }
+
+message MeridianInjury { string meridian_id = 1; MeridianCondition condition = 2; }
 
 message HpLoss {
   HealthTarget target = 1;

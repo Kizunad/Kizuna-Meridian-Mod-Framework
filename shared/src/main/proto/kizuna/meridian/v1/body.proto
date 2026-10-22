@@ -114,7 +114,9 @@ message OrganDefinition {
   string part_id = 4;
   double max_hp = 5;
   repeated Port ports = 6;
-  double qi_capacity = 7; // 缓存与加工中输入共同占用，元。
+  reserved 7;
+  reserved "qi_capacity";
+  double volume_capacity = 11; // 缓存、加工输入与输出预留共同占用的液态参照体积。
   double throughput_per_second = 8; // 端口收发共享吞吐，元/秒。
   OrganIntakeCapability intake = 9; // 可缺省：没有环境摄入能力。实际改造参数随构型保存。
   OrganEndurance endurance = 10; // 可缺省：不具备独立做功预算。
@@ -134,10 +136,10 @@ message MeridianDefinition {
   string id = 1;
   string display_name = 2;
   repeated string part_ids = 3;
-  double lumen_capacity = 4; // 元：有效上限，不是当前余额。
-  optional double wall_capacity = 5;
-  double lumen_liquid_reference = 6;
-  optional double wall_liquid_reference = 7;
+  reserved 4, 5, 6, 7;
+  reserved "lumen_capacity", "wall_capacity", "lumen_liquid_reference", "wall_liquid_reference";
+  double lumen_volume = 12; // 稳定内腔体积，数量上限由实际密度推导。
+  optional double wall_volume = 13; // 外壁独立体积，拓宽内腔不改变它。
   double throughput_per_second = 8; // 元/模拟秒
   double resilience = 9;
   double fatigue_capacity = 10;
@@ -199,12 +201,15 @@ message OrganProcess {
   OrganRecipe recipe = 1; // 发起时固定的事实；缺包或新版配方不能改写已经扣除的输入。
   int64 completion_millis = 2;
   optional bool blocked = 3; // 已到期但器官/归属部位失能，等待恢复事件。
+  QiInventory input = 4; // 已扣除的真实原料，保留实际密度，配方输入仅用于匹配剂量。
 }
 
 message Qi {
-  QiPhase phase = 1;
+  reserved 1;
+  reserved "phase";
   string attribute = 2; // namespace:path，五行与第三方属性使用同一表达。
   double amount = 3; // 元：账户明细必须为正数，空账户用空列表。
+  double density = 4; // ρ，液态基准为 1；相态由密度区间推导，最小 0.01。
 }
 
 message QiInventory {
@@ -232,6 +237,14 @@ message QiTransit {
   optional int64 arrival_millis = 4;
   double throughput_per_second = 5; // 发运时预约的两端共享吞吐；阻塞后不再占用吞吐。
   TransitStatus status = 6;
+  ControlledCircuit circuit = 7; // 可信活动控制的闭环货物；普通到达器不自动兑现。
+}
+
+message ControlledCircuit {
+  repeated string connection_ids = 1; // 顺序闭环，connection_id 等于最后一条，目标为返回账户。
+  double internal_distance_meters = 2; // 模块内部路程；连接自身长度另行累加。
+  double work_millis = 3; // 已完成的等效运输时间，操作节奏由可信活动推进。
+  double duration_millis = 4; // 全路程/速度 + 批量/瓶颈吞吐，仅计一次批量。
 }
 
 enum TransitStatus {
@@ -255,7 +268,7 @@ message TimeCursor {
 }
 
 message BodySnapshot {
-  int32 schema_version = 1; // 当前为 2，独立于线协议与模板版本。
+  int32 schema_version = 1; // 当前为 3；密度模型不兼容旧的独立相态字段。
   string id = 2;
   TemplateReference template = 3;
   BodyStructure structure = 4;
@@ -269,7 +282,8 @@ message BodySnapshot {
   TimeCursor settled_at = 12;
   optional int64 revision = 13;
   repeated ActiveAction actions = 14; // 同时执行的动作实例；定义固定，跨动作的组织占用取并集。
-  OpeningTask opening_task = 15; // 可缺省；保留最近任务结果，只有准备/维持状态享有临时增压权限。
+  OpeningTask opening_task = 15; // 可缺省；保留最近任务结果。
+  map<string, google.protobuf.Any> addon_progress = 16; // 附属命名空间 ID → 附属自己的版本化进度；属于唯一身体存档。
   // 全身真元和剩余寿命由明细派生，不传另一份可修改总账。
 }
 
@@ -280,6 +294,7 @@ message ActionDefinition {
   string display_name = 3;
   repeated string tissue_ids = 4; // 当前生物构型的组织 ID；包含肌肉、注意组织等，不按名称特判。
   repeated string organ_ids = 5;
+  repeated string guided_meridian_ids = 6; // 主动流向接管这些经脉的自然扩散；已有在途仍正常抵达。
 }
 
 message ActiveAction {
@@ -297,23 +312,25 @@ message MeridianOpeningRule {
   reserved 5, 7, 8, 11, 12, 14, 19;
   reserved "required_open_meridian_ids", "minimum_resilience", "required_active_millis",
       "minimum_body_lumen_fraction", "sequence", "intakes", "strict_lumen_threshold";
-  QiInventory minimum_lumen_qi = 6; // 引导目标及维持费用的明细权重；满足条件与否由策略裁定。
+  reserved 6, 16, 21;
+  reserved "minimum_lumen_qi", "lumen_capacity_gain", "guidance_buffer_qi";
   string action_id = 9;
   int32 action_version = 10;
   repeated OpeningEffort efforts = 13;
   bool continuous_hold = 15;
-  double lumen_capacity_gain = 16; // 完成后一次性增加的稳定容量，不生成真元。
+  double lumen_volume_gain = 24; // 完成后一次性拓宽的稳定体积，不生成真元。
   double guidance_qi_per_second = 17; // 0 禁用专用引导；仍共享实际端口吞吐。
   double guidance_batch_qi = 18;
-  double hold_qi_per_second = 20; // 仅适应计时期间消耗目标内腔，按门槛明细比例扣除。
-  double guidance_buffer_qi = 21; // 目标脉在门槛上方的补充余量，降至一半时补足。
+  double hold_qi_per_second = 20; // 仅维持期间，从全身内腔按实际占用体积分摊元数费用。
   string policy_id = 22; // 可信附属策略身份；框架不提供默认开脉条件。
   google.protobuf.Any policy_config = 23; // 附属自己的 Protobuf 条件；框架只保存，不解释。
 }
 
-message OpeningPressureLimit {
+message OpeningGuidanceTarget {
   string meridian_id = 1;
-  double qi = 2; // 参与组门槛及该脉临时额度；不是余额。
+  reserved 2;
+  reserved "qi";
+  double volume = 3; // 引导期望的占用体积，必须在稳定内腔体积内，不授予额外容量。
 }
 
 message OpeningEffort {
@@ -343,9 +360,11 @@ enum OpeningTaskStatus {
 message OpeningTask {
   MeridianOpeningRule rule = 1; // 固定启动规则，缺包后仍可正确推进和清理。
   string action_instance_id = 2;
-  repeated OpeningPressureLimit participants = 3;
+  repeated OpeningGuidanceTarget participants = 3;
   int64 required_millis = 4;
-  double target_stable_capacity = 5;
+  reserved 5;
+  reserved "target_stable_capacity";
+  double target_stable_volume = 12;
   int64 started_millis = 6;
   int64 held_millis = 7;
   OpeningTaskStatus status = 8;

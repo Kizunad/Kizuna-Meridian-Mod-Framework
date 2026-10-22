@@ -45,7 +45,7 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 ## 已实现的变更与事务入口
 
-`BodyCommandHandler<C>.handle(trustedContext, payload)` 接收完整 Protobuf 请求，执行寿元支出、时间结算、运输、器官加工启动、组织做功或环境摄入。前五个构造参数为 `BodyCommandAccess<C>`、`BodySecurityPolicy<C>`、`BodyTimeSource<C>`、`BodyTransactionStore` 与 `BodyAuditSink<C>`；第六个参数 `OrganRecipeCatalog` 省略则为空目录。摄入另需第七个参数 `BodyEnvironmentSource<C>`，未安装则返回 `ENVIRONMENT_UNAVAILABLE`。具体语义见[协议与安全](Protocol-and-Security.md)、[配方接入](Technique-Addons.md)和[环境摄入](Environment-Qi.md)。查询与变更分别路由；送错入口会在宿主回调前拒绝。
+`BodyCommandHandler<C>.handle(trustedContext, payload)` 接收完整 Protobuf 请求，执行寿元支出、时间结算、运输、器官加工启动、组织做功或环境摄入。前五个构造参数为 `BodyCommandAccess<C>`、`BodySecurityPolicy<C>`、`BodyTimeSource<C>`、`BodyTransactionStore` 与 `BodyAuditSink<C>`；第六个参数 `OrganRecipeCatalog` 省略则为空目录。摄入另需第七个参数 `BodyEnvironmentSource<C>`，未提供来源时返回 `ENVIRONMENT_UNAVAILABLE`，表示该宿主没有配置环境摄入能力。具体语义见[协议与安全](Protocol-and-Security.md)、[配方接入](Technique-Addons.md)和[环境摄入](Environment-Qi.md)。查询与变更分别路由；送错入口会在宿主回调前拒绝。
 
 `BodyCommandAccess.authorize` 既决定该操作和剂量是否允许，也返回稳定可信调用者 ID。不能只检查“是否拥有该身体”就把所有未来操作开放给客户端；宿主应仅开放实际需要的命令。认证上下文由宿主生成，客户端不能声明 caller_id。
 

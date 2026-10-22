@@ -122,10 +122,6 @@ public class AddonRegistryTest {
         rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
                         openingRule().toBuilder().setActionVersion(2))).build(),
                 DEFINITION_REFERENCE_VERSION_MISSING, "arts", "sample:focus");
-        rejected(request.toBuilder().setBundles(1, arts.toBuilder().setOpeningRules(0,
-                        openingRule().toBuilder().setMinimumLumenQi(qi("sample:missing_qi", 1)))).build(),
-                SYMBOL_MISSING, "arts", "sample:missing_qi");
-
         // 即使依赖通过中间包带入，也不能隐式引用动作；去掉配方隔离这一检查。
         var middle = bundle("middle").toBuilder().setManifest(manifest("middle").addDependencies(dependency("sample"))).build();
         var indirect = bundle("arts").toBuilder().setManifest(manifest("arts").addDependencies(dependency("middle")))
@@ -355,7 +351,6 @@ public class AddonRegistryTest {
         // 首脉前置为空，门槛只读取目标内腔，不另外复制一份待开拓真元。
         return BodyMessages.MeridianOpeningRule.newBuilder().setId("arts:open_ring").setVersion(1)
                 .setDisplayName("环脉适应").setTargetMeridianId("channel")
-                .setMinimumLumenQi(qi("meridian:none", 3))
                 .setPolicyId("sample:opening").setPolicyConfig(SampleOpeningPolicy.configuration(5000, false, false))
                 .setActionId("sample:focus").setActionVersion(1).build();
     }
@@ -363,7 +358,7 @@ public class AddonRegistryTest {
     private static BodyMessages.QiInventory qi(String attribute, double amount) {
         // 输入与输出都采用现有账本消息，避免建立附属包自己的余额格式。
         return BodyMessages.QiInventory.newBuilder().addEntries(BodyMessages.Qi.newBuilder()
-                .setPhase(BodyMessages.QiPhase.FREE).setAttribute(attribute).setAmount(amount)).build();
+                .setDensity(.01).setAttribute(attribute).setAmount(amount)).build();
     }
 
     private static AddonMessages.AddonBundle bundle(String namespace) {

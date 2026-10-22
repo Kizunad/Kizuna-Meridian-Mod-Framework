@@ -343,6 +343,7 @@ public class BodyHealthTest {
                 .setOrganStates(0, original.getOrganStates(0).toBuilder().setFatigueJoules(8)
                         .setBuffer(BodyProtobuf.toInventory(inventory(2)))
                         .setProcess(BodyMessages.OrganProcess.newBuilder().setRecipe(CapabilityProtobuf.toRecipe(recipe))
+                                .setInput(BodyProtobuf.toInventory(inventory(1)))
                                 .setCompletionMillis(1000).setBlocked(false)))
                 .addActions(BodyMessages.ActiveAction.newBuilder().setInstanceId("use")
                         .setStartedMillis(0).setDefinition(BodyMessages.ActionDefinition.newBuilder()
@@ -353,7 +354,7 @@ public class BodyHealthTest {
 
     private static QiInventory inventory(double amount) {
         // 未完成加工使用可区分的原料属性，以检查死亡不会预发预计产物。
-        return new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.WOOD, amount)));
+        return new QiInventory(List.of(new Qi(Qi.QiAttribute.WOOD, amount, .01)));
     }
 
     private static BodyCommandHandler<String> handler(InMemoryBodyStore store, BodyDamageHandler damage, boolean allow) {

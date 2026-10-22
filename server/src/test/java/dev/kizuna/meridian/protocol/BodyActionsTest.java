@@ -100,7 +100,7 @@ public class BodyActionsTest {
         assertEquals(active.actions(), TissueCapabilities.exert(withEnergy,
                 new TissueCapabilities.Exertion(new Anatomy.TissueId("tendril"), 0, 1, 1)).actions());
         var transport = new QiTransport.Request(new Anatomy.ConnectionId("channel.organ"),
-                new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.of("addon:lava"), .1))), 1);
+                new QiInventory(List.of(new Qi(Qi.QiAttribute.of("addon:lava"), .1, .01))), 1);
         assertEquals(active.actions(), QiTransport.start(active, transport).actions());
         BodySnapshot frozen = BodyTimeAdvancement.apply(active, TimeProtobuf.fromMessage(plan(4000).toBuilder()
                 .setMode(TimeAdvanceMode.LIFESPAN_ONLY).build())).body();

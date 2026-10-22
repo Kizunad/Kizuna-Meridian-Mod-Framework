@@ -44,12 +44,17 @@ public class PassiveQiDiffusionTest {
                     && qi.attribute().equals(original.attribute())).findFirst().orElseThrow();
             assertEquals(original.amount(), settled.amount(), 1e-12);
         }
+        double initialLumenVolume = initial.meridianStates().stream().mapToDouble(state -> state.lumenQi().volume()).sum();
+        double settledLumenVolume = 0;
         for (int index = 0; index < batch.meridianStates().size(); index++) {
             assertEquals(new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0), batch.meridianStates().get(index).opening());
-            double fraction = batch.meridianStates().get(index).lumenQi().totalQi()
-                    / batch.structure().meridians().get(index).lumenCapacity();
-            assertEquals(.3, fraction, .001);
+            double fraction = batch.meridianStates().get(index).lumenQi().volume()
+                    / batch.structure().meridians().get(index).lumenVolume();
+            assertTrue(fraction >= 0 && fraction <= 1);
+            settledLumenVolume += batch.meridianStates().get(index).lumenQi().volume();
         }
+        assertEquals(initialLumenVolume, settledLumenVolume, 1e-9);
+        assertTrue(batch.meridianStates().get(1).lumenQi().totalQi() > 0);
     }
 
     @Test
@@ -119,13 +124,13 @@ public class PassiveQiDiffusionTest {
         var full = message.toBuilder();
         for (int index = 0; index < full.getMeridianStatesCount(); index++) {
             full.setMeridianStates(index, full.getMeridianStates(index).toBuilder().setLumenQi(
-                    BodyProtobuf.toInventory(free(structure.getMeridians(index).getLumenCapacity()))));
+                    BodyProtobuf.toInventory(free(structure.getMeridians(index).getLumenVolume() * .01))));
         }
         assertTrue(PassiveQiDiffusion.nextBoundary(BodyProtobuf.fromMessage(full.build())).isEmpty());
     }
 
     private static BodySnapshot body() {
-        // 三脉总容量 20 元，初值仅在 A；双向通路允许最终按容量比例达到平衡。
+        // 三脉总容量 2000 体积，初值仅在 A；双向通路按当前体积占比扩散。
         var part = new Anatomy.PartId("shell");
         var definitions = List.of(meridian("a", part, 8), meridian("b", part, 4), meridian("c", part, 8));
         var flow = new Anatomy.PassiveQiFlow(.5, .25, .001);
@@ -134,8 +139,8 @@ public class PassiveQiDiffusionTest {
                 connection("c", "a", flow), connection("a", "c", flow));
         var structure = new BodyStructure(List.of(new Anatomy.PartDefinition(part, "外壳", 100)),
                 List.of(), List.of(), definitions, connections);
-        var mixed = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 3),
-                new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("sample:lava"), 3)));
+        var mixed = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, 3, .01),
+                new Qi(Qi.QiAttribute.of("sample:lava"), 3, 10)));
         return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("diffusion-body"),
                 new BodyTemplate.Reference(new DefinitionId("sample:diffusion"), 1), structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(part, 100)), List.of(), List.of(),
@@ -144,9 +149,9 @@ public class PassiveQiDiffusionTest {
     }
 
     private static Anatomy.MeridianDefinition meridian(String id, Anatomy.PartId part, double capacity) {
-        // 吞吐和外壁独立于局部内腔容量，跨脉比较使用占比。
-        return new Anatomy.MeridianDefinition(new Anatomy.MeridianId(id), id, List.of(part), capacity, 1,
-                100, 100, 1, 1, 100,
+        // 参数直接使用液态参照体积，初始真元仍按 0.01 密度换算。
+        return new Anatomy.MeridianDefinition(new Anatomy.MeridianId(id), id, List.of(part), capacity * 100, 100,
+                1, 1, 100,
                 List.of(new Anatomy.Port(new Anatomy.PortId(id + ".port"), Anatomy.PortDirection.BIDIRECTIONAL)));
     }
 
@@ -164,7 +169,7 @@ public class PassiveQiDiffusionTest {
 
     private static QiInventory free(double amount) {
         // 测试货物始终具有明确相态与属性。
-        return new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, amount)));
+        return new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, amount, .01)));
     }
 
     private static BodyTimeAdvancement.Plan plan(long millis, BodyTimeAdvancement.Mode mode, double agingRate) {

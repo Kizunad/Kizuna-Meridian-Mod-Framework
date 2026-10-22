@@ -81,37 +81,38 @@ public final class OrganIntake {
         }
 
         // 在途货物已预约目标空间，加工原料也占容量；摄入不能抢占这两部分空间。
-        requireIntakeSpace(body, accounts, definition, incoming.totalQi());
+        requireIntakeSpace(body, accounts, definition, incoming.volume());
 
         // 先结算既有事件，再归入本段摄入，避免未来收入改变起点处阻塞任务的结果。
         BodyTimeAdvancement.Result advanced = BodyTimeAdvancement.apply(body, plan, intervalUsedTissues);
         BodySnapshot settled = advanced.body();
         var settledAccounts = new QiAccounts(settled);
         // 末端加工可能改变占容；重新核验实际库存与未到货预约后再入账，失败仍整笔回滚。
-        requireIntakeSpace(settled, settledAccounts, definition, incoming.totalQi());
+        requireIntakeSpace(settled, settledAccounts, definition, incoming.volume());
         AnatomyState.Organ settledOrgan = settledAccounts.organ(organId);
         QiInventory buffer = QiAccounting.credit(settledOrgan.buffer(), incoming);
         settledAccounts.replaceOrgan(new AnatomyState.Organ(organId, settledOrgan.hp(), buffer, settledOrgan.process(), settledOrgan.fatigueJoules()));
         var supplied = new BodySnapshot(settled.schemaVersion(), settled.id(), settled.template(), settled.structure(), settled.realm(),
                 settled.partStates(), settled.tissueStates(), settledAccounts.organs(), settled.meridianStates(), settled.transits(),
-                settled.vitality(), settled.settledAt(), settled.revision(), settled.actions(), settled.openingTask());
+                settled.vitality(), settled.settledAt(), settled.revision(), settled.actions(), settled.openingTask(), settled.addonProgress());
         supplied = OpeningRuntime.recordIntake(supplied, organId, incoming.totalQi());
         return new BodyTimeAdvancement.Result(supplied, false, advanced.releasedQi());
     }
 
     private static void requireIntakeSpace(BodySnapshot body, QiAccounts accounts,
-                                           Anatomy.OrganDefinition definition, double incomingQi) {
+                                           Anatomy.OrganDefinition definition, double incomingVolume) {
         // 预约是从在途派生的容量额度，到货后由缓存接替占用，摄入不能挤占任一部分。
-        double reservedQi = 0;
+        double reservedVolume = 0;
         for (QiTransit transit : body.transits()) {
             Anatomy.Connection route = accounts.connection(transit.connectionId());
             QiAccounts.Endpoint target = accounts.endpoint(route.to());
             if (target != null && target.id().equals(definition.id())) {
-                reservedQi += transit.cargo().totalQi();
+                reservedVolume += transit.cargo().volume();
             }
         }
-        double freeCapacity = definition.qiCapacity() - accounts.organ(definition.id()).occupiedQi() - reservedQi;
-        if (incomingQi > freeCapacity) {
+        double freeCapacity = definition.volumeCapacity() - accounts.organ(definition.id()).occupiedVolume() - reservedVolume;
+        // 相同批次的体积由二进制浮点数相除得到，边界处允许一个极小舍入尾差。
+        if (incomingVolume > freeCapacity + 1e-9) {
             throw MeridianErrors.rejectIntake(FailureCode.CAPACITY_EXCEEDED);
         }
     }

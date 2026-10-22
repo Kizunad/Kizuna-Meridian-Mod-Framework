@@ -56,7 +56,7 @@ public final class BodyProtobuf {
                 .addAllMeridianStates(value.meridianStates().stream().map(BodyProtobuf::toMeridianState).toList())
                 .addAllTransits(value.transits().stream().map(BodyProtobuf::toTransit).toList())
                 .setVitality(toVitality(value.vitality())).setSettledAt(toTime(value.settledAt()))
-                .setRevision(value.revision())
+                .setRevision(value.revision()).putAllAddonProgress(value.addonProgress())
                 .addAllActions(value.actions().stream().map(ActionProtobuf::toActive).toList());
         if (value.openingTask() != null) {
             builder.setOpeningTask(OpeningProtobuf.toTask(value.openingTask()));
@@ -78,7 +78,8 @@ public final class BodyProtobuf {
                 value.getTransitsList().stream().map(BodyProtobuf::fromTransit).toList(),
                 fromVitality(value.getVitality()), fromTime(value.getSettledAt()), value.getRevision(),
                 value.getActionsList().stream().map(ActionProtobuf::fromActive).toList(),
-                value.hasOpeningTask() ? OpeningProtobuf.fromTask(value.getOpeningTask()) : null);
+                value.hasOpeningTask() ? OpeningProtobuf.fromTask(value.getOpeningTask()) : null,
+                value.getAddonProgressMap());
     }
 
     public static BodyMessages.BodyTemplate toMessage(BodyTemplate value) {
@@ -157,7 +158,7 @@ public final class BodyProtobuf {
         // 缓存容量和搬运吞吐属于器官本体，具体转换内容由独立配方声明。
         var builder = BodyMessages.OrganDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
                 .setKind(value.kind().value()).setPartId(value.partId().value()).setMaxHp(value.maxHp())
-                .setQiCapacity(value.qiCapacity()).setThroughputPerSecond(value.throughputPerSecond())
+                .setVolumeCapacity(value.volumeCapacity()).setThroughputPerSecond(value.throughputPerSecond())
                 .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList());
         if (value.intake() != null) {
             builder.setIntake(BodyMessages.OrganIntakeCapability.newBuilder()
@@ -177,18 +178,17 @@ public final class BodyProtobuf {
         return new Anatomy.OrganDefinition(new Anatomy.OrganId(value.getId()), value.getDisplayName(),
                 new DefinitionId(value.getKind()), new Anatomy.PartId(value.getPartId()), value.getMaxHp(),
                 value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
-                value.getQiCapacity(), value.getThroughputPerSecond(), value.hasIntake()
+                value.getVolumeCapacity(), value.getThroughputPerSecond(), value.hasIntake()
                         ? new Anatomy.OrganIntakeCapability(value.getIntake().getMaxQiPerSecond()) : null,
                 value.hasEndurance() ? new Anatomy.OrganEndurance(value.getEndurance().getEnduranceJoules(),
                         value.getEndurance().getMaximumWatts(), value.getEndurance().getRecoveryHalfLifeSeconds()) : null);
     }
 
     private static BodyMessages.MeridianDefinition toMeridian(Anatomy.MeridianDefinition value) {
-        // 容量与液态参照分开传递，零外壁容量也必须显式写出。
+        // 只传稳定体积；零外壁体积也必须显式写出。
         return BodyMessages.MeridianDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
                 .addAllPartIds(value.partIds().stream().map(Anatomy.PartId::value).toList())
-                .setLumenCapacity(value.lumenCapacity()).setWallCapacity(value.wallCapacity())
-                .setLumenLiquidReference(value.lumenLiquidReference()).setWallLiquidReference(value.wallLiquidReference())
+                .setLumenVolume(value.lumenVolume()).setWallVolume(value.wallVolume())
                 .setThroughputPerSecond(value.throughputPerSecond()).setResilience(value.resilience())
                 .setFatigueCapacity(value.fatigueCapacity())
                 .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList()).build();
@@ -197,8 +197,8 @@ public final class BodyProtobuf {
     private static Anatomy.MeridianDefinition fromMeridian(BodyMessages.MeridianDefinition value) {
         // 核心继续检查外壁参照与正数承载参数，协议层不维护另一套公式。
         return new Anatomy.MeridianDefinition(new Anatomy.MeridianId(value.getId()), value.getDisplayName(),
-                value.getPartIdsList().stream().map(Anatomy.PartId::new).toList(), value.getLumenCapacity(),
-                value.getWallCapacity(), value.getLumenLiquidReference(), value.getWallLiquidReference(),
+                value.getPartIdsList().stream().map(Anatomy.PartId::new).toList(), value.getLumenVolume(),
+                value.getWallVolume(),
                 value.getThroughputPerSecond(), value.getResilience(), value.getFatigueCapacity(),
                 value.getPortsList().stream().map(BodyProtobuf::fromPort).toList());
     }
@@ -296,13 +296,13 @@ public final class BodyProtobuf {
 
     private static BodyMessages.Qi toQi(Qi value) {
         // 属性始终使用命名空间 ID，避免扩展属性被压成固定枚举。
-        return BodyMessages.Qi.newBuilder().setPhase(BodyMessages.QiPhase.valueOf(value.phase().name()))
+        return BodyMessages.Qi.newBuilder().setDensity(value.density())
                 .setAttribute(value.attribute().id().value()).setAmount(value.amount()).build();
     }
 
     private static Qi fromQi(BodyMessages.Qi value) {
-        // 六种相态逐值保留；解码不进行任何属性转化或相变。
-        return new Qi(Qi.QiPhase.valueOf(value.getPhase().name()), Qi.QiAttribute.of(value.getAttribute()), value.getAmount());
+        // 按实际密度恢复账本；相态由密度派生，不在协议中重复保存。
+        return new Qi(Qi.QiAttribute.of(value.getAttribute()), value.getAmount(), value.getDensity());
     }
 
     private static BodyMessages.MeridianState toMeridianState(MeridianState value) {
@@ -333,19 +333,23 @@ public final class BodyProtobuf {
         return new MeridianOpening(MeridianOpening.Stage.valueOf(value.getStage().name()), value.getProgress());
     }
 
-    private static BodyMessages.QiTransit toTransit(QiTransit value) {
+    public static BodyMessages.QiTransit toTransit(QiTransit value) {
         // 在途货物单独持有，不重复附加到源或目标经脉账户。
-        return BodyMessages.QiTransit.newBuilder().setId(value.id()).setConnectionId(value.connectionId().value())
+        var message = BodyMessages.QiTransit.newBuilder().setId(value.id()).setConnectionId(value.connectionId().value())
                 .setCargo(toInventory(value.cargo())).setArrivalMillis(value.arrivalMillis())
                 .setThroughputPerSecond(value.throughputPerSecond())
-                .setStatus(BodyMessages.TransitStatus.valueOf(value.status().name())).build();
+                .setStatus(BodyMessages.TransitStatus.valueOf(value.status().name()));
+        if (value.circuit() != null) {
+            message.setCircuit(value.circuit());
+        }
+        return message.build();
     }
 
-    private static QiTransit fromTransit(BodyMessages.QiTransit value) {
+    public static QiTransit fromTransit(BodyMessages.QiTransit value) {
         // 到达时间沿用所属快照时钟，恢复不能把它解释为系统时间戳。
         return new QiTransit(value.getId(), new Anatomy.ConnectionId(value.getConnectionId()),
                 fromInventory(value.getCargo()), value.getArrivalMillis(), value.getThroughputPerSecond(),
-                QiTransit.Status.valueOf(value.getStatus().name()));
+                QiTransit.Status.valueOf(value.getStatus().name()), value.hasCircuit() ? value.getCircuit() : null);
     }
 
     private static BodyMessages.VitalityState toVitality(VitalityState value) {

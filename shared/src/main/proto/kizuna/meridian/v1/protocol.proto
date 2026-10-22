@@ -3,9 +3,11 @@ syntax = "proto3";
 package kizuna.meridian.v1;
 
 import "kizuna/meridian/v1/body.proto";
+import "google/protobuf/any.proto";
 import "kizuna/meridian/v1/environment.proto";
 import "kizuna/meridian/v1/opening.proto";
 import "kizuna/meridian/v1/health.proto";
+import "kizuna/meridian/v1/activity.proto";
 
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "MeridianMessages";
@@ -63,7 +65,14 @@ message BodyCommand {
     RestoreFatigue restore_fatigue = 25;
     ConfirmBodyDeath confirm_body_death = 26; // 仅可信宿主确认外部死亡，不能由客户端上报。
     SetPartHealthLimits set_part_health_limits = 27;
+    SetAddonProgress set_addon_progress = 28; // 仅可信附属入口；客户端不能自报解锁。
+    BodyActivity execute_activity = 29; // 仅可信活动入口，整体守恒、容量及负载校验。
   }
+}
+
+message SetAddonProgress {
+  string id = 1; // namespace:path
+  google.protobuf.Any progress = 2; // 由所属附属校验内容 schema，框架只约束大小和类型标识。
 }
 
 // 仅注入游离态无属性真元，保留既有余额、在途、外壁和开拓状态。
@@ -71,11 +80,14 @@ message DebugQi {
   DebugQiMode mode = 1;
   string meridian_id = 2; // 全身 fill 为空；局部 fill / 扩散必须指定真实经脉。
   optional double amount = 3; // fill 是期望局部总量；diffuse 是新增量，不能超过扣预约后的可用容量。
+  double density = 4; // SET_INVENTORY 专用；普通 fill 和 diffuse 仍产生 0.01。
+  bool wall = 5; // SET_INVENTORY 选择外壁，默认内腔。
 }
 enum DebugQiMode {
   DEBUG_QI_UNSPECIFIED = 0;
   FILL_LUMENS = 1;
   INJECT_FOR_DIFFUSION = 2; // 模拟炼化后入脉，后续沿真实连接扩散，不伪造环境摄入证明。
+  SET_INVENTORY = 3; // 管理员精确设置数量与密度，不作为普通资源来源。
 }
 
 message StartAction {

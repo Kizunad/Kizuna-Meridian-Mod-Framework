@@ -66,7 +66,7 @@ public final class BodyActions {
         DataChecks.localId(instanceId);
         if (body.openingTask() != null && body.openingTask().active()
                 && body.openingTask().actionInstanceId().equals(instanceId)) {
-            // 开脉动作只能随任务清理，不能绕过超压撤销而直接解除占用。
+            // 开脉动作只能随任务清理，防止任务仍在运行却失去资源占用。
             throw MeridianErrors.rejectIntake(dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode.OPENING_BUSY);
         }
         List<BodyAction.Active> remaining = body.actions().stream()
@@ -101,6 +101,6 @@ public final class BodyActions {
         // 一次启停只变更动作与版本，恢复在切换之前通过时间算子处理。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), body.organStates(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, actions, body.openingTask());
+                body.vitality(), body.settledAt(), body.revision() + 1, actions, body.openingTask(), body.addonProgress());
     }
 }

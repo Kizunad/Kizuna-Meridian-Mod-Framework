@@ -102,7 +102,7 @@ public class GatheringSessionTest {
     private static dev.kizuna.meridian.protocol.pb.BodyMessages.QiInventory qi(String attribute, double amount) {
         // 自定义属性保留完整身份，只有已安装配方可以决定加工产物。
         return dev.kizuna.meridian.protocol.pb.BodyMessages.QiInventory.newBuilder()
-                .addEntries(Qi.newBuilder().setPhase(QiPhase.FREE).setAttribute(attribute).setAmount(amount)).build();
+                .addEntries(Qi.newBuilder().setDensity(.01).setAttribute(attribute).setAmount(amount)).build();
     }
 
     @Test
@@ -116,7 +116,7 @@ public class GatheringSessionTest {
                 .setSettledAt(now).setRevision(0).clearTransits().build());
         var source = EnvironmentAbsorption.initialize(EnvironmentSpace.newBuilder().setProtocolVersion(1)
                         .setSourceId("sample:contact").setKind(EnvironmentSpaceKind.REGION_BACKGROUND).setVolumeBlocks(100).build(),
-                BodyProtobuf.fromInventory(qi("addon:mist", 100)), now, now.toBuilder().setElapsedMillis(10000).build(),
+                BodyProtobuf.fromInventory(qi("addon:mist", 1000)), now, now.toBuilder().setElapsedMillis(10000).build(),
                 new EnvironmentQiRules(EnvironmentConfigLoader.defaults()));
         var recipe = OrganRecipe.newBuilder().setId("sample:contact_refine").setVersion(1).setOrganKind("sample:filter")
                 .setInput(qi("addon:mist", .05)).setOutput(qi("meridian:none", .01)).setDurationMillis(100)
@@ -150,7 +150,7 @@ public class GatheringSessionTest {
         var remaining = store.environmentSource("sample:contact").orElseThrow();
         assertEquals(now, BodyProtobuf.toTime(body.settledAt()));
         assertEquals(0, remaining.getUsageCount());
-        assertEquals(initial.totalQi() + 100, body.totalQi() + BodyProtobuf.fromInventory(remaining.getInventory()).totalQi(), 1e-9);
+        assertEquals(initial.totalQi() + 1000, body.totalQi() + BodyProtobuf.fromInventory(remaining.getInventory()).totalQi(), 1e-9);
 
         // 同一请求重放与存档恢复不能多领一次，来源版本与真实库存随回执一起保存。
         assertTrue(MeridianProtocol.decodeResponse(handler.handleCapturedQi("owner", request.build().toByteArray())).hasCommandCommitted());
@@ -161,7 +161,7 @@ public class GatheringSessionTest {
 
         // 高浓度或大体积遇到缓存上限只收可保存部分，满载后拒绝且两边账本均不变化。
         request.setRequestId("fill-contact").setBodyCommand(request.getBodyCommand().toBuilder()
-                .setExpectedRevision(body.revision()).setCaptureQi(capture.setSampleVolumeBlocks(10000)));
+                .setExpectedRevision(body.revision()).setCaptureQi(capture.setSampleVolumeBlocks(10)));
         assertTrue(MeridianProtocol.decodeResponse(handler.handleCapturedQi("owner", request.build().toByteArray())).hasCommandCommitted());
         var full = store.find(initial.id()).orElseThrow();
         assertEquals(20, full.organStates().get(0).buffer().totalQi(), 1e-9);

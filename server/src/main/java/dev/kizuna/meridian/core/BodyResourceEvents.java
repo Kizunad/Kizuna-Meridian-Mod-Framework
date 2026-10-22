@@ -22,6 +22,9 @@ final class BodyResourceEvents {
             eventTimes.add(startMillis);
         }
         for (var transit : body.transits()) {
+            if (transit.circuit() != null) {
+                continue;
+            }
             long arrivalOrRetryMillis = Math.max(startMillis, transit.arrivalMillis());
             eventTimes.add(arrivalOrRetryMillis);
         }
@@ -63,7 +66,8 @@ final class BodyResourceEvents {
                 // 新批次可在本次长区间内继续到达和扩散，分段推进与批量推进使用同一事件序列。
                 long arrivalMillis = transit.arrivalMillis();
                 boolean withinBoundary = arrivalMillis < untilMillis || (includeBoundary && arrivalMillis == untilMillis);
-                if (transit.status() == QiTransit.Status.MOVING && arrivalMillis > eventMillis && withinBoundary) {
+                if (transit.circuit() == null && transit.status() == QiTransit.Status.MOVING
+                        && arrivalMillis > eventMillis && withinBoundary) {
                     eventTimes.add(arrivalMillis);
                 }
             }

@@ -31,7 +31,7 @@ public class CoreDataTest {
         assertEquals(8, body.wallQiTotal(), 0);
         assertEquals(2, body.transitQiTotal(), 0);
         assertEquals(13, body.totalQi(), 0);
-        assertEquals(0.01, body.structure().capacityRatio(), 0.000001);
+        assertEquals(2000, body.structure().lumenVolume(), 0.000001);
         // 局部组织与器官 HP 不叠加到总体部位 HP。
         assertEquals(0.5, body.partHpRatio(), 0);
         assertEquals(85, body.vitality().remainingSeconds(), 0);
@@ -76,9 +76,9 @@ public class CoreDataTest {
         BodySnapshot modified = body(grown, original.meridianStates(), List.of());
 
         assertEquals(11, modified.totalQi(), 0);
-        assertEquals(20, template.structure().meridians().get(0).lumenCapacity(), 0);
-        assertEquals(20, original.structure().meridians().get(0).lumenCapacity(), 0);
-        assertEquals(40, modified.structure().meridians().get(0).lumenCapacity(), 0);
+        assertEquals(2000, template.structure().meridians().get(0).lumenVolume(), 0);
+        assertEquals(2000, original.structure().meridians().get(0).lumenVolume(), 0);
+        assertEquals(4000, modified.structure().meridians().get(0).lumenVolume(), 0);
         assertEquals(TEMPLATE, modified.template());
     }
 
@@ -92,7 +92,7 @@ public class CoreDataTest {
                 new VitalityState(10, 100, 0, false), NOW, 0);
 
         assertEquals(0, body.totalQi(), 0);
-        assertEquals(0, body.structure().capacityRatio(), 0);
+        assertEquals(0, body.structure().lumenVolume(), 0);
         assertEquals(1, body.partHpRatio(), 0);
     }
 
@@ -150,8 +150,8 @@ public class CoreDataTest {
         // 允许二进制小数的机器尾差，同时拒绝游戏数值上实际存在的超额。
         BodyStructure s = structure();
         BodyStructure small = new BodyStructure(s.parts(), s.tissues(), s.organs(), List.of(meridian(0.3)), s.connections());
-        QiInventory mixed = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 0.1),
-                new Qi(Qi.QiPhase.GAS, Qi.QiAttribute.FIRE, 0.2)));
+        QiInventory mixed = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, 0.1, .01),
+                new Qi(Qi.QiAttribute.FIRE, 0.2, .1)));
         BodySnapshot body = body(small, List.of(new MeridianState(MERIDIAN, mixed, QiInventory.empty(),
                 0, MeridianState.Condition.INTACT, new MeridianOpening(MeridianOpening.Stage.UNOPENED, 0))), List.of());
 
@@ -230,8 +230,8 @@ public class CoreDataTest {
     }
 
     private static Anatomy.MeridianDefinition meridian(double capacity) {
-        // 保留同一液态参照，仅调整有效容量以验证成长不会凭空产生真元。
-        return new Anatomy.MeridianDefinition(MERIDIAN, "主通路", List.of(PART), capacity, 20, 2000, 2000,
+        // 经脉只保存结构体积；测试参数仍按游离态等效元数传入以便阅读。
+        return new Anatomy.MeridianDefinition(MERIDIAN, "主通路", List.of(PART), capacity * 100, 2000,
                 2, 10, 10, List.of(new Anatomy.Port(MERIDIAN_IN, Anatomy.PortDirection.INPUT),
                 new Anatomy.Port(MERIDIAN_OUT, Anatomy.PortDirection.OUTPUT)));
     }
@@ -244,7 +244,7 @@ public class CoreDataTest {
 
     private static QiInventory inventory(double amount) {
         // 空账户不含零数量行，与正式数据约束保持一致。
-        return amount == 0 ? QiInventory.empty() : new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, amount)));
+        return amount == 0 ? QiInventory.empty() : new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, amount, .01)));
     }
 
     private static QiTransit transit(String id, Anatomy.ConnectionId connection, double amount, long arrival) {

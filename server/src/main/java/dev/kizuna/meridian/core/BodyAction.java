@@ -13,7 +13,13 @@ public final class BodyAction {
     }
 
     public record Definition(DefinitionId id, int version, String displayName,
-                             List<Anatomy.TissueId> tissueIds, List<Anatomy.OrganId> organIds) {
+                             List<Anatomy.TissueId> tissueIds, List<Anatomy.OrganId> organIds,
+                             List<Anatomy.MeridianId> guidedMeridianIds) {
+        public Definition(DefinitionId id, int version, String displayName,
+                          List<Anatomy.TissueId> tissueIds, List<Anatomy.OrganId> organIds) {
+            // 不接管真元流向的动作仅声明既有组织和器官占用。
+            this(id, version, displayName, tissueIds, organIds, List.of());
+        }
         public Definition {
             // 定义可表示任何物种的动作，具体局部模块在启动时与实际身体核对。
             MeridianErrors.required(id, Data.ACTION_REQUIRED);
@@ -23,8 +29,10 @@ public final class BodyAction {
             }
             tissueIds = List.copyOf(tissueIds);
             organIds = List.copyOf(organIds);
+            guidedMeridianIds = List.copyOf(guidedMeridianIds);
             if (new HashSet<>(tissueIds).size() != tissueIds.size()
-                    || new HashSet<>(organIds).size() != organIds.size()) {
+                    || new HashSet<>(organIds).size() != organIds.size()
+                    || new HashSet<>(guidedMeridianIds).size() != guidedMeridianIds.size()) {
                 throw MeridianErrors.invalid(Data.DUPLICATE_ACTION_USE);
             }
         }

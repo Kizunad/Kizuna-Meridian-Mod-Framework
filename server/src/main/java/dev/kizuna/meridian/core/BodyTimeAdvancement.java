@@ -154,7 +154,7 @@ public final class BodyTimeAdvancement {
                 }
                 long postponedArrivalMillis = transit.arrivalMillis() + elapsedMillis;
                 postponedTransits.add(new QiTransit(transit.id(), transit.connectionId(), transit.cargo(),
-                        postponedArrivalMillis, transit.throughputPerSecond(), transit.status()));
+                        postponedArrivalMillis, transit.throughputPerSecond(), transit.status(), transit.circuit()));
             }
             transits = List.copyOf(postponedTransits);
             var postponedOrgans = new ArrayList<AnatomyState.Organ>();
@@ -169,7 +169,7 @@ public final class BodyTimeAdvancement {
                     throw MeridianErrors.rejectTime(TimeRejectionReason.NUMERIC_LIMIT);
                 }
                 long postponedCompletionMillis = process.completionMillis() + elapsedMillis;
-                var postponedProcess = new OrganProcess(process.recipe(), postponedCompletionMillis, false);
+                var postponedProcess = new OrganProcess(process.recipe(), process.input(), postponedCompletionMillis, false);
                 var postponedOrgan = new AnatomyState.Organ(organ.id(), organ.hp(), organ.buffer(), postponedProcess, organ.fatigueJoules());
                 postponedOrgans.add(postponedOrgan);
             }
@@ -191,7 +191,8 @@ public final class BodyTimeAdvancement {
                 vitality.spentLifespanSeconds(), died);
         var updatedBody = new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), tissues, organs, meridians, transits,
-                updatedVitality, settledAt, body.revision() + 1, died ? List.of() : body.actions(), died ? null : body.openingTask());
+                updatedVitality, settledAt, body.revision() + 1, died ? List.of() : body.actions(),
+                died ? null : body.openingTask(), body.addonProgress());
         return new Result(updatedBody, died, releasedQi);
     }
 

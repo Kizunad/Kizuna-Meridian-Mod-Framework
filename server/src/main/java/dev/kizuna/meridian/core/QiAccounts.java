@@ -23,12 +23,12 @@ final class QiAccounts {
         parts = DataChecks.index(body.partStates(), AnatomyState.Part::id, "部位状态");
         connections = DataChecks.index(body.structure().connections(), Anatomy.Connection::id, "连接");
         for (var definition : body.structure().meridians()) {
-            double capacity = body.openingTask() == null ? definition.lumenCapacity() : body.openingTask().capacity(definition);
+            double capacity = definition.lumenVolume();
             var endpoint = new Endpoint(definition.id(), capacity, definition.throughputPerSecond(), null);
             definition.ports().forEach(port -> ports.put(port.id(), endpoint));
         }
         for (var definition : body.structure().organs()) {
-            var endpoint = new Endpoint(definition.id(), definition.qiCapacity(), definition.throughputPerSecond(), definition.partId());
+            var endpoint = new Endpoint(definition.id(), definition.volumeCapacity(), definition.throughputPerSecond(), definition.partId());
             definition.ports().forEach(port -> ports.put(port.id(), endpoint));
         }
     }
@@ -64,9 +64,9 @@ final class QiAccounts {
     double occupied(Endpoint endpoint) {
         // 加工中的输入占器官空间，但不计入可发运缓存。
         if (endpoint.id() instanceof Anatomy.MeridianId) {
-            return inventory(endpoint).totalQi();
+            return inventory(endpoint).volume();
         }
-        return organs.get(endpoint.id()).occupiedQi();
+        return organs.get(endpoint.id()).occupiedVolume();
     }
 
     void replace(Endpoint endpoint, QiInventory inventory) {

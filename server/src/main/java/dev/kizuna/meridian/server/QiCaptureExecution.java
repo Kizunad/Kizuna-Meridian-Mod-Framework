@@ -58,9 +58,10 @@ final class QiCaptureExecution {
         EnvironmentQiOffer offer = EnvironmentAbsorption.offer(source, body.id().value(), now, now);
         QiInventory environment = BodyProtobuf.fromInventory(source.getInventory());
         Qi inputKind = recipe.input().entries().get(0);
-        double availableRaw = environment.entries().stream()
+        Qi sourceQi = environment.entries().stream()
                 .filter(item -> item.phase() == inputKind.phase() && item.attribute().equals(inputKind.attribute()))
-                .mapToDouble(Qi::amount).sum();
+                .findFirst().orElseThrow(() -> MeridianErrors.rejectIntake(FailureCode.INSUFFICIENT_QI));
+        double availableRaw = sourceQi.amount();
         double concentration = environment.totalQi() / source.getSpace().getVolumeBlocks();
         double desiredRaw = concentration * request.getSampleVolumeBlocks();
         if (!Double.isFinite(desiredRaw)) {
@@ -72,21 +73,24 @@ final class QiCaptureExecution {
         List<Anatomy.ConnectionId> incoming = body.structure().connections().stream()
                 .filter(route -> ports.contains(route.to())).map(Anatomy.Connection::id).toList();
         double reserved = body.transits().stream().filter(transit -> incoming.contains(transit.connectionId()))
-                .mapToDouble(transit -> transit.cargo().totalQi()).sum();
-        double room = Math.max(0, organ.qiCapacity() - state.occupiedQi() - reserved);
-        double efficiency = recipe.output().totalQi() / recipe.input().totalQi();
-        double rawAmount = Math.min(Math.min(desiredRaw, availableRaw), room / efficiency);
+                .mapToDouble(transit -> transit.cargo().volume()).sum();
+        double room = Math.max(0, organ.volumeCapacity() - state.occupiedVolume() - reserved);
+        if (room <= 1e-9) {
+            throw MeridianErrors.rejectIntake(FailureCode.CAPACITY_EXCEEDED);
+        }
+        double outputVolumePerInputQi = recipe.output().volume() / recipe.input().totalQi();
+        double rawAmount = Math.min(Math.min(desiredRaw, availableRaw), room / outputVolumePerInputQi);
         if (rawAmount <= 0) {
             throw MeridianErrors.rejectIntake(room <= 0 ? FailureCode.CAPACITY_EXCEEDED : FailureCode.INSUFFICIENT_QI);
         }
-        QiInventory absorbed = new QiInventory(List.of(new Qi(inputKind.phase(), inputKind.attribute(), rawAmount)));
+        QiInventory absorbed = new QiInventory(List.of(sourceQi.withAmount(rawAmount)));
         double scale = rawAmount / recipe.input().totalQi();
         QiInventory output = new QiInventory(recipe.output().entries().stream()
-                .map(item -> new Qi(item.phase(), item.attribute(), item.amount() * scale)).toList());
+                .map(item -> new Qi(item.attribute(), item.amount() * scale, item.density())).toList());
         double loss = Math.max(0, rawAmount - output.totalQi());
         QiInventory released = QiInventory.empty();
         if (loss > 0) {
-            released = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, loss)));
+            released = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, loss, .01)));
         }
 
         // 生成身体候选与开脉的新摄入证据，已有加工和疲劳不被本次接触覆盖。
@@ -96,7 +100,7 @@ final class QiCaptureExecution {
                 state.process(), state.fatigueJoules()));
         BodySnapshot updated = new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), organs, body.meridianStates(), body.transits(), body.vitality(),
-                body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
+                body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
         updated = OpeningRuntime.recordIntake(updated, organ.id(), rawAmount);
 
         // 原始量先扣环境，损耗回同一来源；两个版本和回执一起提交，不重复进入默认释放账。

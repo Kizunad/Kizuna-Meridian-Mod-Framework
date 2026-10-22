@@ -208,7 +208,7 @@ public class OrganIntakeTest {
         var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         var base = BodyProtobuf.toMessage(body("a", 0));
         var structure = original.getStructure().toBuilder().setOrgans(0,
-                base.getStructure().getOrgans(0).toBuilder().setQiCapacity(4));
+                base.getStructure().getOrgans(0).toBuilder().setVolumeCapacity(400));
         var meridian = original.getMeridianStates(0).toBuilder()
                 .setCondition(BodyMessages.MeridianCondition.INTACT)
                 .setOpening(BodyMessages.MeridianOpening.newBuilder().setStage(BodyMessages.MeridianOpeningStage.UNOPENED).setProgress(0));
@@ -234,7 +234,7 @@ public class OrganIntakeTest {
 
         // 已进入加工账户的原料不能被摄入视作腾出的缓存空间。
         var withInput = base.toBuilder().setStructure(base.getStructure().toBuilder().setOrgans(0,
-                base.getStructure().getOrgans(0).toBuilder().setQiCapacity(4)))
+                base.getStructure().getOrgans(0).toBuilder().setVolumeCapacity(400)))
                 .setOrganStates(0, base.getOrganStates(0).toBuilder().setBuffer(BodyProtobuf.toInventory(wood(3)))).build();
         var recipe = new OrganRecipe(new DefinitionId("sample:slow"), 1, new DefinitionId("sample:filter"),
                 wood(3), wood(2), 2000, Realm.WANDERING_QI);
@@ -351,7 +351,7 @@ public class OrganIntakeTest {
 
     private static Qi qi(Qi.QiAttribute attribute, double amount) {
         // 摄入不会把属性自动抹成无属性，测试保持游离态五行原料。
-        return new Qi(Qi.QiPhase.FREE, attribute, amount);
+        return new Qi(attribute, amount, .01);
     }
 
     private static QiInventory wood(double amount) {

@@ -209,15 +209,15 @@ public final class GatheringSession<C> implements AutoCloseable {
         if (targetState.getCondition() != BodyMessages.MeridianCondition.INTACT) {
             throw rejectGathering(ROUTE_UNAVAILABLE);
         }
-        double input = GatheringChoices.total(selected.getRecipe().getInput());
-        double remaining = organ.getQiCapacity() - GatheringChoices.total(state.getBuffer())
+        double input = dev.kizuna.meridian.protocol.QiDensity.volume(selected.getRecipe().getInput());
+        double remaining = organ.getVolumeCapacity() - dev.kizuna.meridian.protocol.QiDensity.volume(state.getBuffer())
                 - GatheringChoices.reserved(body, organ.getPortsList());
-        if (input > remaining || GatheringChoices.total(selected.getRecipe().getOutput()) > selected.getTargetRemainingQi()) {
+        if (input > remaining || dev.kizuna.meridian.protocol.QiDensity.volume(selected.getRecipe().getOutput()) > selected.getTargetRemainingVolume()) {
             throw rejectGathering(CAPACITY_EXCEEDED);
         }
         for (BodyMessages.Qi needed : selected.getRecipe().getInput().getEntriesList()) {
             double available = view.getEnvironment().getQi().getEntriesList().stream()
-                    .filter(qi -> qi.getPhase() == needed.getPhase() && qi.getAttribute().equals(needed.getAttribute()))
+                    .filter(qi -> dev.kizuna.meridian.protocol.QiDensity.phase(qi.getDensity()) == dev.kizuna.meridian.protocol.QiDensity.phase(needed.getDensity()) && qi.getAttribute().equals(needed.getAttribute()))
                     .mapToDouble(BodyMessages.Qi::getAmount).sum();
             if (available < needed.getAmount()) {
                 throw rejectGathering(INSUFFICIENT_QI);

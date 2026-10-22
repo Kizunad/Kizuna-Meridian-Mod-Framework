@@ -45,9 +45,18 @@ public final class AnatomyState {
             double bufferedQi = buffer.totalQi();
             double processingInputQi = 0;
             if (process != null) {
-                processingInputQi = process.recipe().input().totalQi();
+                processingInputQi = process.input().totalQi();
             }
             return bufferedQi + processingInputQi;
+        }
+
+        public double occupiedVolume() {
+            // 加工输入是真实库存；输出只预留空间，防止转换后体积增大挤爆器官。
+            double processingVolume = 0;
+            if (process != null) {
+                processingVolume = Math.max(process.input().volume(), process.recipe().output().volume());
+            }
+            return buffer.volume() + processingVolume;
         }
     }
 }

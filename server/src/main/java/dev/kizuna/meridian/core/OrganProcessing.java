@@ -51,16 +51,17 @@ public final class OrganProcessing {
         }
 
         // 4. 输入从缓存搬入唯一加工账户；预计输出尚不存在，不能同时计入余额。
-        QiInventory remainingBuffer = QiAccounting.debit(organState.buffer(), recipe.input());
+        QiInventory input = QiAccounting.select(organState.buffer(), recipe.input());
+        QiInventory remainingBuffer = QiAccounting.debit(organState.buffer(), input);
         long completionMillis = startMillis + recipe.durationMillis();
-        var process = new OrganProcess(recipe, completionMillis, false);
+        var process = new OrganProcess(recipe, input, completionMillis, false);
         var processingOrgan = new AnatomyState.Organ(organId, organState.hp(), remainingBuffer, process, organState.fatigueJoules());
         accounts.replaceOrgan(processingOrgan);
 
         // 5. 一次启动只生成一份候选身体；实际发布仍由宿主事务决定。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), accounts.organs(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
     }
 
     static QiInventory completeDue(BodySnapshot body, QiAccounts accounts, long atMillis) {
@@ -74,7 +75,7 @@ public final class OrganProcessing {
             }
             if (!accounts.organAvailable(organDefinition)) {
                 // 到期但失能时保留原料，只修改阻塞标记，不能当成已经完成。
-                var blockedProcess = new OrganProcess(process.recipe(), process.completionMillis(), true);
+                var blockedProcess = new OrganProcess(process.recipe(), process.input(), process.completionMillis(), true);
                 var blockedOrgan = new AnatomyState.Organ(organState.id(), organState.hp(), organState.buffer(), blockedProcess, organState.fatigueJoules());
                 accounts.replaceOrgan(blockedOrgan);
                 continue;
@@ -87,7 +88,7 @@ public final class OrganProcessing {
             double outputQi = recipe.output().totalQi();
             double conversionLossQi = inputQi - outputQi;
             if (conversionLossQi > 0) {
-                var wasteQi = new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, conversionLossQi);
+                var wasteQi = new Qi(Qi.QiAttribute.NONE, conversionLossQi, .01);
                 var wasteInventory = new QiInventory(List.of(wasteQi));
                 releasedQi = QiAccounting.credit(releasedQi, wasteInventory);
             }

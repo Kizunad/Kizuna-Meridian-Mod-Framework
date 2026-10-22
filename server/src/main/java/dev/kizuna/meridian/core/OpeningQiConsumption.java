@@ -15,29 +15,16 @@ final class OpeningQiConsumption {
                 || task.rule().holdQiPerSecond() == 0) {
             return QiInventory.empty();
         }
-        MeridianState target = accounts.meridian(task.rule().targetMeridianId());
-        double consumedQi = task.rule().holdQiPerSecond() * (millis / 1000.0);
-        double minimumTotal = task.rule().minimumLumenQi().totalQi();
-        var costs = new ArrayList<Qi>();
-        for (Qi minimum : task.rule().minimumLumenQi().entries()) {
-            double costQi = consumedQi * (minimum.amount() / minimumTotal);
-            // 模拟时钟最小一毫秒，极高消耗可能在最后一毫秒耗尽，仍不能透支账户。
-            costQi = Math.min(costQi, matchingAmount(target.lumenQi(), minimum));
-            if (costQi > 0) {
-                costs.add(new Qi(minimum.phase(), minimum.attribute(), costQi));
-            }
+        var states = accounts.meridians();
+        var costs = QiConsumption.byVolume(states.stream().map(MeridianState::lumenQi).toList(),
+                task.rule().holdQiPerSecond() * (millis / 1000.0));
+        for (int i = 0; i < states.size(); i++) {
+            MeridianState state = states.get(i);
+            QiInventory remaining = QiAccounting.debit(state.lumenQi(), costs.get(i));
+            accounts.replaceMeridian(new MeridianState(state.id(), remaining, state.wallQi(),
+                    state.fatigue(), state.condition(), state.opening()));
         }
-        QiInventory releasedQi = new QiInventory(costs);
-        QiInventory remainingQi = QiAccounting.debit(target.lumenQi(), releasedQi);
-        accounts.replaceMeridian(new MeridianState(target.id(), remainingQi, target.wallQi(), target.fatigue(),
-                target.condition(), target.opening()));
-        return releasedQi;
-    }
-
-    private static double matchingAmount(QiInventory inventory, Qi minimum) {
-        // 同属性不同相态仍是独立明细，不以总账掩盖局部短缺。
-        return inventory.entries().stream().filter(qi -> qi.phase() == minimum.phase()
-                        && qi.attribute().equals(minimum.attribute())).mapToDouble(Qi::amount).sum();
+        return QiInventory.combine(costs);
     }
 
 }

@@ -7,6 +7,9 @@ import java.util.Objects;
 
 /** Java 参考实现的异常类型与文案；公开线协议失败码仍由 Protobuf 定义。 */
 public final class MeridianErrors {
+    public static final String INVALID_ACTIVITY = "活动计划的账户、闭环、负载或资源守恒不成立";
+    public static final String INVALID_ADDON_PROGRESS = "附属进度需要有效内容 ID、Protobuf 类型、非空载荷，最多 64 项且单项不超过 64 KiB";
+    public static final String ADDON_PROGRESS_STAGE = "附属进度事务改变了进度以外的身体事实";
     public static final String INVALID_QI_CAPTURE = "接触摄入需要有效器官、单种输入配方和正数采样体积";
     public static final String QI_CAPTURE_FACT = "接触摄入回执与环境、身体或配方不一致";
     public static final String INVALID_DEBUG_QI = "真元调试模式、目标或剂量无效";
@@ -157,8 +160,6 @@ public final class MeridianErrors {
         public static final String INTAKE = "开拓摄入要求必须包含不重复器官、正数速率和窗口";
         public static final String ACTION_RESOURCES = "开拓消耗和摄入使用的模块必须被其动作占用";
         public static final String GUIDANCE = "开拓引导吞吐和批次须同时启用或同时关闭";
-        public static final String GUIDANCE_BUFFER = "开拓引导缓冲必须配合有效的引导吞吐与批次";
-        public static final String PRESSURE_LIMIT = "开拓增压额度不足或没有有效组门槛";
         public static final String TASK_STATE = "开拓任务的状态、时间、动作或经脉额度不匹配";
         public static final String ORGAN_ENDURANCE = "器官疲劳必须有对应的独立耐力能力且不能超限";
         public static final String RECEIPT = "开拓命令、规则、动作与释放回执不匹配";

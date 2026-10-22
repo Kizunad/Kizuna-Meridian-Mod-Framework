@@ -1,5 +1,6 @@
 package dev.kizuna.meridian.protocol;
 
+import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.BodyId;
 import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.Realm;
@@ -24,6 +25,37 @@ import java.util.function.Function;
 import static org.junit.Assert.*;
 
 public class BodyCommandHandlerTest {
+    @Test
+    public void addonProgressRequiresTrustedEntryAndSurvivesBodyChangesAndPersistence() {
+        // 普通网络权限即使宽泛也不能写进度；可信入口仍经过版本、原子提交和去重。
+        BodySnapshot initial = body();
+        var store = store(initial);
+        var handler = handler(store);
+        var progress = com.google.protobuf.Any.pack(com.google.protobuf.StringValue.of("learned"));
+        var request = MeridianMessages.RequestEnvelope.newBuilder().setProtocolVersion(1).setRequestId("progress")
+                .setBodyCommand(MeridianMessages.BodyCommand.newBuilder().setBodyId(initial.id().value())
+                        .setExpectedRevision(initial.revision())
+                        .setSetAddonProgress(MeridianMessages.SetAddonProgress.newBuilder().setId("sample:knowledge")
+                                .setProgress(progress))).build();
+        byte[] wire = MeridianProtocol.encodeRequest(request);
+        assertFailure(handler.handle("player", wire), MeridianMessages.FailureCode.ACCESS_DENIED);
+        byte[] committed = handler.handleAddonProgress("player", wire);
+        assertTrue(MeridianProtocol.decodeResponse(committed).hasCommandCommitted());
+        assertArrayEquals(committed, handler.handleAddonProgress("player", wire));
+        BodySnapshot saved = store.find(initial.id()).orElseThrow();
+        assertEquals(progress, saved.addonProgress().get("sample:knowledge"));
+        assertEquals(initial.totalQi(), saved.totalQi(), 0);
+        assertEquals(initial.vitality(), saved.vitality());
+        assertEquals(saved, BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(saved)));
+        handler.handle("player", request("after-learning", saved.revision(), 5));
+        assertEquals(saved.addonProgress(), store.find(initial.id()).orElseThrow().addonProgress());
+        var time = saved.settledAt();
+        var later = new dev.kizuna.meridian.core.TimeCursor(time.domain(), time.epoch(), time.elapsedMillis() + 1);
+        var plan = new dev.kizuna.meridian.core.BodyTimeAdvancement.Plan(later, 1,
+                dev.kizuna.meridian.core.BodyTimeAdvancement.Mode.ACTIVE);
+        assertEquals(saved.addonProgress(), dev.kizuna.meridian.core.BodyTimeAdvancement.apply(saved, plan).body().addonProgress());
+    }
+
     @Test
     public void debugQiIsOptInAtomicReservedAndReplayable() {
         // 广泛授权的旧宿主仍默认拒绝调试；开启后也不能抢占在途容量或重复注入。
@@ -51,7 +83,15 @@ public class BodyCommandHandlerTest {
         assertTrue(MeridianProtocol.decodeResponse(response).hasCommandCommitted());
         assertArrayEquals(response, allowed.handle("admin", wire));
         BodySnapshot filled = store.find(initial.id()).orElseThrow();
-        assertEquals(100 - initial.transitQiTotal(), filled.lumenQiTotal(), 1e-12);
+        double initialLumenVolume = initial.meridianStates().stream()
+                .mapToDouble(state -> state.lumenQi().volume()).sum();
+        double reservedVolume = initial.transits().stream()
+                .mapToDouble(transit -> transit.cargo().volume()).sum();
+        double availableVolume = initial.structure().meridians().stream()
+                .mapToDouble(Anatomy.MeridianDefinition::lumenVolume).sum()
+                - initialLumenVolume - reservedVolume;
+        double expectedLumenQi = initial.lumenQiTotal() + availableVolume * .01;
+        assertEquals(expectedLumenQi, filled.lumenQiTotal(), 1e-12);
         assertEquals(initial.transits(), filled.transits());
         assertEquals(initial.wallQiTotal(), filled.wallQiTotal(), 0);
         assertEquals(initial.meridianStates().get(0).opening(), filled.meridianStates().get(0).opening());
@@ -121,6 +161,22 @@ public class BodyCommandHandlerTest {
                 .setBodyCommand(otherRequest.getBodyCommand().toBuilder().setBodyId("other-body")).build());
         assertEquals("other-body", MeridianProtocol.decodeResponse(handler.handle("alice", otherPayload))
                 .getCommandCommitted().getBodyId());
+
+        // 批量恢复仍按身体与调用者隔离相同请求 ID，完整保留历史并拒绝重复记录。
+        var snapshots = List.of(store.find(initial.id()).orElseThrow(), store.find(other.id()).orElseThrow());
+        var receipts = store.receipts();
+        var restored = new InMemoryBodyStore(snapshots, receipts);
+        assertEquals(3, restored.receipts().size());
+        assertArrayEquals(original, handler(restored).handle("alice", request("same", 0, 5)));
+        assertEquals("other-body", MeridianProtocol.decodeResponse(handler(restored).handle("alice", otherPayload))
+                .getCommandCommitted().getBodyId());
+        assertEquals(snapshots.get(0), restored.find(initial.id()).orElseThrow());
+        assertEquals(snapshots.get(1), restored.find(other.id()).orElseThrow());
+        var duplicated = new java.util.ArrayList<>(receipts);
+        duplicated.add(receipts.get(0));
+        assertThrows(IllegalArgumentException.class, () -> new InMemoryBodyStore(snapshots, duplicated));
+        assertThrows(IllegalArgumentException.class, () -> new InMemoryBodyStore(List.of(snapshots.get(0)), receipts));
+        assertThrows(IllegalArgumentException.class, () -> new InMemoryBodyStore(List.of(initial, other), receipts));
     }
 
     @Test
@@ -273,21 +329,32 @@ public class BodyCommandHandlerTest {
     public void storageFailureBeforePublishRollsBackBothStateAndReceipt() {
         // 在 stage 成功之后、真正发布之前注入故障，验证回调异常不会留下半次成功。
         var store = store(body());
+        byte[] prior = handler(store).handle("player", request("prior", 0, 5));
+        var saved = store.find(body().id()).orElseThrow();
+        var savedReceipts = store.receipts();
         BodyTransactionStore failing = new BodyTransactionStore() {
             @Override
             public <T> T transact(BodyId bodyId, Function<Transaction, T> work) {
                 // 故障位于宿主事务内部，内存适配必须一起丢弃暂存快照和回执。
                 return store.transact(bodyId, tx -> {
                     work.apply(tx);
+                    // 暂存期间，包括可重入查询在内的读取只能看见此前已提交记录。
+                    assertTrue(tx.receipt("player", "one").isEmpty());
+                    assertEquals(savedReceipts, store.receipts());
+                    assertEquals(saved, store.find(bodyId).orElseThrow());
                     throw new IllegalStateException("commit-failed");
                 });
             }
         };
-        assertFailure(handler(failing).handle("player", request("one", 0, 5)), MeridianMessages.FailureCode.INTERNAL_ERROR);
-        assertEquals(body(), store.find(body().id()).orElseThrow());
+        assertFailure(handler(failing).handle("player", request("one", 1, 5)), MeridianMessages.FailureCode.INTERNAL_ERROR);
+        assertEquals(saved, store.find(body().id()).orElseThrow());
+        assertEquals(savedReceipts, store.receipts());
         assertTrue(store.transact(body().id(), tx -> tx.receipt("player", "one").isEmpty()));
-        assertTrue(MeridianProtocol.decodeResponse(handler(store).handle("player", request("one", 0, 5))).hasCommandCommitted());
-        assertEquals(1, store.find(body().id()).orElseThrow().revision());
+        assertTrue(MeridianProtocol.decodeResponse(handler(store).handle("player", request("one", 1, 5))).hasCommandCommitted());
+        assertEquals(2, store.find(body().id()).orElseThrow().revision());
+        assertEquals(1, savedReceipts.size());
+        assertEquals(2, store.receipts().size());
+        assertArrayEquals(prior, handler(store).handle("player", request("prior", 0, 5)));
     }
 
     @Test

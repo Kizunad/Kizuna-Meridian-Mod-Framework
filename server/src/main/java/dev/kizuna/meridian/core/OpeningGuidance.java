@@ -54,7 +54,7 @@ final class OpeningGuidance {
         Map<Object, Double> supplyReservations = organSupplyReservations(body, accounts, transits);
         var goals = new ArrayList<>(task.participants());
         goals.sort(Comparator.comparing(limit -> !limit.meridianId().equals(task.rule().targetMeridianId())));
-        for (MeridianOpeningRule.PressureLimit goal : goals) {
+        for (MeridianOpeningRule.GuidanceTarget goal : goals) {
             Optional<Dispatch> dispatch = planToGoal(task, accounts, transits, routes, supplyReservations, goal);
             if (dispatch.isPresent()) {
                 return dispatch;
@@ -65,27 +65,12 @@ final class OpeningGuidance {
 
     private static Optional<Dispatch> planToGoal(OpeningTask task, QiAccounts accounts, List<QiTransit> transits,
                                                 List<Anatomy.Connection> routes, Map<Object, Double> supplyReservations,
-                                                MeridianOpeningRule.PressureLimit goal) {
-        // 目标脉使用上下阈值补充缓冲；其他参与脉只需补足各自门槛。
-        boolean primaryTarget = goal.meridianId().equals(task.rule().targetMeridianId());
-        double desiredQi = goal.qi();
-        double refillThresholdQi = goal.qi();
-        if (primaryTarget) {
-            desiredQi += task.rule().guidanceBufferQi();
-            refillThresholdQi += task.rule().guidanceBufferQi() / 2;
-        }
-        double storedQi = accounts.meridian(goal.meridianId()).lumenQi().totalQi();
-        if (storedQi >= desiredQi - 1e-9 || storedQi > refillThresholdQi + 1e-9) {
+                                                MeridianOpeningRule.GuidanceTarget goal) {
+        // 引导只补足稳定空间内的目标占用；已在途的货物也预留该空间。
+        double desiredVolume = goal.volume();
+        double storedVolume = accounts.meridian(goal.meridianId()).lumenQi().volume();
+        if (storedVolume >= desiredVolume - 1e-9) {
             return Optional.empty();
-        }
-        if (primaryTarget && task.rule().guidanceBufferQi() > 0 && storedQi >= goal.qi() - 1e-9) {
-            // 已预约的补充先到货，避免每次外部查询都为路上这批再追加微量货物。
-            for (QiTransit transit : transits) {
-                Anatomy.Connection connection = accounts.connection(transit.connectionId());
-                if (accounts.endpoint(connection.to()).id().equals(goal.meridianId())) {
-                    return Optional.empty();
-                }
-            }
         }
 
         // 反向搜索给每个源固定无环下一跳；经脉原图仍可包含循环。
@@ -96,26 +81,24 @@ final class OpeningGuidance {
             if (nextHop.get(source.id()) != route) {
                 continue;
             }
-            double retainedQi = task.participants().stream()
+            double retainedVolume = task.participants().stream()
                     .filter(limit -> limit.meridianId().equals(source.id()))
-                    .mapToDouble(MeridianOpeningRule.PressureLimit::qi).findFirst().orElse(0);
-            if (source.id().equals(task.rule().targetMeridianId())) {
-                // 补其他参与脉时保留目标缓冲，避免引导自身抽走维持所需真元。
-                retainedQi += task.rule().guidanceBufferQi();
-            }
-            double movableQi = accounts.inventory(source).totalQi() - retainedQi;
+                    .mapToDouble(MeridianOpeningRule.GuidanceTarget::volume).findFirst().orElse(0);
+            double movableVolume = accounts.inventory(source).volume() - retainedVolume;
             QiTransport.DispatchCapacity capacity = QiTransport.availableCapacity(accounts, transits, source, target,
                     supplyReservations);
             double rate = Math.min(task.rule().guidanceQiPerSecond(), capacity.throughputPerSecond());
-            double amount = Math.min(task.rule().guidanceBatchQi(), Math.min(movableQi, capacity.targetQi()));
+            double availableVolume = Math.min(movableVolume, capacity.targetVolume());
             if (target.id().equals(goal.meridianId())) {
-                // 到目标的预约也算预期补足，防止多条路径同时发送同一缺额。
-                double incomingQi = target.capacity() - accounts.occupied(target) - capacity.targetQi();
-                amount = Math.min(amount, desiredQi - accounts.inventory(target).totalQi() - incomingQi);
+                double incomingVolume = target.capacity() - accounts.occupied(target) - capacity.targetVolume();
+                availableVolume = Math.min(availableVolume,
+                        desiredVolume - accounts.inventory(target).volume() - incomingVolume);
             }
-            if (rate > 1e-9 && amount > 1e-9) {
-                QiInventory cargo = take(accounts.inventory(source), amount);
-                return Optional.of(new Dispatch(route, new QiTransport.Request(route.id(), cargo, rate)));
+            if (rate > 1e-9 && availableVolume > 1e-9) {
+                QiInventory cargo = accounts.inventory(source).take(task.rule().guidanceBatchQi(), availableVolume);
+                if (cargo.totalQi() > 1e-9) {
+                    return Optional.of(new Dispatch(route, new QiTransport.Request(route.id(), cargo, rate)));
+                }
             }
         }
         return Optional.empty();
@@ -183,7 +166,7 @@ final class OpeningGuidance {
         for (Qi entry : inventory.entries()) {
             double amount = Math.min(entry.amount(), remaining);
             if (amount > 0) {
-                cargo.add(new Qi(entry.phase(), entry.attribute(), amount));
+                cargo.add(new Qi(entry.attribute(), amount, entry.density()));
                 remaining -= amount;
             }
             if (remaining <= 0) {

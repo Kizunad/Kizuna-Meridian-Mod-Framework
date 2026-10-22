@@ -1,0 +1,44 @@
+syntax = "proto3";
+package kizuna.meridian.v1;
+import "google/protobuf/any.proto";
+import "kizuna/meridian/v1/body.proto";
+import "kizuna/meridian/v1/health.proto";
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "ActivityMessages";
+
+// 仅可信附属提交的原子执行计划。客户端只提交附属意图，不能上传此计划。
+message BodyActivity {
+  repeated QiAccountChange accounts = 1;
+  repeated CircuitChange circuits = 2;
+  repeated ActivityEffort efforts = 3;
+  repeated CompleteMeridian completions = 4;
+  optional Realm realm = 5;
+  map<string, google.protobuf.Any> progress = 6;
+  QiInventory released_qi = 7;
+  repeated ActivityRecipe recipes = 8;
+  repeated ActivityAction start_actions = 9;
+  repeated string stop_actions = 10;
+  repeated MeridianInjury meridian_injuries = 11;
+  DamageResolution damage = 12;
+}
+message QiAccountChange {
+  oneof account {
+    string lumen_id = 1;
+    string wall_id = 2;
+    string organ_id = 3;
+  }
+  QiInventory expected = 4;
+  QiInventory replacement = 5;
+}
+message CircuitChange {
+  string id = 1;
+  QiTransit replacement = 2; // 缺省表示结束；结束时必须交还或释放原货物。
+}
+message ActivityEffort {
+  oneof module { string tissue_id = 1; string organ_id = 2; }
+  double watts = 3;
+  double seconds = 4;
+}
+message CompleteMeridian { string meridian_id = 1; double added_volume = 2; }
+message ActivityRecipe { string organ_id = 1; OrganRecipe recipe = 2; }
+message ActivityAction { string instance_id = 1; ActionDefinition definition = 2; }

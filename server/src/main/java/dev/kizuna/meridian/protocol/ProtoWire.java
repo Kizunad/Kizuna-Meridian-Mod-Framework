@@ -85,6 +85,11 @@ final class ProtoWire {
                     || field.getFullName().equals("kizuna.meridian.v1.BreathingProfile.body_action")
                     || field.getFullName().equals("kizuna.meridian.v1.OpeningPolicyDecision.next_check_delay_millis")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganState.process")
+                    || field.getFullName().equals("kizuna.meridian.v1.QiTransit.circuit")
+                    || field.getFullName().equals("kizuna.meridian.v1.BodyActivity.realm")
+                    || field.getFullName().equals("kizuna.meridian.v1.BodyActivity.damage")
+                    || field.getFullName().equals("kizuna.meridian.v1.BodyActivity.released_qi")
+                    || field.getFullName().equals("kizuna.meridian.v1.CircuitChange.replacement")
                     || field.getFullName().equals("kizuna.meridian.v1.BreathControl.aim_z")
                     || field.getFullName().equals("kizuna.meridian.v1.DebugQi.amount")) && !message.hasField(field)) {
                 // 仅跳过契约明确允许省略的字段；吐纳深度由执行方补为入口所在平面。

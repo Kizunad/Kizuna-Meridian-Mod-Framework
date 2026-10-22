@@ -1,6 +1,6 @@
 package dev.kizuna.meridian.core;
 
-/** 六境的目标容量比与基础主动任务位。 */
+/** 六境的相态基准密度与基础主动任务位；既有容量比数值沿用为基准密度。 */
 public enum Realm {
     /** 游炁：炁在脉中零散游走，和外界的游离灵气是同一种状态。 */
     WANDERING_QI(0.01, 1),
@@ -19,14 +19,20 @@ public enum Realm {
     private final int controlTasks;
 
     Realm(double capacityRatio, int controlTasks) {
-        // 保存各境的目标容量比和基础主动任务位数。
+        // 原容量比现解释为液态参照下的相态基准密度。
         this.capacityRatio = capacityRatio;
         this.controlTasks = controlTasks;
     }
 
     public double capacityRatio() {
-        // 返回相对于理论液态参照的目标容量比，不是真元余额。
+        // 保留公开名称与数值；返回该境相态的基准密度，不表示结构容量。
         return capacityRatio;
+    }
+
+    public static Qi.QiPhase phaseAtDensity(double density) {
+        // 与客户端采用同一边界，避免界面相态与服务端判定不一致。
+        var phase = dev.kizuna.meridian.protocol.QiDensity.phase(density);
+        return Qi.QiPhase.valueOf(phase.name());
     }
 
     public int controlTasks() {

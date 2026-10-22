@@ -165,6 +165,6 @@ public class EnvironmentProtobufTest {
     private static BodyMessages.QiInventory inventory(BodyMessages.QiPhase phase, String attribute, double amount) {
         // 夹具使用线协议构造明细，使非法消息能够直接进入边界校验。
         return BodyMessages.QiInventory.newBuilder().addEntries(BodyMessages.Qi.newBuilder()
-                .setPhase(phase).setAttribute(attribute).setAmount(amount)).build();
+                .setDensity(QiDensity.baseline(phase)).setAttribute(attribute).setAmount(amount)).build();
     }
 }

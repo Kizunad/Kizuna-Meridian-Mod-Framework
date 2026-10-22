@@ -52,8 +52,8 @@ public class QiTransportTest {
         var clock = new AtomicLong(1000);
         var store = new InMemoryBodyStore(List.of(initial), List.of());
         var handler = handler(store, clock);
-        var cargo = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 1),
-                new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("addon:lava"), 1)));
+        var cargo = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, 1, .01),
+                new Qi(Qi.QiAttribute.of("addon:lava"), 1, 10)));
         var payload = send("send", 0, request("a.b", cargo, 2));
         var response = handler.handle("host", payload);
         committed(response);
@@ -162,7 +162,7 @@ public class QiTransportTest {
         // 阻力使批次更慢；固态不额外增加阻力，所有相态使用同一公式。
         var initial = body();
         var normal = QiTransport.start(initial, request("a.b", free(2), 2));
-        var solid = new QiInventory(List.of(new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("addon:lava"), 2)));
+        var solid = new QiInventory(List.of(new Qi(Qi.QiAttribute.of("addon:lava"), 2, 10)));
         assertEquals(normal.transits().get(0).arrivalMillis(),
                 QiTransport.start(initial, request("a.b", solid, 2)).transits().get(0).arrivalMillis());
         var message = BodyProtobuf.toMessage(initial);
@@ -209,7 +209,7 @@ public class QiTransportTest {
         // 目标大余额吞掉整笔微量入账时不能删掉在途货物，整次时间推进应拒绝。
         var hugeTarget = BodyProtobuf.fromMessage(message.toBuilder()
                 .setStructure(message.getStructure().toBuilder().setMeridians(1,
-                        message.getStructure().getMeridians(1).toBuilder().setLumenCapacity(1e18)))
+                        message.getStructure().getMeridians(1).toBuilder().setLumenVolume(2e18)))
                 .setMeridianStates(1, message.getMeridianStates(1).toBuilder().setLumenQi(BodyProtobuf.toInventory(free(1e16))))
                 .build());
         var moving = QiTransport.start(hugeTarget, request("a.b", free(1), 1));
@@ -276,11 +276,11 @@ public class QiTransportTest {
     @Test
     public void wireContractRejectsInvalidCargoAndImpossibleTransitStates() {
         // 固定独立字节锁定 transport_qi 的字段号、货物结构和流量单位。
-        var cargo = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.of("x:q"), 1)));
+        var cargo = new QiInventory(List.of(new Qi(Qi.QiAttribute.of("x:q"), 1, .01)));
         var envelope = MeridianProtocol.decodeRequest(send("q1", 0, request("a.b", cargo, 1))).toBuilder();
         envelope.setBodyCommand(envelope.getBodyCommand().toBuilder().setBodyId("body-1"));
         var fixture = HexFormat.of().parseHex(
-                "0801120271315a2e0a06626f64792d31100062220a03612e6212120a1008011203783a7119000000000000f03f19000000000000f03f");
+                "0801120271315a350a06626f64792d31100062290a03612e6212190a171203783a7119000000000000f03f217b14ae47e17a843f19000000000000f03f");
         assertArrayEquals(fixture, MeridianProtocol.encodeRequest(envelope.build()));
         assertEquals(envelope.build(), MeridianProtocol.decodeRequest(fixture));
         var command = envelope.getBodyCommand();
@@ -312,8 +312,8 @@ public class QiTransportTest {
         var structure = new BodyStructure(List.of(new Anatomy.PartDefinition(part, "外壳", 100)),
                 List.of(), List.of(), definitions,
                 List.of(connection("a", "b"), connection("c", "b"), connection("b", "a"), connection("a", "c")));
-        var mixed = new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, 10),
-                new Qi(Qi.QiPhase.SOLID, Qi.QiAttribute.of("addon:lava"), 10)));
+        var mixed = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, 10, .01),
+                new Qi(Qi.QiAttribute.of("addon:lava"), 10, 10)));
         return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("transport-body"),
                 new BodyTemplate.Reference(new DefinitionId("sample:transport"), 1), structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(part, 100)), List.of(), List.of(),
@@ -322,9 +322,9 @@ public class QiTransportTest {
     }
 
     private static Anatomy.MeridianDefinition meridian(String id, Anatomy.PartId part, double capacity, double rate) {
-        // 可双向端口用于验证收发共享经脉吞吐，外壁容量独立定义。
-        return new Anatomy.MeridianDefinition(new Anatomy.MeridianId(id), id, List.of(part), capacity, 20,
-                100, 100, rate, 10, 20,
+        // 参数按游离态下的等效元数配置；实际结构只保存液态参照体积。
+        return new Anatomy.MeridianDefinition(new Anatomy.MeridianId(id), id, List.of(part), capacity * 100, 2_000,
+                rate, 10, 20,
                 List.of(new Anatomy.Port(new Anatomy.PortId(id + ".port"), Anatomy.PortDirection.BIDIRECTIONAL)));
     }
 
@@ -342,7 +342,7 @@ public class QiTransportTest {
 
     private static QiInventory free(double amount) {
         // 正数纯无属性货物便于检查容量与吞吐；零余额使用空账户。
-        return amount == 0 ? QiInventory.empty() : new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, amount)));
+        return amount == 0 ? QiInventory.empty() : new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, amount, .01)));
     }
 
     private static QiTransport.Request request(String route, QiInventory cargo, double rate) {

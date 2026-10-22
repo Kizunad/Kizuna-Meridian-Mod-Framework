@@ -1,0 +1,90 @@
+// 所有 Fabric 开发入口使用同一套安装产物；源码依赖仍由各仓库独立声明。
+// localRuntime 只装配本工程运行环境，不沿 composite 的发布变体再次传递整套 JAR。
+// 先构建各仓库安装 JAR，再运行客户端或 GameTest。不存在缺包启动模式。
+def codeDirectory = rootProject.projectDir.parentFile
+repositories { maven { url = 'https://maven.wispforest.io/releases' } }
+def modules = [
+    'kizuna-meridian-human-addon': 'Kizuna-Meridian-Human-Addon/fabric/build/libs/kizuna-meridian-human-addon-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-ui-addon': 'Kizuna-Meridian-UI-Addon/client/build/libs/kizuna-meridian-ui-addon-client-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-human-ui-addon': 'Kizuna-Meridian-Human-UI-Addon/client/build/libs/kizuna-meridian-human-ui-addon-client-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-vanilla-damage-addon': 'Kizuna-Meridian-Vanilla-Damage-Addon/fabric/build/libs/kizuna-meridian-vanilla-damage-addon-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/fabric/build/libs/kizuna-meridian-vanilla-healing-addon-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-players-animation': 'Kizuna-Players-Animation/build/libs/kizuna-players-animation-0.1.0-SNAPSHOT.jar'
+]
+modules.each { repository, artifact ->
+    // 当前工程使用源码输出；Healing 已通过 composite 构建提供 Damage，避免重复加载。
+    boolean builtFromSource = repository == rootProject.name ||
+            (rootProject.name == 'kizuna-meridian-vanilla-healing-addon' && repository == 'kizuna-meridian-vanilla-damage-addon')
+    if (!builtFromSource) {
+        dependencies.add('modLocalRuntime', files(new File(codeDirectory, artifact)))
+    }
+}
+def progressionArtifacts = [
+    fabric: 'Kizuna-Meridian-Progression-Addon/fabric/build/libs/kizuna-meridian-progression-addon-fabric-0.1.0-SNAPSHOT.jar',
+    client: 'Kizuna-Meridian-Progression-Addon/client/build/libs/kizuna-meridian-progression-addon-client-0.1.0-SNAPSHOT.jar'
+]
+progressionArtifacts.each { module, artifact ->
+    // 同仓的 common 和 client 是不同源码入口，不能按 rootProject 一起跳过。
+    if (!(rootProject.name == 'kizuna-meridian-progression-addon' && project.name == module)) {
+        def runtimeArtifact = files(new File(codeDirectory, artifact))
+        if (rootProject.name == 'kizuna-meridian-progression-addon') {
+            // 同仓产物必须声明任务依赖，build 与 GameTest 同次执行也不能读取尚未打包的文件。
+            runtimeArtifact.builtBy(":${module}:remapJar")
+        }
+        dependencies.add('modLocalRuntime', runtimeArtifact)
+    }
+}
+dependencies {
+    localRuntime files(new File(codeDirectory, 'Kizuna-Meridian-Human-Addon/shared/build/libs/kizuna-meridian-human-addon-shared-0.1.0-SNAPSHOT.jar'))
+    modLocalRuntime files(new File(codeDirectory, 'Kizuna-Inventory-UI-Framework/build/libs/kizuna-inventory-ui-framework-0.1.0-SNAPSHOT.jar'))
+    modLocalRuntime files(new File(codeDirectory, 'Kizuna-Inventory-UI-Framework/server/build/libs/kizuna-inventory-ui-framework-server-0.1.0-SNAPSHOT.jar'))
+    modLocalRuntime 'io.wispforest:owo-lib:0.11.2+1.20'
+    // BS3D 声明服务端 Fabric 入口；Items 当前为宿主库，没有独立模组 ID。
+    modLocalRuntime files(new File(codeDirectory, 'backpack-and-storage-3D/server/build/libs/backpack-storage-3d-server-0.1.0-SNAPSHOT.jar'))
+    modLocalRuntime files(new File(codeDirectory, 'backpack-and-storage-3D/client/build/libs/backpack-storage-3d-client-0.1.0-SNAPSHOT.jar'))
+    localRuntime files(new File(codeDirectory, 'Kizuna-Meridian-Items-Addon/build/devlibs/kizuna-meridian-items-addon-0.1.0-SNAPSHOT-dev.jar'))
+    if (rootProject.name == 'kizuna-meridian-progression-addon') {
+        // 本仓通过文件调用公共库，开发运行需显式补齐安装时的嵌套核心和 TOML 依赖。
+        localRuntime files(new File(codeDirectory, 'Kizuna-Meridian-Mod-Framework/server/build/libs/kizuna-meridian-mod-framework-server-0.1.0-SNAPSHOT.jar'))
+        localRuntime 'org.tomlj:tomlj:1.1.1'
+        localRuntime 'org.antlr:antlr4-runtime:4.11.1'
+    }
+    if (rootProject.name != 'kizuna-meridian-progression-addon' || project.name == 'client') {
+        localRuntime files(new File(codeDirectory, 'Kizuna-Meridian-Progression-Addon/server/build/libs/kizuna-meridian-progression-addon-server-0.1.0-SNAPSHOT.jar'))
+    }
+    if (rootProject.name != 'kizuna-meridian-progression-addon') {
+        localRuntime files(new File(codeDirectory, 'Kizuna-Meridian-Progression-Addon/shared/build/libs/kizuna-meridian-progression-addon-shared-0.1.0-SNAPSHOT.jar'))
+    }
+}
+
+// Loom 的开发重映射不保留安装 JAR 的嵌套库，须显式提供其他仓库的纯 Java 服务端类。
+def serverLibraries = [
+    'kizuna-meridian-human-addon': 'Kizuna-Meridian-Human-Addon/server/build/libs/kizuna-meridian-human-addon-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-ui-addon': 'Kizuna-Meridian-UI-Addon/server/build/libs/kizuna-meridian-ui-addon-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-vanilla-damage-addon': 'Kizuna-Meridian-Vanilla-Damage-Addon/server/build/libs/kizuna-meridian-vanilla-damage-addon-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/server/build/libs/kizuna-meridian-vanilla-healing-addon-server-0.1.0-SNAPSHOT.jar'
+]
+serverLibraries.each { repository, artifact ->
+    boolean builtFromSource = repository == rootProject.name ||
+            (rootProject.name == 'kizuna-meridian-vanilla-healing-addon' && repository == 'kizuna-meridian-vanilla-damage-addon')
+    if (!builtFromSource) {
+        dependencies.add('localRuntime', files(new File(codeDirectory, artifact)))
+    }
+}
+
+tasks.withType(JavaExec).configureEach {
+    // 开发客户端和 GameTest 与框架共同使用 Java 17，不跟随 Gradle 守护进程版本。
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    doFirst {
+        // 文件依赖缺失不会被 Gradle 自动拒绝，开发运行前必须检查整套安装产物。
+        def required = modules.values().collect { new File(codeDirectory, it) }
+        required.addAll(progressionArtifacts.values().collect { new File(codeDirectory, it) })
+        required.addAll(serverLibraries.values().collect { new File(codeDirectory, it) })
+        required.add(new File(codeDirectory, 'Kizuna-Meridian-Items-Addon/build/libs/kizuna-meridian-items-addon-0.1.0-SNAPSHOT.jar'))
+        required.each { artifact ->
+            if (!artifact.isFile()) {
+                throw new GradleException("缺少完整装配产物，请先构建对应仓库：${artifact}")
+            }
+        }
+    }
+}

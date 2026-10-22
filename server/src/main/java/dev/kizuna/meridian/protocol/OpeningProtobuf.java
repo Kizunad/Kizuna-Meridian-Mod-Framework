@@ -22,12 +22,11 @@ public final class OpeningProtobuf {
 
         return new MeridianOpeningRule(new DefinitionId(message.getId()), message.getVersion(), message.getDisplayName(),
                 new Anatomy.MeridianId(message.getTargetMeridianId()),
-                BodyProtobuf.fromInventory(message.getMinimumLumenQi()),
                 new DefinitionId(message.getActionId()), message.getActionVersion(),
                 message.getEffortsList().stream().map(OpeningProtobuf::fromEffort).toList(),
                 message.getContinuousHold(),
-                message.getLumenCapacityGain(), message.getGuidanceQiPerSecond(), message.getGuidanceBatchQi(),
-                message.getHoldQiPerSecond(), message.getGuidanceBufferQi(),
+                message.getLumenVolumeGain(), message.getGuidanceQiPerSecond(), message.getGuidanceBatchQi(),
+                message.getHoldQiPerSecond(),
                 new DefinitionId(message.getPolicyId()), message.getPolicyConfig());
     }
 
@@ -36,13 +35,11 @@ public final class OpeningProtobuf {
         var builder = BodyMessages.MeridianOpeningRule.newBuilder()
                 .setId(rule.id().value()).setVersion(rule.version()).setDisplayName(rule.displayName())
                 .setTargetMeridianId(rule.targetMeridianId().value())
-                .setMinimumLumenQi(BodyProtobuf.toInventory(rule.minimumLumenQi()))
                 .setActionId(rule.actionId().value()).setActionVersion(rule.actionVersion())
                 .setContinuousHold(rule.continuousHold())
-                .setLumenCapacityGain(rule.lumenCapacityGain()).setGuidanceQiPerSecond(rule.guidanceQiPerSecond())
+                .setLumenVolumeGain(rule.lumenVolumeGain()).setGuidanceQiPerSecond(rule.guidanceQiPerSecond())
                 .setGuidanceBatchQi(rule.guidanceBatchQi())
                 .setHoldQiPerSecond(rule.holdQiPerSecond())
-                .setGuidanceBufferQi(rule.guidanceBufferQi())
                 .setPolicyId(rule.policyId().value())
                 .setPolicyConfig(rule.policyConfig())
                 .addAllEfforts(rule.efforts().stream().map(OpeningProtobuf::toEffort).toList());
@@ -91,10 +88,10 @@ public final class OpeningProtobuf {
     }
 
     public static OpeningTask fromTask(BodyMessages.OpeningTask message) {
-        // 恢复任务只读取固定事实；身体关联和临时超压上限由 BodySnapshot 进一步检查。
+        // 恢复任务只读取固定事实；身体关联与稳定体积由 BodySnapshot 进一步检查。
         return new OpeningTask(fromRule(message.getRule()), message.getActionInstanceId(),
                 message.getParticipantsList().stream().map(OpeningProtobuf::fromLimit).toList(),
-                message.getRequiredMillis(), message.getTargetStableCapacity(), message.getStartedMillis(),
+                message.getRequiredMillis(), message.getTargetStableVolume(), message.getStartedMillis(),
                 message.getHeldMillis(), OpeningTask.Status.valueOf(message.getStatus().name().substring("OPENING_".length())),
                 message.getIntakeSamplesList().stream().map(sample -> new OpeningTask.IntakeSample(
                         new Anatomy.OrganId(sample.getOrganId()), sample.getAtMillis(), sample.getQi())).toList(),
@@ -106,7 +103,7 @@ public final class OpeningProtobuf {
         return BodyMessages.OpeningTask.newBuilder().setRule(toRule(task.rule()))
                 .setActionInstanceId(task.actionInstanceId())
                 .addAllParticipants(task.participants().stream().map(OpeningProtobuf::toLimit).toList())
-                .setRequiredMillis(task.requiredMillis()).setTargetStableCapacity(task.targetStableCapacity())
+                .setRequiredMillis(task.requiredMillis()).setTargetStableVolume(task.targetStableVolume())
                 .setStartedMillis(task.startedMillis()).setHeldMillis(task.heldMillis())
                 .addAllObservedOrganIds(task.observedOrganIds().stream().map(Anatomy.OrganId::value).toList())
                 .setReceiptWindowMillis(task.receiptWindowMillis())
@@ -135,14 +132,14 @@ public final class OpeningProtobuf {
         return decision;
     }
 
-    private static MeridianOpeningRule.PressureLimit fromLimit(BodyMessages.OpeningPressureLimit value) {
-        // 额度明细绑定经脉实例。
-        return new MeridianOpeningRule.PressureLimit(new Anatomy.MeridianId(value.getMeridianId()), value.getQi());
+    private static MeridianOpeningRule.GuidanceTarget fromLimit(BodyMessages.OpeningGuidanceTarget value) {
+        // 引导目标绑定经脉实例，目标体积不改变该经脉的容量。
+        return new MeridianOpeningRule.GuidanceTarget(new Anatomy.MeridianId(value.getMeridianId()), value.getVolume());
     }
 
-    private static BodyMessages.OpeningPressureLimit toLimit(MeridianOpeningRule.PressureLimit value) {
-        // 临时额度与真实余额分开编码。
-        return BodyMessages.OpeningPressureLimit.newBuilder().setMeridianId(value.meridianId().value()).setQi(value.qi()).build();
+    private static BodyMessages.OpeningGuidanceTarget toLimit(MeridianOpeningRule.GuidanceTarget value) {
+        // 引导目标与实际库存分开编码，避免把期望占用当作已有真元。
+        return BodyMessages.OpeningGuidanceTarget.newBuilder().setMeridianId(value.meridianId().value()).setVolume(value.volume()).build();
     }
 
     private static MeridianOpeningRule.Effort fromEffort(BodyMessages.OpeningEffort value) {

@@ -47,7 +47,7 @@
 
 | 消息 | 字段 | 含义 |
 |---|---|---|
-| `EnvironmentQiOffer` | `protocol_version` | 当前为 1，与身体 schema 2 和账户 revision 独立 |
+| `EnvironmentQiOffer` | `protocol_version` | 当前为 1，与身体 schema 3 和账户 revision 独立 |
 | 供给 | `source_id`、`source_revision` | 宿主内跨世界唯一、永久不复用的来源身份，以及非负权威版本 |
 | 供给 | `body_id` | 该份供给适用的身体，不能挪给另一具身体 |
 | 供给 | `available_qi` | 当前版本允许本次吸收的逐相态、逐属性上限，单位元；可为空 |

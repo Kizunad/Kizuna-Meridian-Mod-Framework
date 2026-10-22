@@ -10,6 +10,8 @@ import java.util.function.Function;
 
 /** 数据值校验，不包含伤害、成长或宿主权限规则。 */
 final class DataChecks {
+    private static final java.util.regex.Pattern LOCAL_ID = java.util.regex.Pattern.compile("[a-z0-9_.-]+");
+
     private DataChecks() {
         // 校验仅使用静态方法，不需要工具类实例。
     }
@@ -22,8 +24,8 @@ final class DataChecks {
     }
 
     static void localId(String value) {
-        // 局部 ID 属于单具身体，跨内容包的命名空间由 DefinitionId 负责。
-        if (value == null || !value.matches("[a-z0-9_.-]+")) {
+        // 高频身体校验复用格式规则；局部ID不接受跨内容包的命名空间。
+        if (value == null || !LOCAL_ID.matcher(value).matches()) {
             throw MeridianErrors.invalid(Data.LOCAL_ID_FORMAT);
         }
     }

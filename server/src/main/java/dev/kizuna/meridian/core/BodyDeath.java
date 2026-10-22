@@ -30,7 +30,8 @@ public final class BodyDeath {
         for (AnatomyState.Organ organ : organs) {
             inventories.add(organ.buffer());
             if (organ.process() != null) {
-                inventories.add(organ.process().recipe().input());
+                // 加工开始时已经按实际密度扣下原料；死亡释放这笔真实原料，不能重新读取配方模板。
+                inventories.add(organ.process().input());
             }
             clearedOrgans.add(new AnatomyState.Organ(organ.id(), organ.hp(), QiInventory.empty(), null, organ.fatigueJoules()));
         }

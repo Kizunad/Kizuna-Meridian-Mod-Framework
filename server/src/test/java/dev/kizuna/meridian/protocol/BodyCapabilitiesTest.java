@@ -108,7 +108,7 @@ public class BodyCapabilitiesTest {
         var initial = body(6);
         var message = BodyProtobuf.toMessage(initial);
         initial = BodyProtobuf.fromMessage(message.toBuilder().setStructure(message.getStructure().toBuilder()
-                .setOrgans(0, message.getStructure().getOrgans(0).toBuilder().setQiCapacity(8))).build());
+                .setOrgans(0, message.getStructure().getOrgans(0).toBuilder().setVolumeCapacity(800))).build());
         var running = OrganProcessing.start(initial, ORGAN, recipe());
         var fed = QiTransport.start(running, transfer("channel.organ", qi(2)));
         assertEquals(MeridianErrors.TransportRejectionReason.CAPACITY_EXCEEDED,
@@ -162,7 +162,7 @@ public class BodyCapabilitiesTest {
                 new OrganRecipe(recipe().id(), 1, recipe().organKind(), qi(4), fire(2), 5000, Realm.TRUE_QI));
         var message = BodyProtobuf.toMessage(running);
         var changed = BodyProtobuf.fromMessage(message.toBuilder().setStructure(message.getStructure().toBuilder()
-                        .setOrgans(0, message.getStructure().getOrgans(0).toBuilder().setQiCapacity(4)))
+                        .setOrgans(0, message.getStructure().getOrgans(0).toBuilder().setVolumeCapacity(400)))
                 .addTransits(BodyMessages.QiTransit.newBuilder().setId("imported").setConnectionId("channel.organ")
                         .setCargo(BodyProtobuf.toInventory(qi(2))).setArrivalMillis(3000).setThroughputPerSecond(1)
                         .setStatus(BodyMessages.TransitStatus.MOVING)).build());
@@ -285,12 +285,12 @@ public class BodyCapabilitiesTest {
 
     private static QiInventory qi(double amount) {
         // 空余额使用空账户，不制造零数量明细。
-        return amount == 0 ? QiInventory.empty() : new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, amount)));
+        return amount == 0 ? QiInventory.empty() : new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, amount, .01)));
     }
 
     private static QiInventory fire(double amount) {
         // 属性产物仍是可输送的真元，测试不生成世界中的火焰实体。
-        return new QiInventory(List.of(new Qi(Qi.QiPhase.GAS, Qi.QiAttribute.FIRE, amount)));
+        return new QiInventory(List.of(new Qi(Qi.QiAttribute.FIRE, amount, .1)));
     }
 
     private static BodyTimeAdvancement.Plan plan(long time, BodyTimeAdvancement.Mode mode) {

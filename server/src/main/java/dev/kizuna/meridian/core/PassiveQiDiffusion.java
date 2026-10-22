@@ -39,8 +39,14 @@ public final class PassiveQiDiffusion {
             // 开脉期间由专用引导接管经脉流向，避免自然压差立即把增压真元抽离。
             return List.of();
         }
+        var guided = body.actions().stream().flatMap(action -> action.definition().guidedMeridianIds().stream())
+                .collect(java.util.stream.Collectors.toSet());
+        var controlledPorts = body.structure().meridians().stream().filter(item -> guided.contains(item.id()))
+                .flatMap(item -> item.ports().stream()).map(Anatomy.Port::id)
+                .collect(java.util.stream.Collectors.toSet());
         return body.structure().connections().stream()
                 .filter(connection -> connection.passiveQiFlow() != null)
+                .filter(connection -> !controlledPorts.contains(connection.from()) && !controlledPorts.contains(connection.to()))
                 .sorted(Comparator.comparing(connection -> connection.id().value()))
                 .toList();
     }
@@ -78,40 +84,27 @@ public final class PassiveQiDiffusion {
         QiTransport.DispatchCapacity capacity = QiTransport.availableCapacity(accounts, transits, source, target);
         double throughputPerSecond = Math.min(flow.throughputPerSecond(), capacity.throughputPerSecond());
         if (throughputPerSecond <= 0 || sourceQi.totalQi() < flow.minimumBatchQi()
-                || capacity.targetQi() < flow.minimumBatchQi()) {
+                || capacity.targetVolume() <= 0) {
             return Optional.empty();
         }
 
         // 2. 以局部储量占比模拟压差。目标的入向预约已经占容，源的未到货不能拿来发送。
-        double sourceFraction = sourceQi.totalQi() / source.capacity();
-        double targetFraction = 1 - capacity.targetQi() / target.capacity();
+        double sourceFraction = sourceQi.volume() / source.capacity();
+        double targetFraction = 1 - capacity.targetVolume() / target.capacity();
         double fractionDifference = sourceFraction - targetFraction;
         if (fractionDifference <= 0) {
             return Optional.empty();
         }
         double smallerCapacity = Math.min(source.capacity(), target.capacity());
         double largerCapacity = Math.max(source.capacity(), target.capacity());
-        double equalizingQi = fractionDifference * smallerCapacity / (1 + smallerCapacity / largerCapacity);
-        double transferQi = Math.min(equalizingQi, flow.maximumBatchQi());
-        transferQi = Math.min(transferQi, Math.min(sourceQi.totalQi(), capacity.targetQi()));
-        if (transferQi < flow.minimumBatchQi()) {
+        double equalizingVolume = fractionDifference * smallerCapacity / (1 + smallerCapacity / largerCapacity);
+        QiInventory cargo = sourceQi.take(flow.maximumBatchQi(), Math.min(equalizingVolume, capacity.targetVolume()));
+        if (cargo.totalQi() < flow.minimumBatchQi()) {
             // 有限阈值避免循环图在接近平衡后产生无限小批次；余额完整留在原账户。
             return Optional.empty();
         }
 
-        // 3. 按账户明细顺序取货，保留每种相态与属性；调度本身不炼化、不产生真元。
-        var cargo = new ArrayList<Qi>();
-        double remainingQi = transferQi;
-        for (Qi entry : sourceQi.entries()) {
-            double amount = Math.min(entry.amount(), remainingQi);
-            if (amount > 0) {
-                cargo.add(new Qi(entry.phase(), entry.attribute(), amount));
-                remainingQi -= amount;
-            }
-            if (remainingQi <= 0) {
-                break;
-            }
-        }
-        return Optional.of(new QiTransport.Request(connection.id(), new QiInventory(cargo), throughputPerSecond));
+        // 调度只搬运原货物，批次和耗时仍按元计，不在路上改变密度。
+        return Optional.of(new QiTransport.Request(connection.id(), cargo, throughputPerSecond));
     }
 }

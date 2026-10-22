@@ -27,9 +27,11 @@ message OpeningPolicyDecision {
   int32 protocol_version = 1;
   FailureCode rejection = 2;
   bool ready = 3;
-  repeated OpeningPressureLimit participants = 4;
+  repeated OpeningGuidanceTarget participants = 4;
   int64 required_millis = 5;
-  double target_stable_capacity = 6;
+  reserved 6;
+  reserved "target_stable_capacity";
+  double target_stable_volume = 10;
   optional int64 next_check_delay_millis = 7; // 必须为正；缺省表示只等待其他身体事件。
   repeated string observed_organ_ids = 8; // 仅订阅成功提交的真实摄入收据。
   int64 receipt_window_millis = 9; // 收据保存窗口，不新增资源账户。

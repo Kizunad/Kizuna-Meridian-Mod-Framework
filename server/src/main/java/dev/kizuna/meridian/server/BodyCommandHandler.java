@@ -129,27 +129,46 @@ public final class BodyCommandHandler<C> {
 
     public byte[] handle(C trustedContext, byte[] payload) {
         // 普通协议入口不接受客户端宣称命中；接触事件必须由可信宿主单独提交。
-        return handle(trustedContext, payload, false, false);
+        return handle(trustedContext, payload, false, false, false);
     }
 
     public byte[] handleCapturedQi(C trustedContext, byte[] payload) {
         // 仅供已完成权威碰撞检查的宿主调用，仍经过身份、私有策略与原子事务。
-        return handle(trustedContext, payload, true, false);
+        return handle(trustedContext, payload, true, false, false);
     }
 
     public byte[] handleHealthEffect(C trustedContext, byte[] payload) {
         // 宿主确认攻击或治疗来源后使用此入口；不注册成接受玩家自报剂量的网络处理器。
-        return handle(trustedContext, payload, false, true);
+        return handle(trustedContext, payload, false, true, false);
     }
 
-    private byte[] handle(C trustedContext, byte[] payload, boolean trustedCapture, boolean trustedHealth) {
+    public byte[] handleAddonProgress(C trustedContext, byte[] payload) {
+        // 可信附属校验进度含义后提交；普通网络不能调用此入口写解锁事实。
+        return handle(trustedContext, payload, false, false, true);
+    }
+
+    public byte[] handleActivity(C trustedContext, byte[] payload) {
+        // 只由可信附属策略调用；网络层不能把客户端计划转交此入口。
+        return handle(trustedContext, payload, false, false, false, true);
+    }
+
+    private byte[] handle(C trustedContext, byte[] payload, boolean trustedCapture, boolean trustedHealth,
+                          boolean trustedProgress) {
+        // 既有入口默认拒绝活动计划，避免新增权限隐式扩散。
+        return handle(trustedContext, payload, trustedCapture, trustedHealth, trustedProgress, false);
+    }
+
+    private byte[] handle(C trustedContext, byte[] payload, boolean trustedCapture, boolean trustedHealth,
+                          boolean trustedProgress, boolean trustedActivity) {
         // 解析失败不进入业务异常分支，避免从不可信字节伪造关联 ID 或调用宿主。
         var request = MeridianProtocol.decodeRequest(payload);
         if (!request.hasBodyCommand()) {
             throw MeridianErrors.invalid(Host.COMMAND_ONLY);
         }
         if (request.getBodyCommand().hasCaptureQi() != trustedCapture
-                || HealthProtobuf.isHealthCommand(request.getBodyCommand()) != trustedHealth) {
+                || HealthProtobuf.isHealthCommand(request.getBodyCommand()) != trustedHealth
+                || request.getBodyCommand().hasSetAddonProgress() != trustedProgress
+                || request.getBodyCommand().hasExecuteActivity() != trustedActivity) {
             return failure(request.getRequestId(), MeridianMessages.FailureCode.ACCESS_DENIED);
         }
         if (trustedContext == null) {
@@ -239,7 +258,7 @@ public final class BodyCommandHandler<C> {
         try {
             // 瞬时发运、加工启动和做功使用已结算时刻；摄入自身消费可信活动区间。
             if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue() || command.hasExertTissues()
-                    || command.hasCaptureQi()
+                    || command.hasCaptureQi() || command.hasExecuteActivity()
                     || HealthProtobuf.isHealthCommand(command)
                     || command.hasStartAction() || command.hasStopAction()
                     || command.hasStartMeridianOpening() || command.hasPauseMeridianOpening() || command.hasDebugQi()) {
@@ -259,6 +278,9 @@ public final class BodyCommandHandler<C> {
             }
             // 先执行纯计算基础校验，私有策略无权跳过余额、死亡或版本上限约束。
             after = switch (command.getOperationCase()) {
+                case EXECUTE_ACTIVITY -> BodyActivityExecution.apply(body, command.getExecuteActivity());
+                case SET_ADDON_PROGRESS -> dev.kizuna.meridian.core.AddonProgress.replace(body,
+                        command.getSetAddonProgress().getId(), command.getSetAddonProgress().getProgress());
                 case SPEND_LIFESPAN -> LifespanSpending.apply(body, command.getSpendLifespan().getSeconds());
                 case ADVANCE_TIME -> {
                     // 可信时间只读取一次；保存采用的计划，重试或恢复不重新询问当前时钟。
@@ -364,7 +386,7 @@ public final class BodyCommandHandler<C> {
                     yield started;
                 }
                 case PAUSE_MERIDIAN_OPENING -> {
-                    // 暂停依据当前任务保存的事实，内容卸载后仍可释放超压并解除占用。
+                    // 暂停依据当前任务保存的事实，目录变化后仍能统一解除占用。
                     var result = OpeningRuntime.pause(body, new Anatomy.MeridianId(command.getPauseMeridianOpening().getMeridianId()));
                     var task = body.openingTask();
                     var action = body.actions().stream().filter(item -> item.instanceId().equals(task.actionInstanceId())).findFirst().orElseThrow();

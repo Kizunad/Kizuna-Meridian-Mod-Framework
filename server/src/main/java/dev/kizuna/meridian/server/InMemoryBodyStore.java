@@ -47,6 +47,8 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         if (receipts.stream().anyMatch(receipt -> (receipt.hasTimeAdvance()
                 && receipt.getTimeAdvance().getReleasedQi().getEntriesCount() > 0)
                 || (receipt.hasOpening() && receipt.getOpening().getReleasedQi().getEntriesCount() > 0)
+                || (receipt.getCommand().hasExecuteActivity()
+                && receipt.getCommand().getExecuteActivity().getReleasedQi().getEntriesCount() > 0)
                 || (receipt.hasHealth() && receipt.getHealth().getReleasedQi().getEntriesCount() > 0))) {
             throw MeridianErrors.invalid(Host.ENVIRONMENT_REQUIRED);
         }
@@ -70,7 +72,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         // 恢复时显式提供身体与成功回执，禁止自动补满或用重复身份覆盖旧身体。
         for (var snapshot : List.copyOf(snapshots)) {
             BodyProtobuf.toMessage(snapshot);
-            if (bodies.putIfAbsent(snapshot.id(), new StoredBody(snapshot, Map.of())) != null) {
+            if (bodies.putIfAbsent(snapshot.id(), new StoredBody(snapshot, new HashMap<>())) != null) {
                 throw MeridianErrors.invalid(Host.DUPLICATE_BODY);
             }
         }
@@ -90,11 +92,10 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             if (stored == null || receipt.getCommitted().getRevision() > stored.snapshot().revision()) {
                 throw MeridianErrors.invalid(Host.RECEIPT_WITHOUT_BODY);
             }
-            var updated = new HashMap<>(stored.receipts());
-            if (updated.putIfAbsent(key(receipt), receipt) != null) {
+            // 构造期间索引尚未对外发布，逐条校验后直接加入，避免反复复制全部历史。
+            if (stored.receipts().putIfAbsent(key(receipt), receipt) != null) {
                 throw MeridianErrors.invalid(Host.DUPLICATE_RECEIPT);
             }
-            bodies.put(id, new StoredBody(stored.snapshot(), Map.copyOf(updated)));
         }
     }
 
@@ -121,7 +122,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
         }
         BodyProtobuf.toMessage(initial);
-        if (bodies.putIfAbsent(initial.id(), new StoredBody(initial, Map.of())) != null) {
+        if (bodies.putIfAbsent(initial.id(), new StoredBody(initial, new HashMap<>())) != null) {
             throw MeridianErrors.invalid(Host.DUPLICATE_BODY);
         }
     }
@@ -178,6 +179,8 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             T result = work.apply(transaction);
             // 所有可能失败的计算在发布之前完成；同一锁内发布身体、回执和环境余额。
             if (transaction.staged != null) {
+                // 仅在回调成功后追加新回执；暂存阶段不修改索引，失败仍完整回滚。
+                transaction.staged.receipts().put(key(transaction.stagedReceipt), transaction.stagedReceipt);
                 bodies.put(bodyId, transaction.staged);
                 environmentQi = transaction.stagedEnvironment;
                 if (transaction.stagedSource != null) {
@@ -199,6 +202,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
 
     private record ReceiptKey(String callerId, String requestId) { }
 
+    // 回执索引只由 Store 持有；构造完成后所有读写都必须在 Store 的监视器内。
     private record StoredBody(BodySnapshot snapshot, Map<ReceiptKey, CommandReceipt> receipts) { }
 
     private static final class MemoryTransaction implements Transaction {
@@ -207,6 +211,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         private final Thread owner = Thread.currentThread();
         private boolean active = true;
         private StoredBody staged;
+        private CommandReceipt stagedReceipt;
         private QiInventory stagedEnvironment;
         private final Map<String, EnvironmentQiSource> sources;
         private EnvironmentQiSource stagedSource;
@@ -258,6 +263,24 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                 throw MeridianErrors.inconsistent(Host.STAGE_MISMATCH);
             }
             var nextEnvironment = stagedEnvironment;
+            if (receipt.getCommand().hasExecuteActivity()) {
+                // 按固定计划重新计算，身体、进度和排放只允许一起发布。
+                var plan = receipt.getCommand().getExecuteActivity();
+                var expected = BodyActivityExecution.apply(original.snapshot(), plan);
+                if (!next.equals(expected)) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.INVALID_ACTIVITY);
+                }
+                nextEnvironment = QiAccounting.credit(nextEnvironment, BodyProtobuf.fromInventory(plan.getReleasedQi()));
+            }
+            if (receipt.getCommand().hasSetAddonProgress()) {
+                // 重算原子替换，拒绝借进度入口悄悄改写真元、寿命或伤势。
+                var update = receipt.getCommand().getSetAddonProgress();
+                var expected = dev.kizuna.meridian.core.AddonProgress.replace(original.snapshot(),
+                        update.getId(), update.getProgress());
+                if (!next.equals(expected)) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.ADDON_PROGRESS_STAGE);
+                }
+            }
             EnvironmentQiSource nextSource = null;
             if (receipt.hasHealth()) {
                 // 使用已固定的附属处理结果复算，不再次调用可能已卸载或升级的伤害实现。
@@ -368,7 +391,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                 }
             }
             if (receipt.hasOpening()) {
-                // 同环境释放一起复算，防止伪造开脉成功、扩容或暂停时的超额回流。
+                // 同释放回执一起复算，防止伪造开脉成功、扩容或额外真元。
                 var fact = receipt.getOpening();
                 BodySnapshot expectedBody;
                 QiInventory released = QiInventory.empty();
@@ -394,11 +417,12 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                 }
                 nextEnvironment = QiAccounting.credit(nextEnvironment, released);
             }
-            var updated = new HashMap<>(original.receipts());
-            if (updated.putIfAbsent(key(receipt), receipt) != null) {
+            if (original.receipts().containsKey(key(receipt))) {
                 throw MeridianErrors.inconsistent(Host.RECEIPT_OVERWRITE);
             }
-            staged = new StoredBody(next, Map.copyOf(updated));
+            // 保存新增事实，等事务回调成功后再更新索引，不为每笔命令复制历史回执。
+            staged = new StoredBody(next, original.receipts());
+            stagedReceipt = receipt;
             stagedEnvironment = nextEnvironment;
             stagedSource = nextSource;
         }

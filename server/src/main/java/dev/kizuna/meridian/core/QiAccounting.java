@@ -13,6 +13,21 @@ public final class QiAccounting {
         // 算术不读取身体，也不提交账户状态。
     }
 
+    public static QiInventory select(QiInventory inventory, QiInventory amounts) {
+        // 配方要求按属性和相态区间匹配；取出的原料保持库存实际密度。
+        var selected = new java.util.ArrayList<Qi>();
+        for (Qi requested : amounts.entries()) {
+            Qi available = inventory.entries().stream()
+                    .filter(entry -> entry.phase() == requested.phase() && entry.attribute().equals(requested.attribute()))
+                    .findFirst().orElseThrow(() -> MeridianErrors.rejectTransport(TransportRejectionReason.INSUFFICIENT_QI));
+            if (requested.amount() > available.amount()) {
+                throw MeridianErrors.rejectTransport(TransportRejectionReason.INSUFFICIENT_QI);
+            }
+            selected.add(available.withAmount(requested.amount()));
+        }
+        return new QiInventory(selected);
+    }
+
     public static QiInventory debit(QiInventory inventory, QiInventory cargo) {
         // 用相态和属性匹配成本，不能用其他种类的富余余额抵扣。
         var remainingByKind = new LinkedHashMap<Kind, Qi>();
@@ -24,7 +39,8 @@ public final class QiAccounting {
         for (var cost : cargo.entries()) {
             var qiKind = new Kind(cost.phase(), cost.attribute());
             Qi availableQi = remainingByKind.get(qiKind);
-            if (availableQi == null || cost.amount() > availableQi.amount()) {
+            if (availableQi == null || cost.amount() > availableQi.amount()
+                    || cost.density() != availableQi.density()) {
                 throw MeridianErrors.rejectTransport(TransportRejectionReason.INSUFFICIENT_QI);
             }
             double remainingAmount = availableQi.amount() - cost.amount();
@@ -35,7 +51,7 @@ public final class QiAccounting {
             if (remainingAmount == 0) {
                 remainingByKind.remove(qiKind);
             } else {
-                remainingByKind.put(qiKind, new Qi(availableQi.phase(), availableQi.attribute(), remainingAmount));
+                remainingByKind.put(qiKind, availableQi.withAmount(remainingAmount));
             }
         }
         return new QiInventory(List.copyOf(remainingByKind.values()));

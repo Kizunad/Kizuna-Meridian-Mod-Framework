@@ -93,11 +93,13 @@ final class BreathingDelivery<C> {
                 .filter(candidate -> profile.getRecipeIdsList().contains(candidate.getRecipe().getId()))
                 .flatMap(candidate -> candidate.getRecipe().getOutput().getEntriesList().stream()).toList();
         List<Qi> output = organ.getBuffer().getEntriesList().stream()
-                .filter(item -> outputKinds.stream().anyMatch(kind -> kind.getPhase() == item.getPhase()
+                .filter(item -> outputKinds.stream().anyMatch(kind -> dev.kizuna.meridian.protocol.QiDensity.phase(kind.getDensity()) == dev.kizuna.meridian.protocol.QiDensity.phase(item.getDensity())
                         && kind.getAttribute().equals(item.getAttribute())))
                 .toList();
         double availableQi = output.stream().mapToDouble(Qi::getAmount).sum();
-        double deliveredQi = Math.min(availableQi, choice.getTargetRemainingQi());
+        double outputVolume = output.stream().mapToDouble(qi -> qi.getAmount() / qi.getDensity()).sum();
+        double fraction = outputVolume == 0 ? 0 : Math.min(1, choice.getTargetRemainingVolume() / outputVolume);
+        double deliveredQi = availableQi * fraction;
         double rate = QiTransport.availableThroughputPerSecond(current, new Anatomy.ConnectionId(choice.getConnectionId()));
         if (availableQi <= 1e-9) {
             return;

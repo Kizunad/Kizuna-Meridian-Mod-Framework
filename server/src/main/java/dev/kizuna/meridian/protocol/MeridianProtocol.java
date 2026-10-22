@@ -165,6 +165,7 @@ public final class MeridianProtocol {
         // 存在性、有限数和非负 revision 已由公共遍历校验，额外约束实际操作的剂量。
         new BodyId(command.getBodyId());
         switch (command.getOperationCase()) {
+            case EXECUTE_ACTIVITY -> dev.kizuna.meridian.server.BodyActivityExecution.validate(command.getExecuteActivity());
             case SPEND_LIFESPAN -> ProtoWire.require(command.getSpendLifespan().getSeconds() > 0,
                     Protocol.LIFESPAN_POSITIVE);
             case ADVANCE_TIME -> {
@@ -196,6 +197,8 @@ public final class MeridianProtocol {
             case PAUSE_MERIDIAN_OPENING -> new Anatomy.MeridianId(command.getPauseMeridianOpening().getMeridianId());
             case DEBUG_QI -> dev.kizuna.meridian.core.QiDebugging.validate(command.getDebugQi());
             case DAMAGE_BODY, HEAL_BODY, RESTORE_FATIGUE, CONFIRM_BODY_DEATH, SET_PART_HEALTH_LIMITS -> HealthProtobuf.validateCommand(command);
+            case SET_ADDON_PROGRESS -> dev.kizuna.meridian.core.AddonProgress.validateEntry(
+                    command.getSetAddonProgress().getId(), command.getSetAddonProgress().getProgress());
             case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
         }
     }

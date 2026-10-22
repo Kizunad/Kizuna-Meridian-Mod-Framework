@@ -50,12 +50,14 @@ public final class CapabilityProtobuf {
     static BodyMessages.OrganProcess toProcess(OrganProcess process) {
         // blocked 必须显式存在，不能把缺失状态默认解释成运行中。
         return BodyMessages.OrganProcess.newBuilder().setRecipe(toRecipe(process.recipe()))
+                .setInput(BodyProtobuf.toInventory(process.input()))
                 .setCompletionMillis(process.completionMillis()).setBlocked(process.blocked()).build();
     }
 
     static OrganProcess fromProcess(BodyMessages.OrganProcess process) {
         // 与身体游标的关联校验交由完整快照构造器执行。
-        return new OrganProcess(fromRecipe(process.getRecipe()), process.getCompletionMillis(), process.getBlocked());
+        return new OrganProcess(fromRecipe(process.getRecipe()), BodyProtobuf.fromInventory(process.getInput()),
+                process.getCompletionMillis(), process.getBlocked());
     }
 
     public static BodyMessages.TissueCapacity toCapacity(Anatomy.TissueCapacity capacity) {

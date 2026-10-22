@@ -155,7 +155,7 @@ public class EnvironmentConfigurationTest {
         var start = BodyMessages.TimeCursor.newBuilder().setDomain("test:clock").setEpoch("e").setElapsedMillis(0);
         var end = start.clone().setElapsedMillis(1000);
         var available = BodyMessages.QiInventory.newBuilder().addEntries(BodyMessages.Qi.newBuilder()
-                .setPhase(BodyMessages.QiPhase.FREE).setAttribute("meridian:none").setAmount(10));
+                .setDensity(.01).setAttribute("meridian:none").setAmount(10));
         var offer = EnvironmentQiOffer.newBuilder().setProtocolVersion(1).setSourceId("test:region")
                 .setSourceRevision(0).setBodyId("body").setAvailableQi(available)
                 .setMaxAbsorptionPerSecond(rules.absorptionLimitPerSecond(inventory, volume))
@@ -200,6 +200,6 @@ public class EnvironmentConfigurationTest {
 
     private static QiInventory inventory(double amount) {
         // 用真实账户构造浓度，测试不会再单独保存一份可能与库存脱节的浓度状态。
-        return new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, amount)));
+        return new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, amount, .01)));
     }
 }

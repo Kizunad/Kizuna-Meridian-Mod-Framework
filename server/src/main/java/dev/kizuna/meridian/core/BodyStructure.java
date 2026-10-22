@@ -77,22 +77,12 @@ public record BodyStructure(List<Anatomy.PartDefinition> parts,
 
         // 局部参数有效仍可能在求和时溢出，提前保证派生总量和比例可用。
         DataChecks.positive(parts.stream().mapToDouble(Anatomy.PartDefinition::maxHp).sum(), "总体部位 HP");
-        double capacity = meridians.stream().mapToDouble(m -> m.lumenCapacity() + m.wallCapacity()).sum();
-        double reference = meridians.stream().mapToDouble(m -> m.lumenLiquidReference() + m.wallLiquidReference()).sum();
-        DataChecks.nonNegative(capacity, "总体真元容量");
-        DataChecks.nonNegative(reference, "总体液态参照");
-        if (reference > 0) {
-            DataChecks.positive(capacity / reference, "容量比");
-        }
+        DataChecks.nonNegative(meridians.stream().mapToDouble(m -> m.lumenVolume() + m.wallVolume()).sum(), "经脉总体积");
     }
 
-    public double capacityRatio() {
-        // 分子分母覆盖相同的内腔与外壁空间；无经脉时显示零而非除零。
-        double reference = meridians.stream().mapToDouble(m -> m.lumenLiquidReference() + m.wallLiquidReference()).sum();
-        if (reference == 0) {
-            return 0;
-        }
-        return meridians.stream().mapToDouble(m -> m.lumenCapacity() + m.wallCapacity()).sum() / reference;
+    public double lumenVolume() {
+        // 总体积只汇总内腔，外壁是独立账户。
+        return meridians.stream().mapToDouble(Anatomy.MeridianDefinition::lumenVolume).sum();
     }
 
     private static void requirePart(Map<Anatomy.PartId, Anatomy.PartDefinition> parts, Anatomy.PartId id) {

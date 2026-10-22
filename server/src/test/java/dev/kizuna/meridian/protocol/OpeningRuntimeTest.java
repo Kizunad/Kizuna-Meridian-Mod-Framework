@@ -56,7 +56,7 @@ public class OpeningRuntimeTest {
 
     @Test
     public void missingOrInvalidPolicyCannotStartAndMissingSavedPolicyPausesSafely() {
-        // 缺包与非法计划都不能建立临时容量；非人体 provider 只存在于测试 classpath。
+        // 缺策略与非法计划都不能建立任务；非人体 provider 只存在于测试 classpath。
         var missing = rule().toBuilder().setPolicyId("removed:opening").build();
         var rejected = assertThrows(dev.kizuna.meridian.error.MeridianErrors.IntakeRejected.class,
                 () -> OpeningRuntime.start(body(), OpeningProtobuf.fromRule(missing), ActionProtobuf.fromDefinition(action())));
@@ -75,22 +75,22 @@ public class OpeningRuntimeTest {
         var paused = BodyTimeAdvancement.apply(unavailable, plan(2200));
         assertEquals(OpeningTask.Status.PAUSED, paused.body().openingTask().status());
         assertTrue(paused.body().actions().isEmpty());
-        assertEquals(2, paused.body().structure().meridians().get(0).lumenCapacity(), 0);
+        assertEquals(200, paused.body().structure().meridians().get(0).lumenVolume(), 0);
         assertEquals(unavailable.totalQi(), paused.body().totalQi() + paused.releasedQi().totalQi(), 1e-9);
     }
 
     @Test
     public void strictHoldingDrainsAndRefillsAcrossSaveAndDifferentAdvanceIntervals() {
-        // 连续费用必须真实扣出目标内腔；引导补到门槛以上，保存恢复不能漏扣或重扣。
+        // 连续费用按全身占用体积分摊；目标仍高于门槛时，费用和分段推进保持一致。
         var consumingRule = rule().toBuilder().setPolicyConfig(SampleOpeningPolicy.configuration(10000, true, false))
-                .setHoldQiPerSecond(.1).setGuidanceBufferQi(.2).build();
+                .setHoldQiPerSecond(.1).build();
         BodySnapshot started = OpeningRuntime.start(body(), OpeningProtobuf.fromRule(consumingRule),
                 ActionProtobuf.fromDefinition(action()));
         var whole = BodyTimeAdvancement.apply(started, plan(15000));
         assertEquals(OpeningTask.Status.COMPLETED, whole.body().openingTask().status());
         assertEquals(started.totalQi(), whole.body().totalQi() + whole.releasedQi().totalQi(), 1e-8);
-        // 稳定目标保留 3 元，完成时至多释放 3.2 元，剩余至少 1 元来自维持费用。
-        assertTrue(whole.releasedQi().totalQi() >= 4 - 1e-8);
+        // 本例没有临时超额，环境释放只有十秒累计维持费 1 元。
+        assertEquals(1, whole.releasedQi().totalQi(), 1e-8);
 
         BodySnapshot split = started;
         double releasedQi = 0;
@@ -109,36 +109,37 @@ public class OpeningRuntimeTest {
 
     @Test
     public void thresholdDepletionResetsBeforeCompletionAndStopsChargingWhilePreparing() {
-        // 起点已有 2 元，门槛 1 元；一秒恰好跌至门槛，不能同毫秒完成。
-        var consumingRule = rule().toBuilder().setMinimumLumenQi(BodyProtobuf.toInventory(free(1)))
+        // 目标脉按体积检查；一秒扣费后略低于 80% 门槛，连续计时必须清零。
+        var consumingRule = rule().toBuilder()
                 .setGuidanceQiPerSecond(0).setGuidanceBatchQi(0)
-                .setPolicyConfig(SampleOpeningPolicy.configuration(1000, true, false)).setHoldQiPerSecond(1).build();
-        BodySnapshot started = OpeningRuntime.start(body(), OpeningProtobuf.fromRule(consumingRule),
+                .setPolicyConfig(SampleOpeningPolicy.configuration(1000, true, false)).setHoldQiPerSecond(.05).build();
+        BodySnapshot started = OpeningRuntime.start(thresholdBody(1.649), OpeningProtobuf.fromRule(consumingRule),
                 ActionProtobuf.fromDefinition(action()));
         var whole = BodyTimeAdvancement.apply(started, plan(5000));
         assertEquals(OpeningTask.Status.PREPARING, whole.body().openingTask().status());
         assertEquals(0, whole.body().openingTask().heldMillis());
-        assertEquals(1, whole.body().meridianStates().get(0).lumenQi().totalQi(), 1e-9);
-        assertEquals(1, whole.releasedQi().totalQi(), 1e-9);
+        assertEquals(1.59995, whole.body().meridianStates().get(0).lumenQi().totalQi(), 1e-9);
+        assertEquals(.04905, whole.releasedQi().totalQi(), 1e-5);
         assertEquals(started.totalQi(), whole.body().totalQi() + whole.releasedQi().totalQi(), 1e-9);
         var first = BodyTimeAdvancement.apply(started, plan(500));
         assertEquals(500, first.body().openingTask().heldMillis());
         var second = BodyTimeAdvancement.apply(BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(first.body())), plan(5000));
         assertEquals(whole.body().openingTask(), second.body().openingTask());
-        assertEquals(1, first.releasedQi().totalQi() + second.releasedQi().totalQi(), 1e-9);
+        assertEquals(.04905, first.releasedQi().totalQi() + second.releasedQi().totalQi(), 1e-5);
 
-        // 恰好等于门槛不开始计时，也不会消耗准备期真元。
-        var exact = consumingRule.toBuilder().setMinimumLumenQi(BodyProtobuf.toInventory(free(2))).build();
-        var waiting = OpeningRuntime.start(body(), OpeningProtobuf.fromRule(exact), ActionProtobuf.fromDefinition(action()));
+        // 恰好达到门槛属于可维持状态；按 >= 规则完成一秒适应。
+        var exact = consumingRule.toBuilder().setHoldQiPerSecond(0).build();
+        var waiting = OpeningRuntime.start(thresholdBody(1.6), OpeningProtobuf.fromRule(exact), ActionProtobuf.fromDefinition(action()));
         var unchanged = BodyTimeAdvancement.apply(waiting, plan(5000));
-        assertEquals(0, unchanged.body().openingTask().heldMillis());
+        assertEquals(OpeningTask.Status.COMPLETED, unchanged.body().openingTask().status());
+        assertEquals(1000, unchanged.body().openingTask().heldMillis());
         assertEquals(0, unchanged.releasedQi().totalQi(), 0);
     }
 
     @Test
     public void commandGuidanceRestoreCompletionAndReplayConserveQi() {
         // 非人环路的未开经脉能够经专用任务汇集资源，普通主动运输仍受开拓门槛限制。
-        BodySnapshot initial = body();
+        BodySnapshot initial = guidanceBody();
         var store = new InMemoryBodyStore(List.of(initial), List.of());
         var now = new AtomicLong();
         var handler = handler(store, now);
@@ -168,9 +169,9 @@ public class OpeningRuntimeTest {
         BodySnapshot completed = current(restored);
         assertEquals(OpeningTask.Status.COMPLETED, completed.openingTask().status());
         assertEquals(MeridianOpening.Stage.OPENED, completed.meridianStates().get(0).opening().stage());
-        assertEquals(3, completed.structure().meridians().get(0).lumenCapacity(), 0);
+        assertEquals(300, completed.structure().meridians().get(0).lumenVolume(), 0);
         assertEquals(initial.totalQi(), completed.totalQi() + restored.environmentQi().totalQi(), 1e-9);
-        assertEquals(3, restored.environmentQi().totalQi(), 1e-9);
+        assertEquals(0, restored.environmentQi().totalQi(), 1e-9);
         assertTrue(completed.actions().isEmpty());
         assertArrayEquals(done, resumed.handle("owner", advance));
         assertArrayEquals(response, resumed.handle("owner", start));
@@ -182,7 +183,7 @@ public class OpeningRuntimeTest {
         assertEquals(completed.structure(), whole.body().structure());
         assertEquals(completed.meridianStates(), whole.body().meridianStates());
         assertEquals(completed.organStates().get(0).fatigueJoules(), whole.body().organStates().get(0).fatigueJoules(), 1e-9);
-        assertEquals(3, whole.releasedQi().totalQi(), 1e-9);
+        assertEquals(0, whole.releasedQi().totalQi(), 1e-9);
         assertThrows(dev.kizuna.meridian.error.MeridianErrors.IntakeRejected.class,
                 () -> OpeningRuntime.start(completed, OpeningProtobuf.fromRule(rule()), ActionProtobuf.fromDefinition(action())));
     }
@@ -203,7 +204,7 @@ public class OpeningRuntimeTest {
         assertEquals(OpeningTask.Status.PREPARING, expired.openingTask().status());
         assertTrue(expired.organStates().get(0).buffer().totalQi() > 0);
 
-        // 暂停清理临时超压，停止扣费；独立器官耐力随后按指数恢复。
+        // 暂停解除动作并停止扣费；独立器官耐力随后按指数恢复。
         var paused = OpeningRuntime.pause(expired, new Anatomy.MeridianId("channel"));
         assertEquals(OpeningTask.Status.PAUSED, paused.body().openingTask().status());
         assertEquals(expired.totalQi(), paused.body().totalQi() + paused.releasedQi().totalQi(), 1e-9);
@@ -219,7 +220,7 @@ public class OpeningRuntimeTest {
         BodySnapshot started = OpeningRuntime.start(body(), longRule, ActionProtobuf.fromDefinition(action()));
         var exhausted = BodyTimeAdvancement.apply(started, plan(100000));
         assertEquals(OpeningTask.Status.EXHAUSTED, exhausted.body().openingTask().status());
-        assertEquals(2, exhausted.body().structure().meridians().get(0).lumenCapacity(), 0);
+        assertEquals(200, exhausted.body().structure().meridians().get(0).lumenVolume(), 0);
         assertEquals(started.totalQi(), exhausted.body().totalQi() + exhausted.releasedQi().totalQi(), 1e-9);
         var frozen = BodyTimeAdvancement.apply(started, new BodyTimeAdvancement.Plan(plan(100000).target(), 0,
                 BodyTimeAdvancement.Mode.LIFESPAN_ONLY));
@@ -241,11 +242,11 @@ public class OpeningRuntimeTest {
 
     @Test
     public void organDamageInterruptsPressureAndCommitsReleaseWithHealthEffect() {
-        // 先形成真实在途与临时超压，伤害事件必须立即撤销任务，不能等下一次时间推进。
+        // 先沿真实通路引导真元，再验证器官受损会立即撤销任务且不扩容内腔。
         var longRule = rule().toBuilder().setPolicyConfig(SampleOpeningPolicy.configuration(10000, false, false)).build();
-        BodySnapshot started = OpeningRuntime.start(body(), OpeningProtobuf.fromRule(longRule), ActionProtobuf.fromDefinition(action()));
+        BodySnapshot started = OpeningRuntime.start(guidanceBody(), OpeningProtobuf.fromRule(longRule), ActionProtobuf.fromDefinition(action()));
         BodySnapshot pressurized = BodyTimeAdvancement.apply(started, plan(2100)).body();
-        assertTrue(pressurized.meridianStates().get(0).lumenQi().totalQi() > 2);
+        assertTrue(pressurized.meridianStates().get(0).lumenQi().totalQi() > 1);
         var store = new InMemoryBodyStore(List.of(pressurized), List.of());
         var handler = new BodyCommandHandler<String>((caller, command) -> Optional.of(caller),
                 (caller, command, current) -> true,
@@ -270,9 +271,10 @@ public class OpeningRuntimeTest {
         assertEquals(OpeningTask.Status.DAMAGED, interrupted.openingTask().status());
         assertTrue(interrupted.actions().isEmpty());
         assertEquals(pressurized.revision() + 1, interrupted.revision());
-        assertEquals(2, interrupted.structure().meridians().get(0).lumenCapacity(), 0);
-        assertEquals(2, interrupted.meridianStates().get(0).lumenQi().totalQi(), 1e-9);
-        assertTrue(store.environmentQi().totalQi() > 0);
+        assertEquals(200, interrupted.structure().meridians().get(0).lumenVolume(), 0);
+        assertTrue(interrupted.meridianStates().get(0).lumenQi().volume()
+                <= interrupted.structure().meridians().get(0).lumenVolume());
+        assertEquals(0, store.environmentQi().totalQi(), 1e-9);
         assertEquals(pressurized.totalQi(), interrupted.totalQi() + store.environmentQi().totalQi(), 1e-9);
         assertArrayEquals(response, handler.handleHealthEffect("owner", request));
         assertEquals(interrupted, current(store));
@@ -284,8 +286,8 @@ public class OpeningRuntimeTest {
         var structure = base.getStructure().toBuilder().clearConnections().clearMeridians();
         for (String id : List.of("channel", "supply")) {
             structure.addMeridians(BodyMessages.MeridianDefinition.newBuilder().setId(id).setDisplayName(id)
-                    .addPartIds("body").setLumenCapacity(id.equals("channel") ? 2 : 10).setWallCapacity(0)
-                    .setLumenLiquidReference(100).setWallLiquidReference(0).setThroughputPerSecond(4)
+                    .addPartIds("body").setLumenVolume(id.equals("channel") ? 200 : 1000).setWallVolume(0)
+                    .setThroughputPerSecond(4)
                     .setResilience(1).setFatigueCapacity(10)
                     .addPorts(BodyMessages.Port.newBuilder().setId(id + ".port").setDirection(BodyMessages.PortDirection.BIDIRECTIONAL)));
         }
@@ -311,13 +313,29 @@ public class OpeningRuntimeTest {
         return BodyProtobuf.fromMessage(base.build());
     }
 
+    private static BodySnapshot thresholdBody(double targetQi) {
+        // 仅为边界回归调整目标脉存量；密度 0.01 下 1.6 元正好对应 80% 体积。
+        var message = BodyProtobuf.toMessage(body());
+        return BodyProtobuf.fromMessage(message.toBuilder().setMeridianStates(0,
+                message.getMeridianStates(0).toBuilder().setLumenQi(BodyProtobuf.toInventory(free(targetQi))))
+                .setMeridianStates(1, message.getMeridianStates(1).toBuilder()
+                        .setLumenQi(BodyMessages.QiInventory.getDefaultInstance())).build());
+    }
+
+    private static BodySnapshot guidanceBody() {
+        // 开拓前目标脉占用低于内容策略的引导线，由供给脉提供真实在途真元。
+        var message = BodyProtobuf.toMessage(body());
+        return BodyProtobuf.fromMessage(message.toBuilder().setMeridianStates(0,
+                message.getMeridianStates(0).toBuilder().setLumenQi(BodyProtobuf.toInventory(free(1)))).build());
+    }
+
     private static BodyMessages.MeridianOpeningRule rule() {
-        // 小型规则覆盖超压和永久扩容，产品数值由附属配置。
+        // 小型规则覆盖稳定体积内的引导和永久扩容，产品数值由附属配置。
         return BodyMessages.MeridianOpeningRule.newBuilder().setId("sample:open").setVersion(1).setDisplayName("环路开拓")
-                .setTargetMeridianId("channel").setMinimumLumenQi(BodyProtobuf.toInventory(free(6)))
+            .setTargetMeridianId("channel")
                 .setPolicyId("sample:opening").setPolicyConfig(SampleOpeningPolicy.configuration(1000, false, false))
                 .setActionId("sample:focus").setActionVersion(1)
-                .setContinuousHold(true).setLumenCapacityGain(1)
+                .setContinuousHold(true).setLumenVolumeGain(100)
                 .setGuidanceQiPerSecond(2).setGuidanceBatchQi(1)
                 .addEfforts(BodyMessages.OpeningEffort.newBuilder().setOrganId("filter").setWatts(2))
                 .addEfforts(BodyMessages.OpeningEffort.newBuilder().setTissueId("tendril").setWatts(1)).build();
@@ -331,7 +349,7 @@ public class OpeningRuntimeTest {
 
     private static QiInventory free(double amount) {
         // 测试资源使用唯一属性，数量仍由真实账户搬运。
-        return new QiInventory(List.of(new Qi(Qi.QiPhase.FREE, Qi.QiAttribute.NONE, amount)));
+        return new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, amount, .01)));
     }
 
     private static BodyTimeAdvancement.Plan plan(long millis) {

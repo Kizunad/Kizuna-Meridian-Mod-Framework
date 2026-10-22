@@ -39,9 +39,9 @@ final class ProtocolFixtures {
                 List.of(new Anatomy.TissueDefinition(tissue, "屈肌", new DefinitionId("sample:muscle"), part, 50, 20,
                         List.of(new Anatomy.Port(c, Anatomy.PortDirection.INPUT)), new Anatomy.TissueCapacity(100, 200, 1000))),
                 List.of(new Anatomy.OrganDefinition(organ, "滤元器", new DefinitionId("sample:filter"), part, 30,
-                        List.of(new Anatomy.Port(a, Anatomy.PortDirection.BIDIRECTIONAL)), 20, 5)),
-                List.of(new Anatomy.MeridianDefinition(meridian, "环形通路", List.of(part), 100, 100,
-                        1000, 1000, 5, 10, 20, List.of(new Anatomy.Port(b, Anatomy.PortDirection.BIDIRECTIONAL),
+                        List.of(new Anatomy.Port(a, Anatomy.PortDirection.BIDIRECTIONAL)), 2_000, 5)),
+                List.of(new Anatomy.MeridianDefinition(meridian, "环形通路", List.of(part), 10_000, 10_000,
+                        5, 10, 20, List.of(new Anatomy.Port(b, Anatomy.PortDirection.BIDIRECTIONAL),
                         new Anatomy.Port(new Anatomy.PortId("channel.out"), Anatomy.PortDirection.OUTPUT)))),
                 List.of(new Anatomy.Connection(connection, a, b, 0, 1),
                         new Anatomy.Connection(new Anatomy.ConnectionId("channel.organ"), b, a, 1, 2),
@@ -49,7 +49,7 @@ final class ProtocolFixtures {
 
         // 所有相态共存，并保留内腔、外壁、在途三份独立货量。
         var qi = new QiInventory(Arrays.stream(Qi.QiPhase.values())
-                .map(phase -> new Qi(phase, Qi.QiAttribute.of("addon:lava"), 0.5)).toList());
+                .map(phase -> new Qi(Qi.QiAttribute.of("addon:lava"), 0.5, dev.kizuna.meridian.protocol.QiDensity.baseline(dev.kizuna.meridian.protocol.pb.BodyMessages.QiPhase.valueOf((phase).name())))).toList());
         return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("creature-1"),
                 new BodyTemplate.Reference(new DefinitionId("sample:tendril"), 7), structure, realm,
                 List.of(new AnatomyState.Part(part, 80)), List.of(new AnatomyState.Tissue(tissue, 40, 2)),

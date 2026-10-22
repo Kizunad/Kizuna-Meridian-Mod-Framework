@@ -4,6 +4,7 @@ package kizuna.meridian.v1;
 
 import "kizuna/meridian/v1/body.proto";
 import "kizuna/meridian/v1/operation_ui.proto";
+import "kizuna/meridian/v1/protocol.proto";
 
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "PresentationMessages";
@@ -16,6 +17,17 @@ message BodyViewUpdate {
   string presentation_resource = 3; // namespace:path，相对于资源包 assets。
   MeridianOpeningOptions opening = 4; // 可缺省；存在时替换此连接可见的开脉选项。
   repeated MeridianOperationUpdate operations = 5; // 同一身体版本的只读操作卡，由对应内容包生成。
+  string request_id = 6;
+  RequestFailure failure = 7;
+  bool introspection = 8; // 当前连接是否获得内部修炼视图订阅。
+}
+
+// 基础检视由宿主推送；内部修炼视图必须另行授权，不能由打开窗口取得权限。
+message BodyViewRequest {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  string body_id = 3;
+  bool introspection = 4;
 }
 
 // 宿主提供可选择的内容定义；实际执行仍由权威目录、权限和身体条件校验。

@@ -3,37 +3,61 @@ package dev.kizuna.meridian.core;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.error.MeridianErrors.Data;
 
-/** 真元的唯一可计量单位；属性和相态只是账本维度。 */
-public record Qi(QiPhase phase, QiAttribute attribute, double amount) {
+/** 真元的唯一可计量单位；账本保存属性、数量和密度，相态由密度派生。 */
+public record Qi(QiAttribute attribute, double amount, double density) {
     public Qi {
         // 数量与类型必须同时明确，零数量可用于算术结果。
-        MeridianErrors.required(phase, Data.QI_PHASE_REQUIRED);
+        Realm.phaseAtDensity(density);
         MeridianErrors.required(attribute, Data.QI_ATTRIBUTE_REQUIRED);
         DataChecks.nonNegative(amount, "真元数量");
+        DataChecks.nonNegative(amount / density, "真元体积");
     }
 
-    public static Qi empty(QiPhase phase, QiAttribute attribute) {
+    public static Qi empty(QiAttribute attribute, double density) {
         // 保留类型的零值用于计算；账户存储空余额时使用空明细列表。
-        return new Qi(phase, attribute, 0);
+        return new Qi(attribute, 0, density);
+    }
+
+    public QiPhase phase() {
+        // 相态没有独立存储，任何密度变化都会重新得到正确区间。
+        return Realm.phaseAtDensity(density);
+    }
+
+    public double volume() {
+        // 元数与体积使用不同量纲，容量检查只读取体积。
+        return amount / density;
+    }
+
+    public Qi withAmount(double quantity) {
+        // 分取均匀明细时保持源密度，不以调用方要求的密度制造新资源。
+        return new Qi(attribute, quantity, density);
     }
 
     public Qi add(Qi other) {
         // 加法只合并同类数量，不隐式进行相变或属性转化。
         requireSameKind(other);
-        return new Qi(phase, attribute, amount + other.amount);
+        double totalAmount = amount + other.amount;
+        double totalVolume = volume() + other.volume();
+        double mergedDensity = totalAmount == 0 ? density : totalAmount / totalVolume;
+        var wirePhase = dev.kizuna.meridian.protocol.pb.BodyMessages.QiPhase.valueOf(phase().name());
+        mergedDensity = dev.kizuna.meridian.protocol.QiDensity.clampToPhase(mergedDensity, wirePhase);
+        return new Qi(attribute, totalAmount, mergedDensity);
     }
 
     public Qi subtract(Qi other) {
         // 扣减先验证同类和余额；机器舍入产生的极小负尾差归零。
         requireSameKind(other);
         DataChecks.atMost(other.amount, amount, "真元扣减");
-        return new Qi(phase, attribute, Math.max(0, amount - other.amount));
+        if (density != other.density) {
+            throw MeridianErrors.invalid(Data.QI_KIND_MISMATCH);
+        }
+        return withAmount(Math.max(0, amount - other.amount));
     }
 
     private void requireSameKind(Qi other) {
         // 属性按内容 ID 的值比较，不依赖两个属性对象是否为同一实例。
         MeridianErrors.required(other, Data.QI_REQUIRED);
-        if (phase != other.phase || !attribute.equals(other.attribute)) {
+        if (phase() != other.phase() || !attribute.equals(other.attribute)) {
             throw MeridianErrors.invalid(Data.QI_KIND_MISMATCH);
         }
     }

@@ -61,7 +61,9 @@ message GatheringChoice {
   OrganRecipe recipe = 2;
   string connection_id = 3;
   string target_meridian_id = 4;
-  double target_remaining_qi = 5; // 扣除所有入向在途预约后的容量。
+  reserved 5;
+  reserved "target_remaining_qi";
+  double target_remaining_volume = 7; // 扣除实际库存与入向在途预约后的稳定空间。
   double intake_per_second = 6;
 }
 

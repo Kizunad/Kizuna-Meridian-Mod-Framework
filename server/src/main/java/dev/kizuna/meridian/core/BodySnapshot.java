@@ -16,8 +16,19 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
                            List<MeridianState> meridianStates,
                            List<QiTransit> transits,
                            VitalityState vitality, TimeCursor settledAt, long revision,
-                           List<BodyAction.Active> actions, OpeningTask openingTask) {
-    public static final int CURRENT_SCHEMA_VERSION = 2;
+                           List<BodyAction.Active> actions, OpeningTask openingTask,
+                           Map<String, com.google.protobuf.Any> addonProgress) {
+    public static final int CURRENT_SCHEMA_VERSION = 3;
+
+    public BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference template, BodyStructure structure,
+                        Realm realm, List<AnatomyState.Part> partStates, List<AnatomyState.Tissue> tissueStates,
+                        List<AnatomyState.Organ> organStates, List<MeridianState> meridianStates, List<QiTransit> transits,
+                        VitalityState vitality, TimeCursor settledAt, long revision, List<BodyAction.Active> actions,
+                        OpeningTask openingTask) {
+        // 兼容无附属进度的出生候选；已有身体的算子必须传递原进度。
+        this(schemaVersion, id, template, structure, realm, partStates, tissueStates, organStates,
+                meridianStates, transits, vitality, settledAt, revision, actions, openingTask, Map.of());
+    }
 
     public BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference template, BodyStructure structure,
                         Realm realm, List<AnatomyState.Part> partStates, List<AnatomyState.Tissue> tissueStates,
@@ -53,6 +64,8 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         meridianStates = List.copyOf(meridianStates);
         transits = List.copyOf(transits);
         actions = List.copyOf(actions);
+        addonProgress = Map.copyOf(addonProgress);
+        AddonProgress.validate(addonProgress);
         MeridianErrors.required(vitality, Data.VITALITY_REQUIRED);
         MeridianErrors.required(settledAt, Data.SETTLED_AT_REQUIRED);
         DataChecks.revision(revision);
@@ -70,7 +83,8 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         for (BodyAction.Active action : actions) {
             if (action.startedMillis() > settledAt.elapsedMillis()
                     || !tissues.keySet().containsAll(action.definition().tissueIds())
-                    || !organs.keySet().containsAll(action.definition().organIds())) {
+                    || !organs.keySet().containsAll(action.definition().organIds())
+                    || !meridians.keySet().containsAll(action.definition().guidedMeridianIds())) {
                 throw MeridianErrors.invalid(Data.INVALID_ACTION_STATE);
             }
         }
@@ -88,7 +102,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
             double enduranceLimit = definition.endurance() == null ? 0 : definition.endurance().enduranceJoules();
             DataChecks.atMost(state.fatigueJoules(), enduranceLimit, "器官疲劳");
             DataChecks.atMost(state.hp(), definition.maxHp(), "器官 HP");
-            DataChecks.atMost(state.occupiedQi(), definition.qiCapacity(), "器官真元");
+            DataChecks.atMost(state.occupiedVolume(), definition.volumeCapacity(), "器官占用体积");
             if (state.process() != null) {
                 // 正在加工的输入仍归身体所有；状态与时间不符会导致重复完成或漏结算。
                 OrganProcess process = state.process();
@@ -104,13 +118,12 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         }
         for (var state : meridianStates) {
             Anatomy.MeridianDefinition definition = meridians.get(state.id());
-            double lumenLimit = openingTask == null ? definition.lumenCapacity() : openingTask.capacity(definition);
-            DataChecks.atMost(state.lumenQi().totalQi(), lumenLimit, "内腔真元");
-            DataChecks.atMost(state.wallQi().totalQi(), definition.wallCapacity(), "外壁真元");
+            DataChecks.atMost(state.lumenQi().volume(), definition.lumenVolume(), "内腔占用体积");
+            DataChecks.atMost(state.wallQi().volume(), definition.wallVolume(), "外壁占用体积");
             DataChecks.atMost(state.fatigue(), definition.fatigueCapacity(), "经脉疲劳");
         }
 
-        // 临时超压必须能追溯到同一任务与动作，不能靠上传一张额度表提高容量。
+        // 开脉任务须与同一身体的目标、动作和时间一致，不能凭任务数据绕过稳定体积校验。
         if (openingTask != null) {
             OpeningRuntime.validateTask(openingTask, structure, meridianStates, actions, settledAt, vitality);
         }
@@ -121,6 +134,10 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         for (var transit : transits) {
             if (!connections.containsKey(transit.connectionId())) {
                 throw MeridianErrors.invalid(Data.transitConnectionMissing(transit.id()));
+            }
+            if (transit.circuit() != null) {
+                CircuitTransport.validate(structure, transit);
+                continue;
             }
             if (transit.status() == QiTransit.Status.MOVING && transit.arrivalMillis() <= settledAt.elapsedMillis()) {
                 throw MeridianErrors.invalid(Data.transitAlreadyArrived(transit.id()));
@@ -145,6 +162,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
                 .sum();
         DataChecks.nonNegative(lumenQi + wallQi + organQi + transitQi, "身体真元总量");
     }
+
 
     /** 内腔总量也不代表任意目标都能立即使用，实际还受通路与操作规则约束。 */
     public double lumenQiTotal() {

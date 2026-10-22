@@ -107,16 +107,14 @@ public class BodyProtobufTest {
             assertEquals(Long.MAX_VALUE, restored.revision());
         }
 
-        // 各相态沿用编号；尤其第五、六项须稳定映射为有序态和相干态。
+        // 相态不再编码；六个密度区间由同一个只读工具推导。
         BodyMessages.QiPhase[] phases = {BodyMessages.QiPhase.FREE, BodyMessages.QiPhase.GAS,
                 BodyMessages.QiPhase.LIQUID, BodyMessages.QiPhase.SOLID,
                 BodyMessages.QiPhase.ORDERED, BodyMessages.QiPhase.COHERENT};
         var entries = message().getMeridianStates(0).getLumenQi().getEntriesList();
         assertEquals(phases.length, entries.size());
         for (int index = 0; index < phases.length; index++) {
-            assertEquals(phases[index], entries.get(index).getPhase());
-            assertArrayEquals(new byte[] {0x08, (byte) (index + 1)},
-                    BodyMessages.Qi.newBuilder().setPhase(phases[index]).build().toByteArray());
+            assertEquals(phases[index], QiDensity.phase(entries.get(index).getDensity()));
         }
     }
 
@@ -163,7 +161,7 @@ public class BodyProtobufTest {
         rejects(body.toBuilder().setSchemaVersion(BodySnapshot.CURRENT_SCHEMA_VERSION + 1).build());
         rejects(body.toBuilder().setRealmValue(999).build());
         rejects(body.toBuilder().clearRealm().build());
-        var qi = body.getMeridianStates(0).getLumenQi().getEntries(0).toBuilder().setPhaseValue(999);
+        var qi = body.getMeridianStates(0).getLumenQi().getEntries(0).toBuilder().setDensity(0);
         var inventory = body.getMeridianStates(0).getLumenQi().toBuilder().setEntries(0, qi);
         rejects(body.toBuilder().setMeridianStates(0, body.getMeridianStates(0).toBuilder().setLumenQi(inventory)).build());
         var unknown = UnknownFieldSet.newBuilder().addField(100,

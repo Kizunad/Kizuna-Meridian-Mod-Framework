@@ -102,7 +102,7 @@ public final class TerrainQiGenerator {
             if (!Double.isFinite(amount) || amount <= 0) {
                 throw MeridianErrors.invalid(Environment.GENERATION_NUMERIC);
             }
-            inventory.addEntries(Qi.newBuilder().setPhase(QiPhase.FREE)
+            inventory.addEntries(Qi.newBuilder().setDensity(.01)
                     .setAttribute(TerrainQiProtobuf.ELEMENT_IDS.get(index)).setAmount(amount));
             remainingQi -= amount;
         }

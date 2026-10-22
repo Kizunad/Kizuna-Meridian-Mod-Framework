@@ -19,6 +19,7 @@ import java.util.OptionalLong;
 /** 经脉内腔与器官缓存间的批次运输；源、在途、目标各自持有唯一余额。 */
 public final class QiTransport {
     public static final double BASE_SPEED_METERS_PER_SECOND = 1;
+    private static final double CAPACITY_TOLERANCE = 1e-9;
 
     private enum DispatchMode { ACTIVE, PASSIVE, OPENING_GUIDANCE }
 
@@ -55,7 +56,7 @@ public final class QiTransport {
                 body.settledAt().elapsedMillis(), DispatchMode.ACTIVE);
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), accounts.organs(), accounts.meridians(), updatedTransits,
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
     }
 
     static List<QiTransit> dispatchPassive(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
@@ -103,7 +104,8 @@ public final class QiTransport {
         if (request.throughputPerSecond() > capacity.throughputPerSecond()) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.THROUGHPUT_EXCEEDED);
         }
-        if (request.cargo().totalQi() > capacity.targetQi()) {
+        // 体积来自数量除以密度；边界处允许一小段浮点尾差，避免同一份容量计算在再次校验时被舍入拒绝。
+        if (request.cargo().volume() > capacity.targetVolume() + CAPACITY_TOLERANCE) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.CAPACITY_EXCEEDED);
         }
 
@@ -136,7 +138,7 @@ public final class QiTransport {
         return List.copyOf(updatedTransits);
     }
 
-    record DispatchCapacity(double throughputPerSecond, double targetQi) { }
+    record DispatchCapacity(double throughputPerSecond, double targetVolume) { }
 
     public static double availableThroughputPerSecond(BodySnapshot body, Anatomy.ConnectionId connectionId) {
         // 编排器按当前共享预约选择可申请流量；读取不预留资源，最终发运仍重新校验。
@@ -168,16 +170,23 @@ public final class QiTransport {
                                               Map<Object, Double> reservedThroughput) {
         // 自动引导可让出部分空闲吞吐；预留只限制本次调度，不创建在途或额外资源账户。
         var usedThroughput = new HashMap<Object, Double>();
-        double reservedTargetQi = 0;
+        double reservedTargetVolume = 0;
         for (var transit : transits) {
             Anatomy.Connection route = accounts.connection(transit.connectionId());
             QiAccounts.Endpoint from = accounts.endpoint(route.from());
             QiAccounts.Endpoint to = accounts.endpoint(route.to());
             if (to != null && to.id().equals(target.id())) {
                 // 阻塞货物仍预留目标容量；预约仅是由在途派生的额度，不是另一份余额。
-                reservedTargetQi += transit.cargo().totalQi();
+                reservedTargetVolume += transit.cargo().volume();
             }
             if (transit.status() == QiTransit.Status.MOVING) {
+                if (transit.circuit() != null) {
+                    // 一个闭环只预约每个模块一次，普通运输与它共享相同吞吐预算。
+                    for (Object module : CircuitTransport.modules(accounts, transit)) {
+                        usedThroughput.merge(module, transit.throughputPerSecond(), Double::sum);
+                    }
+                    continue;
+                }
                 if (from != null) {
                     usedThroughput.merge(from.id(), transit.throughputPerSecond(), Double::sum);
                 }
@@ -195,8 +204,8 @@ public final class QiTransport {
         double targetAvailableRate = target.throughputPerSecond() - targetUsedRate
                 - reservedThroughput.getOrDefault(target.id(), 0.0);
         double availableThroughputPerSecond = Math.min(sourceAvailableRate, targetAvailableRate);
-        double occupiedTargetQi = accounts.occupied(target);
-        double availableTargetCapacity = target.capacity() - occupiedTargetQi - reservedTargetQi;
+        double occupiedTargetVolume = accounts.occupied(target);
+        double availableTargetCapacity = target.capacity() - occupiedTargetVolume - reservedTargetVolume;
         return new DispatchCapacity(availableThroughputPerSecond, availableTargetCapacity);
     }
 
@@ -208,6 +217,11 @@ public final class QiTransport {
                 .sorted(Comparator.comparingLong(QiTransit::arrivalMillis).thenComparing(QiTransit::id))
                 .toList();
         for (var transit : orderedTransits) {
+            if (transit.circuit() != null) {
+                // 闭环的结束、提纯和返回必须由可信活动在同一事务结算。
+                pendingTransits.add(transit);
+                continue;
+            }
             if (transit.arrivalMillis() > atMillis) {
                 pendingTransits.add(transit);
                 continue;
@@ -224,7 +238,7 @@ public final class QiTransport {
             QiTransit.Status blockedStatus = null;
             if (!accounts.available(source) || !accounts.available(target)) {
                 blockedStatus = QiTransit.Status.BLOCKED_ROUTE;
-            } else if (transit.cargo().totalQi() > availableTargetCapacity) {
+            } else if (transit.cargo().volume() > availableTargetCapacity + CAPACITY_TOLERANCE) {
                 blockedStatus = QiTransit.Status.BLOCKED_CAPACITY;
             }
             if (blockedStatus != null) {
@@ -253,7 +267,7 @@ public final class QiTransport {
             return Optional.empty();
         }
         OptionalLong nextArrivalMillis = body.transits().stream()
-                .filter(transit -> transit.status() == QiTransit.Status.MOVING)
+                .filter(transit -> transit.circuit() == null && transit.status() == QiTransit.Status.MOVING)
                 .mapToLong(QiTransit::arrivalMillis)
                 .min();
         if (nextArrivalMillis.isEmpty()) {

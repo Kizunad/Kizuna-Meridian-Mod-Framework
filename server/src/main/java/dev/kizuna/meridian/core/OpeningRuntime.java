@@ -35,19 +35,20 @@ public final class OpeningRuntime {
 
         // 2. 附属判断启动条件并编排本轮参数；框架仅验证返回计划的引用与资源边界。
         OpeningPolicyDecision decision = OpeningPolicies.evaluate(body, rule, OpeningPolicyPhase.PREPARE_OPENING, 0);
-        var participants = new ArrayList<MeridianOpeningRule.PressureLimit>();
+        var participants = new ArrayList<MeridianOpeningRule.GuidanceTarget>();
         for (var limit : decision.getParticipantsList()) {
             Anatomy.MeridianId id = new Anatomy.MeridianId(limit.getMeridianId());
             if (!states.containsKey(id) || states.get(id).condition() != MeridianState.Condition.INTACT) {
                 throw MeridianErrors.rejectIntake(FailureCode.ROUTE_UNAVAILABLE);
             }
-            participants.add(new MeridianOpeningRule.PressureLimit(id, limit.getQi()));
+            DataChecks.atMost(limit.getVolume(), definitions.get(id).lumenVolume(), "引导目标体积");
+            participants.add(new MeridianOpeningRule.GuidanceTarget(id, limit.getVolume()));
         }
         long requiredMillis = decision.getRequiredMillis();
         DataChecks.nonNegative(rule.holdQiPerSecond() * (requiredMillis / 1000.0), "开拓维持总消耗");
-        double stableCapacity = target.lumenCapacity() + rule.lumenCapacityGain();
+        double stableCapacity = target.lumenVolume() + rule.lumenVolumeGain();
         DataChecks.positive(stableCapacity, "开拓后稳定容量");
-        if (decision.getTargetStableCapacity() != stableCapacity || requiredMillis <= 0) {
+        if (decision.getTargetStableVolume() != stableCapacity || requiredMillis <= 0) {
             throw MeridianErrors.invalid(MeridianErrors.Opening.POLICY_INVALID);
         }
         var observedOrgans = decision.getObservedOrganIdsList().stream().map(Anatomy.OrganId::new).toList();
@@ -66,7 +67,7 @@ public final class OpeningRuntime {
                 observedOrgans, decision.getReceiptWindowMillis());
         OpeningTask previous = body.openingTask();
         if (previous != null && previous.rule().equals(rule) && !rule.continuousHold()
-                && previous.requiredMillis() == requiredMillis && previous.targetStableCapacity() == stableCapacity
+                && previous.requiredMillis() == requiredMillis && previous.targetStableVolume() == stableCapacity
                 && previous.participants().equals(participants)) {
             // 非连续规则可恢复相同任务的适应时间；条件、目标或参与组变化后重新开始。
             task = task.progress(previous.heldMillis(), OpeningTask.Status.PREPARING, List.of());
@@ -79,7 +80,7 @@ public final class OpeningRuntime {
     }
 
     public static BodyTimeAdvancement.Result pause(BodySnapshot body, Anatomy.MeridianId id) {
-        // 暂停也经过完整事务；撤销临时容量时同时产生可核对的环境释放明细。
+        // 暂停通过同一身体事务解除动作占用，保存本次任务的终止事实。
         requireAlive(body);
         OpeningTask task = body.openingTask();
         if (task == null || !task.active() || !task.rule().targetMeridianId().equals(id)) {
@@ -90,7 +91,7 @@ public final class OpeningRuntime {
     }
 
     public static BodyTimeAdvancement.Result interruptUnavailable(BodySnapshot body) {
-        // 伤害使任务所占模块失能时立即撤销增压；本次版本已由外层健康事务递增。
+        // 伤害使任务所占模块失能时立即解除占用；本次版本已由外层健康事务递增。
         if (body.openingTask() != null && body.openingTask().active() && !modulesAvailable(body)) {
             return finish(body, OpeningTask.Status.DAMAGED);
         }
@@ -118,7 +119,7 @@ public final class OpeningRuntime {
                 }
                 break;
             }
-            // 按依赖、模块完好、预算的顺序确定终止原因，再统一撤销占用和临时容量。
+            // 按依赖、模块完好、预算的顺序确定终止原因，再统一解除动作占用。
             OpeningTask.Status stopStatus = null;
             if (!OpeningPolicies.available(task.rule())) {
                 stopStatus = OpeningTask.Status.PAUSED;
@@ -180,7 +181,7 @@ public final class OpeningRuntime {
                 heldMillis = 0;
             }
             if (heldMillis >= intervalTask.requiredMillis()) {
-                // 成功与结构扩容、动作解除、超额释放构成一次状态转换。
+                // 成功标记、结构扩容和动作解除构成一次状态转换。
                 BodyTimeAdvancement.Result completed = finish(current, OpeningTask.Status.COMPLETED);
                 current = completed.body();
                 released = QiAccounting.credit(released, completed.releasedQi());
@@ -209,7 +210,7 @@ public final class OpeningRuntime {
     }
 
     static BodyTimeAdvancement.Result freeze(BodySnapshot body, BodyTimeAdvancement.Plan plan, Set<Anatomy.TissueId> used) {
-        // 冻结相当于结束本次连续尝试，防止离线时保留免费增压、再用现实时间补足适应。
+        // 冻结结束本次连续尝试，防止用冻结期间的时间补足适应。
         BodyTimeAdvancement.Result stopped = finish(body, OpeningTask.Status.PAUSED);
         BodyTimeAdvancement.Result advanced = settleInterval(stopped.body(), plan, used);
         return new BodyTimeAdvancement.Result(revision(advanced.body(), body.revision() + 1), advanced.died(),
@@ -287,52 +288,70 @@ public final class OpeningRuntime {
     }
 
     private static BodyTimeAdvancement.Result finish(BodySnapshot body, OpeningTask.Status status) {
-        // 成功只增目标脉稳定容量一次；失败只撤销临时额度，历史已开脉保持原状。
+        // 成功只拓宽目标一次；停止和失败不改变体积，也不排出原本合法的库存。
         OpeningTask task = body.openingTask();
-        var definitions = new ArrayList<Anatomy.MeridianDefinition>();
-        for (Anatomy.MeridianDefinition definition : body.structure().meridians()) {
-            if (status == OpeningTask.Status.COMPLETED && definition.id().equals(task.rule().targetMeridianId())) {
-                definition = new Anatomy.MeridianDefinition(definition.id(), definition.displayName(), definition.partIds(),
-                        task.targetStableCapacity(), definition.wallCapacity(), definition.lumenLiquidReference(),
-                        definition.wallLiquidReference(), definition.throughputPerSecond(), definition.resilience(),
-                        definition.fatigueCapacity(), definition.ports());
-            }
-            definitions.add(definition);
+        if (status == OpeningTask.Status.COMPLETED) {
+            BodySnapshot completed = complete(body, task.rule().targetMeridianId(), task.targetStableVolume());
+            return new BodyTimeAdvancement.Result(completed, false, QiInventory.empty());
         }
-        var structure = new BodyStructure(body.structure().parts(), body.structure().tissues(), body.structure().organs(),
-                definitions, body.structure().connections());
-        var capacities = DataChecks.index(definitions, Anatomy.MeridianDefinition::id, "经脉定义");
         var states = new ArrayList<MeridianState>();
-        var released = new ArrayList<QiInventory>();
-        long held = status == OpeningTask.Status.COMPLETED ? task.requiredMillis() : task.heldMillis();
-        if (status != OpeningTask.Status.COMPLETED && task.rule().continuousHold()) {
+        long held = task.heldMillis();
+        if (task.rule().continuousHold()) {
             held = 0;
         }
         for (MeridianState state : body.meridianStates()) {
-            double capacity = capacities.get(state.id()).lumenCapacity();
             QiInventory lumen = state.lumenQi();
-            if (lumen.totalQi() > capacity) {
-                // 超压撤销后的余量真实回归环境，绝不截断余额或复制到外壁。
-                QiInventory surplus = OpeningGuidance.take(lumen, lumen.totalQi() - capacity);
-                released.add(surplus);
-                lumen = QiAccounting.debit(lumen, surplus);
-            }
             MeridianOpening opening = state.opening();
             if (state.id().equals(task.rule().targetMeridianId())) {
-                MeridianOpening.Stage stage = MeridianOpening.Stage.IN_PROGRESS;
-                if (status == OpeningTask.Status.COMPLETED) {
-                    stage = MeridianOpening.Stage.OPENED;
-                }
                 double progress = (double) held / task.requiredMillis();
-                opening = new MeridianOpening(stage, progress);
+                opening = new MeridianOpening(MeridianOpening.Stage.IN_PROGRESS, progress);
             }
             states.add(new MeridianState(state.id(), lumen, state.wallQi(), state.fatigue(), state.condition(), opening));
         }
         List<BodyAction.Active> actions = body.actions().stream()
                 .filter(action -> !action.instanceId().equals(task.actionInstanceId())).toList();
-        BodySnapshot finished = copy(body, structure, body.tissueStates(), body.organStates(), states, body.transits(), actions,
+        BodySnapshot finished = copy(body, body.structure(), body.tissueStates(), body.organStates(), states, body.transits(), actions,
                 task.progress(held, status, List.of()), body.revision());
-        return new BodyTimeAdvancement.Result(finished, false, QiInventory.combine(released));
+        return new BodyTimeAdvancement.Result(finished, false, QiInventory.empty());
+    }
+
+    public static BodySnapshot complete(BodySnapshot body, Anatomy.MeridianId id, double stableVolume) {
+        // 正常完成和管理员完成共用此路径；已经开通的经脉不能再次获得体积。
+        MeridianState target = body.meridianStates().stream().filter(state -> state.id().equals(id))
+                .findFirst().orElseThrow(() -> MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY));
+        if (target.opening().stage() == MeridianOpening.Stage.OPENED) {
+            return body;
+        }
+        DataChecks.positive(stableVolume, "完成后内腔体积");
+        var definitions = new ArrayList<Anatomy.MeridianDefinition>();
+        for (Anatomy.MeridianDefinition definition : body.structure().meridians()) {
+            if (definition.id().equals(id)) {
+                if (stableVolume < definition.lumenVolume()) {
+                    throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
+                }
+                definition = new Anatomy.MeridianDefinition(id, definition.displayName(), definition.partIds(),
+                        stableVolume, definition.wallVolume(), definition.throughputPerSecond(), definition.resilience(),
+                        definition.fatigueCapacity(), definition.ports());
+            }
+            definitions.add(definition);
+        }
+        List<MeridianState> states = body.meridianStates().stream().map(state -> {
+            if (!state.id().equals(id)) {
+                return state;
+            }
+            return new MeridianState(id, state.lumenQi(), state.wallQi(), state.fatigue(), state.condition(),
+                    new MeridianOpening(MeridianOpening.Stage.OPENED, 1));
+        }).toList();
+        OpeningTask task = body.openingTask();
+        List<BodyAction.Active> actions = body.actions();
+        if (task != null && task.rule().targetMeridianId().equals(id)) {
+            String instance = task.actionInstanceId();
+            actions = actions.stream().filter(action -> !action.instanceId().equals(instance)).toList();
+            task = task.progress(task.requiredMillis(), OpeningTask.Status.COMPLETED, List.of());
+        }
+        var structure = new BodyStructure(body.structure().parts(), body.structure().tissues(), body.structure().organs(),
+                definitions, body.structure().connections());
+        return copy(body, structure, body.tissueStates(), body.organStates(), states, body.transits(), actions, task, body.revision());
     }
 
     private static boolean modulesAvailable(BodySnapshot body) {
@@ -400,11 +419,11 @@ public final class OpeningRuntime {
             if (!definitions.containsKey(limit.meridianId())) {
                 throw MeridianErrors.invalid(MeridianErrors.Opening.TASK_STATE);
             }
-            DataChecks.positive(limit.qi() + task.rule().guidanceBufferQi() + task.rule().guidanceBatchQi(), "开拓临时容量");
+            DataChecks.atMost(limit.volume(), definitions.get(limit.meridianId()).lumenVolume(), "引导目标体积");
         }
         Optional<BodyAction.Active> action = actions.stream().filter(item -> item.instanceId().equals(task.actionInstanceId())).findFirst();
         if (task.active()) {
-            if (action.isEmpty() || task.targetStableCapacity() != target.lumenCapacity() + task.rule().lumenCapacityGain()
+            if (action.isEmpty() || task.targetStableVolume() != target.lumenVolume() + task.rule().lumenVolumeGain()
                     || states.get(target.id()).opening().stage() != MeridianOpening.Stage.IN_PROGRESS) {
                 throw MeridianErrors.invalid(MeridianErrors.Opening.TASK_STATE);
             }
@@ -454,7 +473,7 @@ public final class OpeningRuntime {
                              List<BodyAction.Active> actions, OpeningTask task, long revision) {
         // 只组装一次计算的不可变候选，时间和寿命继续使用统一时间算子的结果。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), structure, body.realm(), body.partStates(),
-                tissues, organs, meridians, transits, body.vitality(), body.settledAt(), revision, actions, task);
+                tissues, organs, meridians, transits, body.vitality(), body.settledAt(), revision, actions, task, body.addonProgress());
     }
 
     private static long earlier(long current, Optional<TimeCursor> boundary) {

@@ -99,18 +99,18 @@ public final class Anatomy {
 
     /** 器官声明自身接口与可选摄入能力；转换产物由配方定义。 */
     public record OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
-                                  double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond,
+                                  double maxHp, List<Port> ports, double volumeCapacity, double throughputPerSecond,
                                   OrganIntakeCapability intake, OrganEndurance endurance) {
         public OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
-                               double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond,
+                               double maxHp, List<Port> ports, double volumeCapacity, double throughputPerSecond,
                                OrganIntakeCapability intake) {
             // 没有声明独立耐力的器官保持原有加工能力。
-            this(id, displayName, kind, partId, maxHp, ports, qiCapacity, throughputPerSecond, intake, null);
+            this(id, displayName, kind, partId, maxHp, ports, volumeCapacity, throughputPerSecond, intake, null);
         }
         public OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
-                               double maxHp, List<Port> ports, double qiCapacity, double throughputPerSecond) {
+                               double maxHp, List<Port> ports, double volumeCapacity, double throughputPerSecond) {
             // 未声明能力的器官只能使用已有缓存，不隐式获得从环境补元的能力。
-            this(id, displayName, kind, partId, maxHp, ports, qiCapacity, throughputPerSecond, null);
+            this(id, displayName, kind, partId, maxHp, ports, volumeCapacity, throughputPerSecond, null);
         }
 
         public OrganDefinition {
@@ -120,7 +120,7 @@ public final class Anatomy {
             MeridianErrors.required(kind, Data.ORGAN_KIND_REQUIRED);
             MeridianErrors.required(partId, Data.ORGAN_PART_REQUIRED);
             DataChecks.positive(maxHp, "器官生命值");
-            DataChecks.positive(qiCapacity, "器官真元容量");
+            DataChecks.positive(volumeCapacity, "器官真元容量");
             DataChecks.positive(throughputPerSecond, "器官端口吞吐");
             ports = List.copyOf(ports);
         }
@@ -150,10 +150,9 @@ public final class Anatomy {
         }
     }
 
-    /** 容量以元计，液态参照空间与有效容量分列；容量增长本身不生成真元。 */
+    /** 内腔与外壁分别保存液态参照体积；拓宽只改变指定空间。 */
     public record MeridianDefinition(MeridianId id, String displayName, List<PartId> partIds,
-                                     double lumenCapacity, double wallCapacity,
-                                     double lumenLiquidReference, double wallLiquidReference,
+                                     double lumenVolume, double wallVolume,
                                      double throughputPerSecond, double resilience,
                                      double fatigueCapacity, List<Port> ports) {
         public MeridianDefinition {
@@ -165,14 +164,9 @@ public final class Anatomy {
             if (partIds.isEmpty()) {
                 throw MeridianErrors.invalid(Data.MERIDIAN_WITHOUT_PART);
             }
-            // 有效容量和液态参照分开；新增外壁空间也必须有参照，避免虚增容量比。
-            DataChecks.positive(lumenCapacity, "经脉内腔容量");
-            DataChecks.nonNegative(wallCapacity, "经脉外壁容量");
-            DataChecks.positive(lumenLiquidReference, "内腔液态参照");
-            DataChecks.nonNegative(wallLiquidReference, "外壁液态参照");
-            if (wallCapacity > 0 && wallLiquidReference == 0) {
-                throw MeridianErrors.invalid(Data.WALL_WITHOUT_REFERENCE);
-            }
+            // 只有体积是结构事实，能容纳的元数取决于库存实际密度。
+            DataChecks.positive(lumenVolume, "经脉内腔体积");
+            DataChecks.nonNegative(wallVolume, "经脉外壁体积");
             // 这里只接受有效结构参数，输送、超载和成长公式由运行层负责。
             DataChecks.positive(throughputPerSecond, "经脉吞吐量");
             DataChecks.positive(resilience, "经脉承受度");

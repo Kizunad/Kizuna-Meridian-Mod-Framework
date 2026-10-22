@@ -137,9 +137,6 @@ public final class AddonRegistry {
                 }
             }
             for (var rule : bundle.getOpeningRulesList()) {
-                for (var qi : rule.getMinimumLumenQi().getEntriesList()) {
-                    requireSymbol(manifest, qi.getAttribute(), QI_ATTRIBUTE, symbols);
-                }
                 requireAction(manifest, rule.getActionId(), rule.getActionVersion(), symbols, definitionKinds, actions);
                 OpeningRuntime.requireAction(OpeningProtobuf.fromRule(rule), ActionProtobuf.fromDefinition(
                         actions.get(new DefinitionKey(rule.getActionId(), rule.getActionVersion()))), null);

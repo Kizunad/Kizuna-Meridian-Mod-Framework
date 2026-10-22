@@ -33,6 +33,7 @@ subprojects {
 
     // 两端各自生成消息类，共用一份协议源；客户端无需依赖服务端身体实现。
     sourceSets.main.proto.setSrcDirs([rootProject.file('shared/src/main/proto')])
+    sourceSets.main.java.srcDir(rootProject.file('shared/src/main/java'))
     def protocolDescriptor = layout.buildDirectory.file('descriptors/meridian-v1.desc')
     protobuf {
         protoc { artifact = "com.google.protobuf:protoc:${rootProject.protobufVersion}" }

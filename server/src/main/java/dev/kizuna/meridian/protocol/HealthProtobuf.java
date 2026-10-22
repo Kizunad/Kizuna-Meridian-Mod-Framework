@@ -144,6 +144,15 @@ public final class HealthProtobuf {
             validateTarget(loss.getTarget());
             ProtoWire.require(targets.add(loss.getTarget()) && positive(loss.getHp()), MeridianErrors.Health.RESOLUTION);
         }
+        var meridians = new HashSet<String>();
+        ProtoWire.require(resolution.getMeridianInjuriesCount() <= 128, MeridianErrors.Health.RESOLUTION);
+        for (var injury : resolution.getMeridianInjuriesList()) {
+            // 经脉伤势只能表达损伤，修复需要另外授权的恢复规则。
+            new dev.kizuna.meridian.core.Anatomy.MeridianId(injury.getMeridianId());
+            ProtoWire.require(meridians.add(injury.getMeridianId())
+                    && (injury.getCondition() == dev.kizuna.meridian.protocol.pb.BodyMessages.MeridianCondition.LEAKING
+                    || injury.getCondition() == dev.kizuna.meridian.protocol.pb.BodyMessages.MeridianCondition.SEVERED), MeridianErrors.Health.RESOLUTION);
+        }
     }
 
     public static void validateResult(BodyCommand command, HealthResult result) {

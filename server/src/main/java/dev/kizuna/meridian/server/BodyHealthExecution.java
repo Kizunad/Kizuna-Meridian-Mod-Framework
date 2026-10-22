@@ -58,6 +58,17 @@ final class BodyHealthExecution {
                 for (HpLoss loss : resolution.getLossesList()) {
                     changeHp(candidate, loss.getTarget(), loss.getHp(), false);
                 }
+                for (MeridianInjury injury : resolution.getMeridianInjuriesList()) {
+                    // 经脉伤势独立于组织 HP；健康接口不能借伤害意图修复既有损伤。
+                    MeridianState state = candidate.getMeridianStatesList().stream()
+                            .filter(item -> item.getId().equals(injury.getMeridianId())).findFirst()
+                            .orElseThrow(() -> MeridianErrors.rejectHealth(FailureCode.MODULE_NOT_FOUND));
+                    if (injury.getConditionValue() < state.getConditionValue()) {
+                        throw MeridianErrors.invalid(MeridianErrors.Health.RESOLUTION);
+                    }
+                    candidate.setMeridianStates(candidate.getMeridianStatesList().indexOf(state),
+                            state.toBuilder().setCondition(injury.getCondition()));
+                }
                 died = resolution.getLethal();
                 if (command.getDamageBody().hasDeathProtection()) {
                     // 即使没有致死也校验完整保命方案，不能把非法账户藏在未执行的分支。
@@ -111,7 +122,7 @@ final class BodyHealthExecution {
             updated = new BodySnapshot(updated.schemaVersion(), updated.id(), updated.template(),
                     updated.structure(), updated.realm(), updated.partStates(), updated.tissueStates(), death.organs(),
                     death.meridians(), List.of(), new VitalityState(vitality.ageSeconds(), vitality.lifespanLimitSeconds(),
-                    vitality.spentLifespanSeconds(), true), updated.settledAt(), updated.revision(), List.of(), null);
+                    vitality.spentLifespanSeconds(), true), updated.settledAt(), updated.revision(), List.of(), null, updated.addonProgress());
             released = death.qi();
         } else if (command.hasDamageBody()) {
             BodyTimeAdvancement.Result interrupted = OpeningRuntime.interruptUnavailable(updated);

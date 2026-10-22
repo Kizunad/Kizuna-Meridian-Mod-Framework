@@ -4,11 +4,11 @@
 
 经脉基础模组提供身体规则，附属包提供具体功法。官方基础功法也放在独立附属包，不能让核心反向依赖官方内容。
 
-功法内容包与可选 3D 经脉世界 Addon 职责独立：配方和路线模板引用身体模块及端口能力，不要求存在特定 3D 设施或显示坐标；基础操作面板和 3D 铺带均可调用已学内容。交互设计见[经脉操作与 3D Addon](Inner-World.md)。
+功法内容包与规划中的 3D 经脉世界 Addon 职责独立：配方和路线模板引用身体模块及端口能力，不要求存在特定 3D 设施或显示坐标；基础操作面板和 3D 铺带均可调用已学内容。交互设计见[经脉操作与 3D Addon](Inner-World.md)。
 
 ## 已实现的器官配方接口
 
-附属 JAR 通过 `AddonBundle.organ_recipes` 提供 protoc 生成的 `BodyMessages.OrganRecipe`。宿主收集完整包集合，经 `AddonRegistry.load` 检查归属、依赖、宿主能力和类型引用后取得 `registry.recipes()`，作为 `BodyCommandHandler` 第六个参数。五参数构造器安装空目录，基础功能可独立运行。
+附属 JAR 通过 `AddonBundle.organ_recipes` 提供 protoc 生成的 `BodyMessages.OrganRecipe`。宿主收集完整包集合，经 `AddonRegistry.load` 检查归属、依赖、宿主能力和类型引用后取得 `registry.recipes()`，作为 `BodyCommandHandler` 第六个参数。五参数构造器使用空配方目录，适用于没有器官配方的通用身体；实际游戏按完整装配提供所需配方。
 
 独立配方编解码仍可使用 `CapabilityProtobuf.encodeRecipe/decodeRecipe`；直接构造 `OrganRecipeCatalog(List<BodyMessages.OrganRecipe>)` 是底层入口，只检查配方及重复 `id + version`，不替代包级依赖校验。
 

@@ -18,7 +18,8 @@ public final class ActionProtobuf {
         ProtoWire.validate(message);
         return new BodyAction.Definition(new DefinitionId(message.getId()), message.getVersion(), message.getDisplayName(),
                 message.getTissueIdsList().stream().map(Anatomy.TissueId::new).toList(),
-                message.getOrganIdsList().stream().map(Anatomy.OrganId::new).toList());
+                message.getOrganIdsList().stream().map(Anatomy.OrganId::new).toList(),
+                message.getGuidedMeridianIdsList().stream().map(Anatomy.MeridianId::new).toList());
     }
 
     public static BodyMessages.ActionDefinition toDefinition(BodyAction.Definition definition) {
@@ -26,7 +27,8 @@ public final class ActionProtobuf {
         var message = BodyMessages.ActionDefinition.newBuilder().setId(definition.id().value())
                 .setVersion(definition.version()).setDisplayName(definition.displayName())
                 .addAllTissueIds(definition.tissueIds().stream().map(Anatomy.TissueId::value).toList())
-                .addAllOrganIds(definition.organIds().stream().map(Anatomy.OrganId::value).toList()).build();
+                .addAllOrganIds(definition.organIds().stream().map(Anatomy.OrganId::value).toList())
+                .addAllGuidedMeridianIds(definition.guidedMeridianIds().stream().map(Anatomy.MeridianId::value).toList()).build();
         ProtoWire.validate(message);
         return message;
     }

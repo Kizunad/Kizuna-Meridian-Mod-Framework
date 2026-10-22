@@ -92,6 +92,6 @@ var commands = new BodyCommandHandler<>(access, security, timeSource, store, aud
 
 已启动动作保存完整占用定义，缺包后仍能维持占用、计算恢复和结束实例；新启动返回 `ACTION_NOT_FOUND`。完整规则见[身体动作](Actions.md)。
 
-开脉任务保存完整规则、策略配置、参与组及摄入证据；仅目录规则缺失而原策略仍可用时，可以继续固定任务。策略执行器缺失时安全暂停、解除占用并守恒释放临时超额；新启动缺规则返回 `OPENING_RULE_NOT_FOUND`，缺策略返回 `OPENING_POLICY_UNAVAILABLE`。普通 `stop_action` 不能删除活动开脉持有的动作，须走开脉暂停完成额度撤销与释放。条件由对应附属自己的 Protobuf 与可信策略提供，框架不解释 Any，具体接入见[开脉策略](Meridian-Opening.md)。
+开脉任务保存完整规则、策略配置、引导目标及摄入证据；仅目录规则缺失而原策略仍可用时，可以继续固定任务。策略执行器缺失时安全暂停并解除占用，保留合法库存和稳定体积；新启动缺规则返回 `OPENING_RULE_NOT_FOUND`，缺策略返回 `OPENING_POLICY_UNAVAILABLE`。普通 `stop_action` 不能删除活动开脉持有的动作，须走开脉暂停统一解除占用。条件由对应附属自己的 Protobuf 与可信策略提供，框架不解释 Any，具体接入见[开脉策略](Meridian-Opening.md)。
 
 首版按启动时安装设计，增删 JAR 需要重启。尚未实现新建身体命令、生命周期热切换、定义迁移、客户端必需资源检查或附属 JAR 发布打包。
