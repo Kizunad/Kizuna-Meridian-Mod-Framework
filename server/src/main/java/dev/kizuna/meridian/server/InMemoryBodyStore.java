@@ -111,6 +111,20 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         return environmentQi;
     }
 
+    /** 可信宿主将没有区域归属的外部释放记入默认账户；调用方负责去重和持久化。 */
+    public synchronized void creditReleasedQi(QiInventory credited) {
+        // 与身体事务隔离，避免外部释放被事务开始时的默认余额覆盖。
+        if (transactionOpen) {
+            throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
+        }
+        MeridianErrors.required(credited, MeridianErrors.Environment.INVENTORY_REQUIRED);
+        if (credited.entries().isEmpty()) {
+            throw MeridianErrors.invalid(MeridianErrors.Environment.CREDIT_EMPTY);
+        }
+        // 所有数量与密度合并成功后才发布；失败保留原余额。
+        environmentQi = QiAccounting.credit(environmentQi, credited);
+    }
+
     public synchronized List<CommandReceipt> receipts() {
         // 宿主保存身体时同时取得已提交回执；不可变消息不会暴露可写事务或去重索引。
         return bodies.values().stream().flatMap(body -> body.receipts().values().stream()).toList();

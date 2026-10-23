@@ -23,6 +23,32 @@ import static org.junit.Assert.*;
 /** 整体回归：可信宿主区域入账、默认释放账户归位及失败时的两账原子性。 */
 public class InMemoryBodyStoreTest {
     @Test
+    public void externalReleasedCreditsPreserveAccountsAndRejectNestedOrFailedWrites() {
+        // 无区域释放仍走唯一 Store，保留自定义属性和相态，且不改变区域版本。
+        BodySnapshot body = ProtocolFixtures.snapshot(Realm.WANDERING_QI);
+        var qi = inventory(new Qi(Qi.QiAttribute.of("qi_variants:wither"), 2, .01));
+        var initial = source(qi);
+        var store = new InMemoryBodyStore(List.of(body), List.of(), qi, List.of(initial));
+        store.creditReleasedQi(qi);
+        assertEquals(4, store.environmentQi().totalQi(), 0);
+        assertEquals(initial, store.environmentSource("region").orElseThrow());
+        assertThrows(IllegalArgumentException.class, () -> store.creditReleasedQi(QiInventory.empty()));
+        assertThrows(IllegalStateException.class, () -> store.transact(body.id(), transaction -> {
+            // 禁止嵌套写入，失败不得改变外层事务和默认账户。
+            store.creditReleasedQi(qi);
+            return null;
+        }));
+        assertEquals(4, store.environmentQi().totalQi(), 0);
+        var restored = new InMemoryBodyStore(List.of(body), store.receipts(), store.environmentQi(), store.environmentSources());
+        assertEquals(store.environmentQi(), restored.environmentQi());
+        assertEquals(initial, restored.environmentSource("region").orElseThrow());
+        var huge = inventory(new Qi(Qi.QiAttribute.WOOD, Double.MAX_VALUE, 1));
+        var overflowing = new InMemoryBodyStore(List.of(), List.of(), huge);
+        assertThrows(MeridianErrors.TransportRejected.class, () -> overflowing.creditReleasedQi(huge));
+        assertEquals(huge, overflowing.environmentQi());
+    }
+
+    @Test
     public void mixedCreditsAndReleasedTransfersPreserveWindowAndSurviveRestore() {
         // 同一自定义属性的游离态和气态必须分别保存，普通属性可以与已有库存合并。
         Qi.QiAttribute wither = Qi.QiAttribute.of("qi_variants:wither");

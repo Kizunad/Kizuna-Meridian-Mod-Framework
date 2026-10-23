@@ -59,14 +59,15 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 `InMemoryBodyStore` 是可运行的参考适配，也实现 `BodySnapshotReader`。无环境历史时用快照与回执初始化；已有时间、开脉或健康命令的环境释放时，通过三参数构造器恢复 `QiInventory` 默认释放账户。区域摄入使用四参数构造器，同时传入完整 `List<EnvironmentQiSource>`；有摄入回执却缺少对应来源时拒绝恢复，不重放回执扣账。`environmentSource(id)` 读取已提交来源，`renewEnvironmentWindow` 用预期版本续窗，保留库存。`environmentQi()` 表示时间、开脉和健康命令共用的默认释放账户；摄入区间加工损耗直接回选定区域，不重复进入该账户。它用一个监视器隔离所有身体与来源，拒绝嵌套写事务、跨线程及回调结束后使用事务。它不写磁盘，没有 TTL；正式宿主需实现原子持久化、恢复及实际并发策略。
 
-事务外的区域入账由两个可信宿主方法提供，均返回提交后的完整 `EnvironmentQiSource`：
+事务外的区域入账与默认账户接收由三个可信宿主方法提供；两个区域相关方法返回提交后的完整 `EnvironmentQiSource`：
 
 - `creditEnvironmentSource(sourceId, credited)`：将其他宿主已经释放的真元记入指定区域，不改默认释放账户。
+- `creditReleasedQi(credited)`：将没有区域归属的外部释放记入默认释放账户，不改变任何区域库存或版本；同样禁止嵌套于身体事务，拒绝空明细和数值溢出，调用方负责释放 ID 去重与保存。
 - `transferReleasedToSource(sourceId, amount)`：从默认释放账户扣除指定明细并记入区域；按 `QiAccounting.debit` 逐属性、逐相态核对余额且要求密度匹配，不能用其他种类抵扣。
 
-两个方法与身体事务、登记和续窗共用监视器；事务回调内调用抛 `NESTED_TRANSACTION`，来源不存在时拒绝为 `ENVIRONMENT_UNAVAILABLE`，来源版本已达 `Long.MAX_VALUE` 时拒绝为 `REVISION_EXHAUSTED`。明细必须非空，每项由 `QiInventory` 保证正数且有限，允许混相与自定义属性。先计算全部候选并通过 `EnvironmentProtobuf.validateSource`，再一次发布；余额不足、数值极限或协议校验失败均保留全部旧账。成功仅增加区域库存和来源版本，不改变供给窗口、固定速率或已用预算；归位同时扣减默认释放账户。
+这些方法与身体事务、登记和续窗共用监视器；事务回调内调用抛 `NESTED_TRANSACTION`，来源不存在时拒绝为 `ENVIRONMENT_UNAVAILABLE`，来源版本已达 `Long.MAX_VALUE` 时拒绝为 `REVISION_EXHAUSTED`。明细必须非空，每项由 `QiInventory` 保证正数且有限，允许混相与自定义属性。区域入账先计算候选并通过 `EnvironmentProtobuf.validateSource`，再一次发布；余额不足、数值极限或协议校验失败均保留全部旧账。区域入账增加来源库存和版本，不改变供给窗口、固定速率或已用预算；默认账户接收只改变默认账户，归位同时扣减默认释放账户。
 
-这两个方法只保证单次原子入账，不保存释放 ID，也不自动识别玩家或位置。外部释放的真实性、按释放 ID 去重及归位记录由宿主负责；持久化宿主应将去重事实与入账结果一起保存，避免崩溃重试重复发放。默认账户中的余额归位须使用转出方法，不能用外部入账方法复制一份。来源版本变化后，旧 offer 的交换返回 `ENVIRONMENT_REVISION_CONFLICT`；宜先结清旧窗摄入，再在同一宿主串行边界集中入账/归位，用最后返回的 revision 调用 `renewEnvironmentWindow`，随后重新生成 offer。各方法单独加锁不代表多次调用自动组成一个事务。
+这些方法只保证单次原子入账，不保存释放 ID，也不自动识别玩家或位置。外部释放的真实性、按释放 ID 去重及归位记录由宿主负责；持久化宿主应将去重事实与入账结果一起保存，避免崩溃重试重复发放。默认账户中的余额归位须使用转出方法，不能用外部入账方法复制一份。来源版本变化后，旧 offer 的交换返回 `ENVIRONMENT_REVISION_CONFLICT`；宜先结清旧窗摄入，再在同一宿主串行边界集中入账/归位，用最后返回的 revision 调用 `renewEnvironmentWindow`，随后重新生成 offer。各方法单独加锁不代表多次调用自动组成一个事务。
 
 [环境交换契约](Environment-Qi.md)通过 `environment.proto` 表达来源库存、供给、交换及成功回执。`EnvironmentAbsorption.initialize/renewWindow` 在窗口开始时利用 `EnvironmentQiRules` 按浓度计算速率；交换期间从真实库存扣账，按重叠子区间检查多人共享供给。`EnvironmentConfigLoader` 从 TOML 提供配置。`BodyEnvironmentSource.resolve(context, body, plan)` 必须确认 `[body.settledAt, plan.target)` 全程可从返回的来源摄入，而不是只看最后位置。移动、环境条件或离线模式改变时由宿主先拆段；这个只读接口不预扣款，也不接收客户端提供的 offer。
 
