@@ -9,6 +9,8 @@ def modules = [
     'kizuna-meridian-human-ui-addon': 'Kizuna-Meridian-Human-UI-Addon/client/build/libs/kizuna-meridian-human-ui-addon-client-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-vanilla-damage-addon': 'Kizuna-Meridian-Vanilla-Damage-Addon/fabric/build/libs/kizuna-meridian-vanilla-damage-addon-fabric-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/fabric/build/libs/kizuna-meridian-vanilla-healing-addon-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-qi-variants-addon': 'Kizuna-Meridian-Qi-Variants-Addon/server/build/libs/kizuna-meridian-qi-variants-addon-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-vanilla-creature-threatening': 'Kizuna-Meridian-Vanilla-Creature-Threatening/fabric/build/libs/kizuna-meridian-vanilla-creature-threatening-fabric-0.1.0-SNAPSHOT.jar',
     'kizuna-players-animation': 'Kizuna-Players-Animation/build/libs/kizuna-players-animation-0.1.0-SNAPSHOT.jar'
 ]
 modules.each { repository, artifact ->
@@ -16,7 +18,9 @@ modules.each { repository, artifact ->
     boolean builtFromSource = repository == rootProject.name ||
             (rootProject.name == 'kizuna-meridian-vanilla-healing-addon' && repository == 'kizuna-meridian-vanilla-damage-addon')
     if (!builtFromSource) {
-        dependencies.add('modLocalRuntime', files(new File(codeDirectory, artifact)))
+        // 真元变体是纯 Java 内容库，没有 Fabric 入口，不能交给 Loom 当模组重映射。
+        String runtimeConfiguration = repository == 'kizuna-meridian-qi-variants-addon' ? 'localRuntime' : 'modLocalRuntime'
+        dependencies.add(runtimeConfiguration, files(new File(codeDirectory, artifact)))
     }
 }
 def progressionArtifacts = [
@@ -34,7 +38,10 @@ progressionArtifacts.each { module, artifact ->
         dependencies.add('modLocalRuntime', runtimeArtifact)
     }
 }
+// 真元变体 server JAR 不内嵌自己的协议库，开发运行需同时装配 shared。
+def qiVariantsShared = new File(codeDirectory, 'Kizuna-Meridian-Qi-Variants-Addon/shared/build/libs/kizuna-meridian-qi-variants-addon-shared-0.1.0-SNAPSHOT.jar')
 dependencies {
+    localRuntime files(qiVariantsShared)
     localRuntime files(new File(codeDirectory, 'Kizuna-Meridian-Human-Addon/shared/build/libs/kizuna-meridian-human-addon-shared-0.1.0-SNAPSHOT.jar'))
     modLocalRuntime files(new File(codeDirectory, 'Kizuna-Inventory-UI-Framework/build/libs/kizuna-inventory-ui-framework-0.1.0-SNAPSHOT.jar'))
     modLocalRuntime files(new File(codeDirectory, 'Kizuna-Inventory-UI-Framework/server/build/libs/kizuna-inventory-ui-framework-server-0.1.0-SNAPSHOT.jar'))
@@ -80,6 +87,7 @@ tasks.withType(JavaExec).configureEach {
         def required = modules.values().collect { new File(codeDirectory, it) }
         required.addAll(progressionArtifacts.values().collect { new File(codeDirectory, it) })
         required.addAll(serverLibraries.values().collect { new File(codeDirectory, it) })
+        required.add(qiVariantsShared)
         required.add(new File(codeDirectory, 'Kizuna-Meridian-Items-Addon/build/libs/kizuna-meridian-items-addon-0.1.0-SNAPSHOT.jar'))
         required.each { artifact ->
             if (!artifact.isFile()) {

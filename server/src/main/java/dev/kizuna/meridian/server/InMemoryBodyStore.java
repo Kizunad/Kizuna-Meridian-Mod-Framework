@@ -165,6 +165,60 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         sources.put(sourceId, renewed);
     }
 
+    /**
+     * 将可信宿主提供的非空真元明细记入区域，返回已提交来源；不改变供给窗口、速率和已用预算。
+     * 调用方负责释放 ID 去重；来源版本递增会使旧 offer 得到 ENVIRONMENT_REVISION_CONFLICT，
+     * 宜在结清旧窗口后集中入账，再使用新版本续窗，避免打断进行中的摄入。
+     */
+    public synchronized EnvironmentQiSource creditEnvironmentSource(String sourceId, QiInventory credited) {
+        // 与身体事务共用监视器，先验证完整候选，再发布唯一的区域账本。
+        EnvironmentQiSource updated = prepareEnvironmentCredit(sourceId, credited);
+        sources.put(sourceId, updated);
+        return updated;
+    }
+
+    /**
+     * 从默认释放账户扣除指定非空明细并记入区域，两边在同一锁内一起发布。
+     * 按 QiAccounting.debit 校验属性、相态、密度与余额；版本冲突和宿主去重约定同 creditEnvironmentSource。
+     */
+    public synchronized EnvironmentQiSource transferReleasedToSource(String sourceId, QiInventory amount) {
+        // 两份候选都算完才提交，任一属性余额不足或区域校验失败都不会部分转出。
+        EnvironmentQiSource updated = prepareEnvironmentCredit(sourceId, amount);
+        QiInventory remainingReleased = QiAccounting.debit(environmentQi, amount);
+
+        sources.put(sourceId, updated);
+        environmentQi = remainingReleased;
+        return updated;
+    }
+
+    private EnvironmentQiSource prepareEnvironmentCredit(String sourceId, QiInventory credited) {
+        // 调用者已持有 Store 监视器；禁止在身体回调中写账，否则外层暂存状态会覆盖这里的入账。
+        if (transactionOpen) {
+            throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
+        }
+        EnvironmentQiSource source = sources.get(sourceId);
+        if (source == null) {
+            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_UNAVAILABLE);
+        }
+        if (source.getRevision() == Long.MAX_VALUE) {
+            throw MeridianErrors.rejectIntake(FailureCode.REVISION_EXHAUSTED);
+        }
+        MeridianErrors.required(credited, MeridianErrors.Environment.INVENTORY_REQUIRED);
+        if (credited.entries().isEmpty()) {
+            throw MeridianErrors.invalid(MeridianErrors.Environment.CREDIT_EMPTY);
+        }
+
+        // QiInventory 已保证明细为正且有限；共用入账规则保留混相与自定义属性并拒绝浮点吞量。
+        QiInventory inventory = QiAccounting.credit(BodyProtobuf.fromInventory(source.getInventory()), credited);
+        EnvironmentQiSource updated = source.toBuilder()
+                .setInventory(BodyProtobuf.toInventory(inventory))
+                .setRevision(source.getRevision() + 1)
+                .build();
+        // 包括协议大小限制在内的完整校验必须在发布之前完成，窗口与用量原样保留。
+        EnvironmentProtobuf.validateSource(updated);
+        return updated;
+    }
+
     @Override
     public synchronized <T> T transact(BodyId bodyId, Function<Transaction, T> work) {
         // 参考实现用一个锁隔离身体和共享来源；正式宿主需联合锁定两者或使用数据库事务。

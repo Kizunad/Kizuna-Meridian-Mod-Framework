@@ -51,13 +51,22 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 健康操作通过 `handleHealthEffect(context, payload)` 接入，普通 `handle` 默认拒绝。宿主先确认攻击命中或治疗、药效事实，再构造请求，不能接受玩家自报剂量。完整构造器的最后一个参数是 `BodyDamageHandler`：接收 `DamageContext` bytes，返回 `DamageResolution` bytes。宿主按实际生物模板选择 Addon；减伤、分配和生物特定死亡条件由该处理器计算，框架校验及提交局部变化。回调在事务内只计算一次方案，不写账、不调用外界副作用；其他语言按相同 Protobuf 实现即可。省略最后参数时使用 `DefaultBodyDamageHandler`：可省略命中点以随机选择尚有 HP 的部位，全部部位归零时判死。已装配策略失败时不改用兜底。治疗与主动疲劳恢复不依赖伤害处理器。
 
-健康回执固定 Addon 原方案；Store 复算与成功重试不再调用 Addon。死亡及开脉因伤中断的真元释放与身体、回执原子保存到默认释放账户，恢复时必须带回该余额。普通时间释放和健康释放后续按位置进入区域的调度仍由宿主补齐。字段、剂量及失能规则见[伤害、治疗与主动恢复](Health-Effects.md)。
+健康回执固定 Addon 原方案；Store 复算与成功重试不再调用 Addon。死亡及开脉因伤中断的真元释放与身体、回执原子保存到默认释放账户，恢复时必须带回该余额。宿主确定普通时间释放和健康释放的位置归属后，可用下述 `transferReleasedToSource` 归位；位置记录与调度仍由宿主负责。字段、剂量及失能规则见[伤害、治疗与主动恢复](Health-Effects.md)。
 
 独立伤害适配可以通过 `BodyHealthHost.exchange(byte[])` 交换 `health_host.proto` 消息，查询实际身份绑定后向同一宿主提交健康命令。`ConfirmBodyDeath` 用于已经发生的外部死亡，保留局部 HP 与伤势。只有明确 `unbound = true` 允许寻找其他宿主；拒绝和重复认领均停止，不换账本。Fabric entrypoint 与原版事件接线属于独立 Addon，核心仍不依赖 Minecraft。详细可信边界见[健康宿主交换](Health-Effects.md#跨附属健康宿主交换)。
 
 `BodyTransactionStore.transact(bodyId, work)` 在隔离同一身体所有写入的事务内恰好调用一次 `work`，不能通过自动重跑回调解决冲突。事务提供只读快照、成功回执查找、`environmentSource(sourceId)` 与 `stage(next, receipt)`。环境读取还须隔离其他身体对同一来源的写入；只锁身体不足以防止共享预算透支。stage 是暂存，正常返回后才能把身体、来源库存、预算与回执一起发布。任何提交前故障必须一起回滚；成功返回必须意味着提交完成。权限/会话撤销及环境位置历史由宿主与提交边界协调，数据库类型不进入框架接口。
 
 `InMemoryBodyStore` 是可运行的参考适配，也实现 `BodySnapshotReader`。无环境历史时用快照与回执初始化；已有时间、开脉或健康命令的环境释放时，通过三参数构造器恢复 `QiInventory` 默认释放账户。区域摄入使用四参数构造器，同时传入完整 `List<EnvironmentQiSource>`；有摄入回执却缺少对应来源时拒绝恢复，不重放回执扣账。`environmentSource(id)` 读取已提交来源，`renewEnvironmentWindow` 用预期版本续窗，保留库存。`environmentQi()` 表示时间、开脉和健康命令共用的默认释放账户；摄入区间加工损耗直接回选定区域，不重复进入该账户。它用一个监视器隔离所有身体与来源，拒绝嵌套写事务、跨线程及回调结束后使用事务。它不写磁盘，没有 TTL；正式宿主需实现原子持久化、恢复及实际并发策略。
+
+事务外的区域入账由两个可信宿主方法提供，均返回提交后的完整 `EnvironmentQiSource`：
+
+- `creditEnvironmentSource(sourceId, credited)`：将其他宿主已经释放的真元记入指定区域，不改默认释放账户。
+- `transferReleasedToSource(sourceId, amount)`：从默认释放账户扣除指定明细并记入区域；按 `QiAccounting.debit` 逐属性、逐相态核对余额且要求密度匹配，不能用其他种类抵扣。
+
+两个方法与身体事务、登记和续窗共用监视器；事务回调内调用抛 `NESTED_TRANSACTION`，来源不存在时拒绝为 `ENVIRONMENT_UNAVAILABLE`，来源版本已达 `Long.MAX_VALUE` 时拒绝为 `REVISION_EXHAUSTED`。明细必须非空，每项由 `QiInventory` 保证正数且有限，允许混相与自定义属性。先计算全部候选并通过 `EnvironmentProtobuf.validateSource`，再一次发布；余额不足、数值极限或协议校验失败均保留全部旧账。成功仅增加区域库存和来源版本，不改变供给窗口、固定速率或已用预算；归位同时扣减默认释放账户。
+
+这两个方法只保证单次原子入账，不保存释放 ID，也不自动识别玩家或位置。外部释放的真实性、按释放 ID 去重及归位记录由宿主负责；持久化宿主应将去重事实与入账结果一起保存，避免崩溃重试重复发放。默认账户中的余额归位须使用转出方法，不能用外部入账方法复制一份。来源版本变化后，旧 offer 的交换返回 `ENVIRONMENT_REVISION_CONFLICT`；宜先结清旧窗摄入，再在同一宿主串行边界集中入账/归位，用最后返回的 revision 调用 `renewEnvironmentWindow`，随后重新生成 offer。各方法单独加锁不代表多次调用自动组成一个事务。
 
 [环境交换契约](Environment-Qi.md)通过 `environment.proto` 表达来源库存、供给、交换及成功回执。`EnvironmentAbsorption.initialize/renewWindow` 在窗口开始时利用 `EnvironmentQiRules` 按浓度计算速率；交换期间从真实库存扣账，按重叠子区间检查多人共享供给。`EnvironmentConfigLoader` 从 TOML 提供配置。`BodyEnvironmentSource.resolve(context, body, plan)` 必须确认 `[body.settledAt, plan.target)` 全程可从返回的来源摄入，而不是只看最后位置。移动、环境条件或离线模式改变时由宿主先拆段；这个只读接口不预扣款，也不接收客户端提供的 offer。
 

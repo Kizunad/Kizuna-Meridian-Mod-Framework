@@ -147,6 +147,36 @@ public class OrganIntakeTest {
     }
 
     @Test
+    public void externalCreditsInvalidateOldOffersAndAllowFreshIntake() {
+        // 先形成真实摄入用量，再验证外部入账使旧供给失效而不重置共享预算。
+        var store = store(List.of(body("a", 0), body("b", 0)));
+        committed(handler(store, 1000, true).handle("owner", request("a", 0, "first", wood(3))));
+        EnvironmentQiSource previous = source(store);
+        var staleExchange = EnvironmentQiExchange.newBuilder().setExchangeId("stale")
+                .setOffer(EnvironmentAbsorption.offer(previous, "b", time(0), time(1000)))
+                .setExpectedBodyRevision(0).setStartedAt(time(0)).setEndedAt(time(1000))
+                .setAbsorbedQi(BodyProtobuf.toInventory(wood(1)))
+                .setReleasedQi(BodyProtobuf.toInventory(QiInventory.empty())).build();
+
+        EnvironmentQiSource credited = store.creditEnvironmentSource("region", wood(10));
+        assertEquals(FailureCode.ENVIRONMENT_REVISION_CONFLICT,
+                assertThrows(MeridianErrors.IntakeRejected.class,
+                        () -> EnvironmentAbsorption.apply(credited, staleExchange)).code());
+        assertEquals(previous.getUsageList(), credited.getUsageList());
+        assertEquals(previous.getMaxAbsorptionPerSecond(), credited.getMaxAbsorptionPerSecond(), 0);
+
+        // 新库存没有新增本窗口带宽；通过正常宿主入口取得新 offer 后，只能消费剩余的一元。
+        failure(handler(store, 1000, true).handle("owner", request("b", 0, "over-budget", wood(2))),
+                FailureCode.ENVIRONMENT_BUDGET_EXCEEDED);
+        assertEquals(credited, source(store));
+        committed(handler(store, 1000, true).handle("owner", request("b", 0, "fresh", wood(1))));
+        assertEquals(credited.getRevision() + 1, source(store).getRevision());
+        assertEquals(106, sourceTotal(store), 0);
+        assertEquals(4, source(store).getUsage(0).getQiPerSecond(), 0);
+        assertEquals(1, store.find(new BodyId("b")).orElseThrow().totalQi(), 0);
+    }
+
+    @Test
     public void invalidCapabilityCapacityTimeAndHostPolicyLeaveBothAccountsUntouched() {
         // 每个拒绝都通过真实处理器，不只验证纯算子的异常。
         var initial = BodyProtobuf.toMessage(body("a", 0));

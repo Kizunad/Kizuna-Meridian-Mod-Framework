@@ -31,6 +31,7 @@ final class BreathingDriver<C> {
     private BreathControl control = BreathControl.newBuilder().setAction(HOLD).setAimX(.5).setAimY(.4).build();
     private boolean active;
     private boolean automatic;
+    private boolean automaticWaiting;
     private BreathAction automaticAction = INHALE;
     private long updatedMillis;
     private long leaseMillis;
@@ -141,6 +142,14 @@ final class BreathingDriver<C> {
         }
         long now = session.now();
         boolean changesMode = requested.getAction() == BEGIN_BREATHING || requested.getAction() == SET_AUTOMATIC_BREATHING;
+        if (automaticWaiting && requested.getAction() == SET_AUTOMATIC_BREATHING) {
+            // 等待期间复选框仍代表自动意图；再次勾选保持等待，取消勾选立即撤销。
+            if (!requested.getAutomatic()) {
+                stop();
+            }
+            control = requested;
+            return;
+        }
         if (changesMode && requested.getAutomatic()) {
             if (!profile.hasAutomatic()) {
                 throw MeridianErrors.rejectGathering(INTAKE_UNSUPPORTED);
@@ -170,6 +179,7 @@ final class BreathingDriver<C> {
                 throw MeridianErrors.rejectGathering(MODULE_UNAVAILABLE);
             }
             active = true;
+            automaticWaiting = false;
             failure = FAILURE_CODE_UNSPECIFIED;
             updatedMillis = now;
             status = "左键吸气 · 右键呼气";
@@ -186,6 +196,7 @@ final class BreathingDriver<C> {
             }
             updateBodyAction(false);
             automatic = requested.getAutomatic();
+            automaticWaiting = false;
             automaticAction = airLiters >= view(session.read()).getCapacityLiters() ? EXHALE : INHALE;
         }
         // 按新输入切换后续区间的占用；此前气流已经由 step 按旧输入结清。
@@ -196,12 +207,12 @@ final class BreathingDriver<C> {
         // 只有占用提交成功才接受新气流输入，失败后继续沿用旧控制状态。
         control = requested;
         leaseMillis = now + INPUT_LEASE_MILLIS;
-        boundaryMillis = active ? now + STEP_MILLIS : 0;
+        boundaryMillis = active || automaticWaiting ? now + STEP_MILLIS : 0;
     }
 
     boolean advance() {
-        // 闲置会话没有唤醒；失去输入租约后停止主动操作，不积累离线吸收。
-        if (!active) {
+        // 普通闲置会话没有唤醒；自动等待保留恢复边界，但不积累离线吸收。
+        if (!active && !automaticWaiting) {
             return false;
         }
         try {
@@ -209,8 +220,12 @@ final class BreathingDriver<C> {
             if (now < boundaryMillis) {
                 return false;
             }
+            if (automaticWaiting) {
+                resumeAutomatic(now);
+                return true;
+            }
             step(now);
-            boundaryMillis = active ? now + STEP_MILLIS : 0;
+            boundaryMillis = active || automaticWaiting ? now + STEP_MILLIS : 0;
             return true;
         } catch (MeridianErrors.GatheringRejected failure) {
             stop();
@@ -242,8 +257,7 @@ final class BreathingDriver<C> {
             return;
         }
         if (automatic && before.getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
-            stop();
-            status = "呼吸耐力低于自动停止线，请休息后重新开始";
+            waitForAutomaticStamina(now);
             return;
         }
         if (automatic && airLiters >= before.getCapacityLiters()) {
@@ -301,8 +315,7 @@ final class BreathingDriver<C> {
         status = inhaling ? "吸气 · 引导空间气流汇入口鼻" : "呼气 · 引导空间气流向外扩散";
         BreathingView after = view(session.read());
         if (automatic && after.getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
-            stop();
-            status = "呼吸耐力低于自动停止线，请休息后重新开始";
+            waitForAutomaticStamina(now);
         } else if (after.getStaminaRatio() < .00001 || !automatic && after.getAttentionRatio() < .00001) {
             stop();
             status = "耐力或精力耗尽";
@@ -313,6 +326,44 @@ final class BreathingDriver<C> {
         // 呼吸与注意力按实际功率计费，零外部作用力不等于免费做功。
         return ExertTissue.newBuilder().setTissueId(id).setForceNewtons(0)
                 .setPowerWatts(watts).setDurationSeconds(seconds).build();
+    }
+
+    private void waitForAutomaticStamina(long now) {
+        // 先释放膈肌占用，让框架自然恢复；自动意图保留并安排下一次阈值检查。
+        updateBodyAction(false);
+        active = false;
+        automatic = true;
+        automaticWaiting = true;
+        suction = 0;
+        blowing = 0;
+        boundaryMillis = now + STEP_MILLIS;
+        status = "呼吸耐力不足，恢复后自动继续";
+    }
+
+    private void resumeAutomatic(long now) {
+        // 等待间隔只结算身体自然恢复，不追补吸气、粒子接触或摄入证据。
+        session.settleManual();
+        BodySnapshot body = session.read();
+        BreathingView current = view(body);
+        if (body.vitality().dead() || current.getCapacityLiters() <= 0) {
+            stop();
+            status = "呼吸器官无法工作";
+            return;
+        }
+        if (current.getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
+            updatedMillis = now;
+            boundaryMillis = now + STEP_MILLIS;
+            return;
+        }
+
+        // 达到原启动线后从当前空气量选择方向，并在新边界开始做功。
+        automaticWaiting = false;
+        active = true;
+        automaticAction = airLiters >= current.getCapacityLiters() ? EXHALE : INHALE;
+        updateBodyAction(true);
+        updatedMillis = now;
+        boundaryMillis = now + STEP_MILLIS;
+        status = "自动吐纳已恢复";
     }
 
     private void moveParticles(double seconds, BreathAction action, double airflow) {
@@ -558,7 +609,7 @@ final class BreathingDriver<C> {
     }
 
     long nextBoundaryMillis() {
-        // 宿主只需为正在吐纳的身体安排短区间事件。
+        // 活动或等待恢复的自动吐纳都需要下一次服务端边界检查。
         return boundaryMillis;
     }
 
@@ -567,6 +618,7 @@ final class BreathingDriver<C> {
         updateBodyAction(false);
         active = false;
         automatic = false;
+        automaticWaiting = false;
         suction = 0;
         blowing = 0;
         boundaryMillis = 0;

@@ -2,7 +2,9 @@
 
 通用身体、经脉与功法扩展框架的设计和接入文档。基础模组负责通用身体运行、权威数据与操作协议；独立 Meridian UI Addon 提供通用身体查看和操作界面，人体模型与构型由 Human 提供，人体专属表现归 Human-UI，功法附属 JAR 提供功法内容。3D 经脉世界规划为独立扩展，宿主负责世界接入。
 
-Framework、Human、UI、Items、Vanilla-Damage、Vanilla-Healing、Human-UI 与 Kizuna-Players-Animation 按适用端整套必装。拆仓用于职责和代码管理，缺少宿主、效果集成或客户端接线是装配错误；未绑定身体的实体继续原版。运行时必装不改变通用核心与人体内容的源码边界。
+Framework、Human、UI、Items、Vanilla-Damage、Vanilla-Healing、Human-UI、Progression、Qi-Variants、Vanilla-Creature-Threatening 与 Kizuna-Players-Animation 按适用端整套必装。拆仓用于职责和代码管理，缺少宿主、效果集成或客户端接线是装配错误；未绑定身体的实体继续原版。运行时必装不改变通用核心与人体内容的源码边界。
+
+`scripts/full-assembly.gradle` 集中声明开发运行所需产物：Qi-Variants 的 server 与 shared JAR 作为纯 Java 库放入 `localRuntime`，Threatening 的 Fabric JAR 放入 `modLocalRuntime`。缺少必装产物时拒绝启动；当前 Threatening 尚无构建产物，脚本中的路径为待实现的装配目标，不代表已有可运行整套分发。
 
 > 当前已实现 Java 17 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输与[被动扩散](Meridian-and-Qi.md)、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。框架自身为两端库，没有独立 Fabric 加载入口或正式版本；Human 提供玩家宿主，伤害和治疗由对应 Addon 接线。肌肉真元增益/攻击、连续流等后续能力仍按模块边界推进。
 
