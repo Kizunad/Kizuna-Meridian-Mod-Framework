@@ -10,7 +10,7 @@ def modules = [
     'kizuna-meridian-vanilla-damage-addon': 'Kizuna-Meridian-Vanilla-Damage-Addon/fabric/build/libs/kizuna-meridian-vanilla-damage-addon-fabric-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/fabric/build/libs/kizuna-meridian-vanilla-healing-addon-fabric-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-qi-variants-addon': 'Kizuna-Meridian-Qi-Variants-Addon/server/build/libs/kizuna-meridian-qi-variants-addon-server-0.1.0-SNAPSHOT.jar',
-    'kizuna-meridian-vanilla-creature-threatening': 'Kizuna-Meridian-Vanilla-Creature-Threatening/fabric/build/libs/kizuna-meridian-vanilla-creature-threatening-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-vanilla-humanoid-threatening': 'Kizuna-Meridian-Vanilla-Humanoid-Threatening/fabric/build/libs/kizuna-meridian-vanilla-humanoid-threatening-fabric-0.1.0-SNAPSHOT.jar',
     'kizuna-players-animation': 'Kizuna-Players-Animation/build/libs/kizuna-players-animation-0.1.0-SNAPSHOT.jar'
 ]
 modules.each { repository, artifact ->
