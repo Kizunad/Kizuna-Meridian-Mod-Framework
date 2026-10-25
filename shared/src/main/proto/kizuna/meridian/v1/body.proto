@@ -99,6 +99,7 @@ message TissueDefinition {
   reserved 9;
   reserved "rest_recovery_per_second";
   double recovery_half_life_seconds = 10; // 未被动作使用时，剩余疲劳减半所需模拟秒；0 禁用自然恢复。
+  repeated string tags = 11; // namespace:path；每个定义最多 16 个且不重复，框架不解释语义。
 }
 
 message TissueCapacity {
@@ -120,6 +121,7 @@ message OrganDefinition {
   double throughput_per_second = 8; // 端口收发共享吞吐，元/秒。
   OrganIntakeCapability intake = 9; // 可缺省：没有环境摄入能力。实际改造参数随构型保存。
   OrganEndurance endurance = 10; // 可缺省：不具备独立做功预算。
+  repeated string tags = 12; // 与组织、经脉共用标签格式和数量约束。
 }
 
 message OrganEndurance {
@@ -144,6 +146,7 @@ message MeridianDefinition {
   double resilience = 9;
   double fatigue_capacity = 10;
   repeated Port ports = 11;
+  repeated string tags = 14; // 标签属于定义，不在 MeridianState 中重复保存。
 }
 
 message Port {

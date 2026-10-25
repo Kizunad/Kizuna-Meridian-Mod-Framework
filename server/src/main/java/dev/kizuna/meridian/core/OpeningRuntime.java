@@ -317,25 +317,18 @@ public final class OpeningRuntime {
 
     public static BodySnapshot complete(BodySnapshot body, Anatomy.MeridianId id, double stableVolume) {
         // 正常完成和管理员完成共用此路径；已经开通的经脉不能再次获得体积。
-        MeridianState target = body.meridianStates().stream().filter(state -> state.id().equals(id))
+        List<MeridianState> originalStates = body.meridianStates();
+        MeridianState target = originalStates.stream().filter(state -> state.id().equals(id))
                 .findFirst().orElseThrow(() -> MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY));
         if (target.opening().stage() == MeridianOpening.Stage.OPENED) {
             return body;
         }
         DataChecks.positive(stableVolume, "完成后内腔体积");
-        var definitions = new ArrayList<Anatomy.MeridianDefinition>();
-        for (Anatomy.MeridianDefinition definition : body.structure().meridians()) {
-            if (definition.id().equals(id)) {
-                if (stableVolume < definition.lumenVolume()) {
-                    throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
-                }
-                definition = new Anatomy.MeridianDefinition(id, definition.displayName(), definition.partIds(),
-                        stableVolume, definition.wallVolume(), definition.throughputPerSecond(), definition.resilience(),
-                        definition.fatigueCapacity(), definition.ports());
-            }
-            definitions.add(definition);
-        }
-        List<MeridianState> states = body.meridianStates().stream().map(state -> {
+
+        // 扩容与开拓状态一起切换，保留实际构型中的标签及独立库存。
+        BodyStructure originalStructure = body.structure();
+        List<Anatomy.MeridianDefinition> definitions = expandedDefinitions(originalStructure, id, stableVolume);
+        List<MeridianState> states = originalStates.stream().map(state -> {
             if (!state.id().equals(id)) {
                 return state;
             }
@@ -344,14 +337,40 @@ public final class OpeningRuntime {
         }).toList();
         OpeningTask task = body.openingTask();
         List<BodyAction.Active> actions = body.actions();
+        List<BodyAction.Active> remainingActions;
+        OpeningTask completedTask;
         if (task != null && task.rule().targetMeridianId().equals(id)) {
             String instance = task.actionInstanceId();
-            actions = actions.stream().filter(action -> !action.instanceId().equals(instance)).toList();
-            task = task.progress(task.requiredMillis(), OpeningTask.Status.COMPLETED, List.of());
+            remainingActions = actions.stream().filter(action -> !action.instanceId().equals(instance)).toList();
+            completedTask = task.progress(task.requiredMillis(), OpeningTask.Status.COMPLETED, List.of());
+        } else {
+            remainingActions = actions;
+            completedTask = task;
         }
-        var structure = new BodyStructure(body.structure().parts(), body.structure().tissues(), body.structure().organs(),
-                definitions, body.structure().connections());
-        return copy(body, structure, body.tissueStates(), body.organStates(), states, body.transits(), actions, task, body.revision());
+        var structure = new BodyStructure(originalStructure.parts(), originalStructure.tissues(),
+                originalStructure.organs(), definitions, originalStructure.connections());
+        return copy(body, structure, body.tissueStates(), body.organStates(), states, body.transits(),
+                remainingActions, completedTask, body.revision());
+    }
+
+    private static List<Anatomy.MeridianDefinition> expandedDefinitions(BodyStructure structure,
+                                                                      Anatomy.MeridianId id, double stableVolume) {
+        // 扩容只改变目标内腔体积，标签与其他结构事实必须完整保留。
+        var definitions = new ArrayList<Anatomy.MeridianDefinition>();
+        for (Anatomy.MeridianDefinition definition : structure.meridians()) {
+            if (!definition.id().equals(id)) {
+                definitions.add(definition);
+                continue;
+            }
+            if (stableVolume < definition.lumenVolume()) {
+                throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
+            }
+            var expanded = new Anatomy.MeridianDefinition(id, definition.displayName(), definition.partIds(),
+                    stableVolume, definition.wallVolume(), definition.throughputPerSecond(), definition.resilience(),
+                    definition.fatigueCapacity(), definition.ports(), definition.tags());
+            definitions.add(expanded);
+        }
+        return List.copyOf(definitions);
     }
 
     private static boolean modulesAvailable(BodySnapshot body) {

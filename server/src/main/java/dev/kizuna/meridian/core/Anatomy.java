@@ -65,7 +65,15 @@ public final class Anatomy {
     /** kind 使用内容标识区分肌肉、皮肤、骨骼等，不封闭第三方组织类型。 */
     public record TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
                                    double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity,
-                                   double recoveryHalfLifeSeconds) {
+                                   double recoveryHalfLifeSeconds, List<DefinitionId> tags) {
+        public TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
+                                double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity,
+                                double recoveryHalfLifeSeconds) {
+            // 未使用标签选择的内容仍可声明完整组织能力。
+            this(id, displayName, kind, partId, maxHp, fatigueCapacity, ports, capacity,
+                    recoveryHalfLifeSeconds, List.of());
+        }
+
         public TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
                                 double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity) {
             // 内容没有声明恢复能力时保持禁用，避免给所有物种暗中配置相同恢复数值。
@@ -84,6 +92,8 @@ public final class Anatomy {
             DataChecks.nonNegative(recoveryHalfLifeSeconds, "组织疲劳恢复半衰期");
             // 防止调用者随后修改端口列表，绕过构型校验。
             ports = List.copyOf(ports);
+            tags = List.copyOf(tags);
+            DataChecks.validateTags(tags);
         }
     }
 
@@ -100,7 +110,15 @@ public final class Anatomy {
     /** 器官声明自身接口与可选摄入能力；转换产物由配方定义。 */
     public record OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
                                   double maxHp, List<Port> ports, double volumeCapacity, double throughputPerSecond,
-                                  OrganIntakeCapability intake, OrganEndurance endurance) {
+                                  OrganIntakeCapability intake, OrganEndurance endurance, List<DefinitionId> tags) {
+        public OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
+                               double maxHp, List<Port> ports, double volumeCapacity, double throughputPerSecond,
+                               OrganIntakeCapability intake, OrganEndurance endurance) {
+            // 标签为空时仍保留已有器官构造入口及明确声明的耐力。
+            this(id, displayName, kind, partId, maxHp, ports, volumeCapacity, throughputPerSecond,
+                    intake, endurance, List.of());
+        }
+
         public OrganDefinition(OrganId id, String displayName, DefinitionId kind, PartId partId,
                                double maxHp, List<Port> ports, double volumeCapacity, double throughputPerSecond,
                                OrganIntakeCapability intake) {
@@ -123,6 +141,8 @@ public final class Anatomy {
             DataChecks.positive(volumeCapacity, "器官真元容量");
             DataChecks.positive(throughputPerSecond, "器官端口吞吐");
             ports = List.copyOf(ports);
+            tags = List.copyOf(tags);
+            DataChecks.validateTags(tags);
         }
     }
 
@@ -154,7 +174,15 @@ public final class Anatomy {
     public record MeridianDefinition(MeridianId id, String displayName, List<PartId> partIds,
                                      double lumenVolume, double wallVolume,
                                      double throughputPerSecond, double resilience,
-                                     double fatigueCapacity, List<Port> ports) {
+                                     double fatigueCapacity, List<Port> ports, List<DefinitionId> tags) {
+        public MeridianDefinition(MeridianId id, String displayName, List<PartId> partIds,
+                                  double lumenVolume, double wallVolume, double throughputPerSecond,
+                                  double resilience, double fatigueCapacity, List<Port> ports) {
+            // 未标记的经脉继续依靠局部 ID 和实际连接参与通用规则。
+            this(id, displayName, partIds, lumenVolume, wallVolume, throughputPerSecond,
+                    resilience, fatigueCapacity, ports, List.of());
+        }
+
         public MeridianDefinition {
             // 经脉覆盖部位不得重复或为空，部位实际存在性由构型校验。
             MeridianErrors.required(id, Data.MERIDIAN_ID_REQUIRED);
@@ -172,6 +200,8 @@ public final class Anatomy {
             DataChecks.positive(resilience, "经脉承受度");
             DataChecks.positive(fatigueCapacity, "经脉疲劳容量");
             ports = List.copyOf(ports);
+            tags = List.copyOf(tags);
+            DataChecks.validateTags(tags);
         }
     }
 

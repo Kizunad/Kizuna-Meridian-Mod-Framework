@@ -1,5 +1,9 @@
 # 基础数据定义
 
+## 模块标签
+
+组织、器官和经脉定义分别在 `TissueDefinition.tags = 11`、`OrganDefinition.tags = 12`、`MeridianDefinition.tags = 14` 声明标签；已有字段及 reserved 编号不变。标签采用 `namespace:path`，每个定义最多 16 个，格式非法、重复或超数量均拒绝。框架仅保存与校验身份，具体选择语义属于使用方。标签保留在模板及快照内嵌的实际构型定义中，不复制到 `TissueState`、`OrganState`、`MeridianState`；开脉扩容保留原标签。空标签兼容现有定义与存档。
+
 ## 受控闭环与原子活动
 
 `QiTransit.circuit` 保存真实连接 ID 序列、模块内部路程、工作进度和本圈总工作时间。货物仍只在 `cargo` 记一次，纳入总账、存档和死亡释放。普通单段在途没有此字段，继续使用原公式。

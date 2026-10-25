@@ -138,12 +138,18 @@ public final class BodyProtobuf {
 
     private static BodyMessages.TissueDefinition toTissue(Anatomy.TissueDefinition value) {
         // 组织拥有自己的类型、承载参数和端口，不归经脉持有。
-        return BodyMessages.TissueDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
-                .setKind(value.kind().value()).setPartId(value.partId().value()).setMaxHp(value.maxHp())
+        return BodyMessages.TissueDefinition.newBuilder()
+                .setId(value.id().value())
+                .setDisplayName(value.displayName())
+                .setKind(value.kind().value())
+                .setPartId(value.partId().value())
+                .setMaxHp(value.maxHp())
                 .setFatigueCapacity(value.fatigueCapacity())
                 .setRecoveryHalfLifeSeconds(value.recoveryHalfLifeSeconds())
                 .setCapacity(CapabilityProtobuf.toCapacity(value.capacity()))
-                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList()).build();
+                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList())
+                .addAllTags(value.tags().stream().map(DefinitionId::value).toList())
+                .build();
     }
 
     private static Anatomy.TissueDefinition fromTissue(BodyMessages.TissueDefinition value) {
@@ -151,47 +157,74 @@ public final class BodyProtobuf {
         return new Anatomy.TissueDefinition(new Anatomy.TissueId(value.getId()), value.getDisplayName(),
                 new DefinitionId(value.getKind()), new Anatomy.PartId(value.getPartId()), value.getMaxHp(),
                 value.getFatigueCapacity(), value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
-                CapabilityProtobuf.fromCapacity(value.getCapacity()), value.getRecoveryHalfLifeSeconds());
+                CapabilityProtobuf.fromCapacity(value.getCapacity()), value.getRecoveryHalfLifeSeconds(),
+                value.getTagsList().stream().map(DefinitionId::new).toList());
     }
 
     private static BodyMessages.OrganDefinition toOrgan(Anatomy.OrganDefinition value) {
         // 缓存容量和搬运吞吐属于器官本体，具体转换内容由独立配方声明。
-        var builder = BodyMessages.OrganDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
-                .setKind(value.kind().value()).setPartId(value.partId().value()).setMaxHp(value.maxHp())
-                .setVolumeCapacity(value.volumeCapacity()).setThroughputPerSecond(value.throughputPerSecond())
-                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList());
-        if (value.intake() != null) {
-            builder.setIntake(BodyMessages.OrganIntakeCapability.newBuilder()
-                    .setMaxQiPerSecond(value.intake().maxQiPerSecond()));
+        var builder = BodyMessages.OrganDefinition.newBuilder()
+                .setId(value.id().value())
+                .setDisplayName(value.displayName())
+                .setKind(value.kind().value())
+                .setPartId(value.partId().value())
+                .setMaxHp(value.maxHp())
+                .setVolumeCapacity(value.volumeCapacity())
+                .setThroughputPerSecond(value.throughputPerSecond())
+                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList())
+                .addAllTags(value.tags().stream().map(DefinitionId::value).toList());
+        Anatomy.OrganIntakeCapability intake = value.intake();
+        if (intake != null) {
+            BodyMessages.OrganIntakeCapability intakeMessage = BodyMessages.OrganIntakeCapability.newBuilder()
+                    .setMaxQiPerSecond(intake.maxQiPerSecond())
+                    .build();
+            builder.setIntake(intakeMessage);
         }
-        if (value.endurance() != null) {
-            builder.setEndurance(BodyMessages.OrganEndurance.newBuilder()
-                    .setEnduranceJoules(value.endurance().enduranceJoules())
-                    .setMaximumWatts(value.endurance().maximumWatts())
-                    .setRecoveryHalfLifeSeconds(value.endurance().recoveryHalfLifeSeconds()));
+        Anatomy.OrganEndurance endurance = value.endurance();
+        if (endurance != null) {
+            BodyMessages.OrganEndurance enduranceMessage = BodyMessages.OrganEndurance.newBuilder()
+                    .setEnduranceJoules(endurance.enduranceJoules())
+                    .setMaximumWatts(endurance.maximumWatts())
+                    .setRecoveryHalfLifeSeconds(endurance.recoveryHalfLifeSeconds())
+                    .build();
+            builder.setEndurance(enduranceMessage);
         }
         return builder.build();
     }
 
     private static Anatomy.OrganDefinition fromOrgan(BodyMessages.OrganDefinition value) {
         // 归属部位和端口的实际存在性由完整构型验证。
+        Anatomy.OrganIntakeCapability intake = null;
+        if (value.hasIntake()) {
+            intake = new Anatomy.OrganIntakeCapability(value.getIntake().getMaxQiPerSecond());
+        }
+        Anatomy.OrganEndurance endurance = null;
+        if (value.hasEndurance()) {
+            BodyMessages.OrganEndurance definition = value.getEndurance();
+            endurance = new Anatomy.OrganEndurance(definition.getEnduranceJoules(), definition.getMaximumWatts(),
+                    definition.getRecoveryHalfLifeSeconds());
+        }
         return new Anatomy.OrganDefinition(new Anatomy.OrganId(value.getId()), value.getDisplayName(),
                 new DefinitionId(value.getKind()), new Anatomy.PartId(value.getPartId()), value.getMaxHp(),
                 value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
-                value.getVolumeCapacity(), value.getThroughputPerSecond(), value.hasIntake()
-                        ? new Anatomy.OrganIntakeCapability(value.getIntake().getMaxQiPerSecond()) : null,
-                value.hasEndurance() ? new Anatomy.OrganEndurance(value.getEndurance().getEnduranceJoules(),
-                        value.getEndurance().getMaximumWatts(), value.getEndurance().getRecoveryHalfLifeSeconds()) : null);
+                value.getVolumeCapacity(), value.getThroughputPerSecond(), intake, endurance,
+                value.getTagsList().stream().map(DefinitionId::new).toList());
     }
 
     private static BodyMessages.MeridianDefinition toMeridian(Anatomy.MeridianDefinition value) {
         // 只传稳定体积；零外壁体积也必须显式写出。
-        return BodyMessages.MeridianDefinition.newBuilder().setId(value.id().value()).setDisplayName(value.displayName())
+        return BodyMessages.MeridianDefinition.newBuilder()
+                .setId(value.id().value())
+                .setDisplayName(value.displayName())
                 .addAllPartIds(value.partIds().stream().map(Anatomy.PartId::value).toList())
-                .setLumenVolume(value.lumenVolume()).setWallVolume(value.wallVolume())
-                .setThroughputPerSecond(value.throughputPerSecond()).setResilience(value.resilience())
+                .setLumenVolume(value.lumenVolume())
+                .setWallVolume(value.wallVolume())
+                .setThroughputPerSecond(value.throughputPerSecond())
+                .setResilience(value.resilience())
                 .setFatigueCapacity(value.fatigueCapacity())
-                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList()).build();
+                .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList())
+                .addAllTags(value.tags().stream().map(DefinitionId::value).toList())
+                .build();
     }
 
     private static Anatomy.MeridianDefinition fromMeridian(BodyMessages.MeridianDefinition value) {
@@ -200,7 +233,8 @@ public final class BodyProtobuf {
                 value.getPartIdsList().stream().map(Anatomy.PartId::new).toList(), value.getLumenVolume(),
                 value.getWallVolume(),
                 value.getThroughputPerSecond(), value.getResilience(), value.getFatigueCapacity(),
-                value.getPortsList().stream().map(BodyProtobuf::fromPort).toList());
+                value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
+                value.getTagsList().stream().map(DefinitionId::new).toList());
     }
 
     private static BodyMessages.Port toPort(Anatomy.Port value) {

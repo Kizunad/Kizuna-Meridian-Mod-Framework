@@ -268,6 +268,7 @@ public final class MeridianErrors {
     public static final class Data {
         public static final String LOCAL_ID_FORMAT = "局部标识必须使用非空小写字母、数字、点、横线或下划线";
         public static final String CONTENT_ID_FORMAT = "内容标识必须采用 namespace:path 格式";
+        public static final String MODULE_TAG_LIMIT = "每个模块定义最多允许 16 个标签";
         public static final String NEGATIVE_REVISION = "版本号不能为负数";
         public static final String NO_PARTS = "身体必须包含至少一个部位";
         public static final String MERIDIAN_WITHOUT_PART = "经脉必须映射至少一个实际部位";

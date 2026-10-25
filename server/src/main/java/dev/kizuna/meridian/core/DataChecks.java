@@ -10,6 +10,7 @@ import java.util.function.Function;
 
 /** 数据值校验，不包含伤害、成长或宿主权限规则。 */
 final class DataChecks {
+    static final int MAX_MODULE_TAGS = 16;
     private static final java.util.regex.Pattern LOCAL_ID = java.util.regex.Pattern.compile("[a-z0-9_.-]+");
 
     private DataChecks() {
@@ -49,6 +50,14 @@ final class DataChecks {
         if (value < 0) {
             throw MeridianErrors.invalid(Data.NEGATIVE_REVISION);
         }
+    }
+
+    static void validateTags(List<DefinitionId> tags) {
+        // 标签仅为内容选择提供身份，数量和唯一性在任何构型入口都执行同一校验。
+        if (tags.size() > MAX_MODULE_TAGS) {
+            throw MeridianErrors.invalid(Data.MODULE_TAG_LIMIT);
+        }
+        index(tags, DefinitionId::value, "模块标签");
     }
 
     static void atMost(double value, double maximum, String label) {
