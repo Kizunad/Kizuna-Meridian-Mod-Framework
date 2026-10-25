@@ -9,12 +9,25 @@ import java.util.List;
 
 /** 运输、加工与环境入账共用的余额操作，禁止整笔被浮点精度吞掉。 */
 public final class QiAccounting {
+    /** 最小可流转明细为 1e-12 元，隔离体积反算的浮点尘埃，避免其进入空账户后再次发运。 */
+    public static final double MIN_TRANSFER_QI = 1e-12;
+
     private QiAccounting() {
         // 算术不读取身体，也不提交账户状态。
     }
 
+    public static void validateTransferable(QiInventory cargo) {
+        // 只限制新发起的取用；存档读取、合并和完整释放仍须保留低于单位的真实余额。
+        for (Qi entry : cargo.entries()) {
+            if (entry.amount() < MIN_TRANSFER_QI) {
+                throw MeridianErrors.rejectTransport(TransportRejectionReason.NUMERIC_LIMIT);
+            }
+        }
+    }
+
     public static QiInventory select(QiInventory inventory, QiInventory amounts) {
         // 配方要求按属性和相态区间匹配；取出的原料保持库存实际密度。
+        validateTransferable(amounts);
         var selected = new java.util.ArrayList<Qi>();
         for (Qi requested : amounts.entries()) {
             Qi available = inventory.entries().stream()

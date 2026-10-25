@@ -159,20 +159,4 @@ final class OpeningGuidance {
         return nextHop;
     }
 
-    static QiInventory take(QiInventory inventory, double requested) {
-        // 沿原明细顺序截取，保留混相和属性；调用者负责从唯一源账户扣除。
-        var cargo = new ArrayList<Qi>();
-        double remaining = requested;
-        for (Qi entry : inventory.entries()) {
-            double amount = Math.min(entry.amount(), remaining);
-            if (amount > 0) {
-                cargo.add(new Qi(entry.attribute(), amount, entry.density()));
-                remaining -= amount;
-            }
-            if (remaining <= 0) {
-                break;
-            }
-        }
-        return new QiInventory(cargo);
-    }
 }

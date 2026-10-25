@@ -19,6 +19,47 @@ import static org.junit.Assert.*;
 
 /** 整体回归：真实通路引导、连续条件、独立费用、恢复和原子回执。 */
 public class OpeningRuntimeTest {
+    private static final double PRECISION_DENSITY = 0.1;
+    private static final double PRECISION_TARGET_VOLUME = 0.8749999999999999;
+    private static final double PRECISION_GUIDANCE_VOLUME = 0.7;
+    private static final long PRECISION_END_MILLIS = 2000;
+    private static final double PRECISION_QI_TOLERANCE = 1e-12;
+
+    @Test
+    public void mixedGuidanceFiltersInvisibleCargoAndKeepsCostsAndCapacity() {
+        // 目标引导体积为 0.7，火属性反算后的正尾差不能带出扣不动的木属性。
+        BodySnapshot initial = mixedGuidanceBody();
+        var boundedRule = rule().toBuilder()
+                .setLumenVolumeGain(0)
+                .setGuidanceBatchQi(1)
+                .build();
+        BodySnapshot started = OpeningRuntime.start(initial, OpeningProtobuf.fromRule(boundedRule),
+                ActionProtobuf.fromDefinition(action()));
+        BodySnapshot dispatched = BodyTimeAdvancement.apply(started, plan(0)).body();
+        List<QiTransit> transits = dispatched.transits();
+        assertEquals(1, transits.size());
+        QiTransit transit = transits.get(0);
+        QiInventory cargo = transit.cargo();
+        assertEquals(List.of(new Qi(Qi.QiAttribute.FIRE,
+                PRECISION_GUIDANCE_VOLUME * PRECISION_DENSITY, PRECISION_DENSITY)), cargo.entries());
+        assertTrue(cargo.totalQi() <= boundedRule.getGuidanceBatchQi());
+        assertEquals(boundedRule.getGuidanceQiPerSecond(), transit.throughputPerSecond(), 0);
+        assertTrue(cargo.volume() <= PRECISION_GUIDANCE_VOLUME);
+
+        // 到达和适应计时使用真实任务；保持原费用规则，完成后源木属性、容量和总量仍有效。
+        var advanced = BodyTimeAdvancement.apply(dispatched, plan(PRECISION_END_MILLIS));
+        BodySnapshot completed = advanced.body();
+        List<MeridianState> meridians = completed.meridianStates();
+        assertEquals(OpeningTask.Status.COMPLETED, completed.openingTask().status());
+        assertEquals(1, meridians.get(1).lumenQi().entries().get(1).amount(), 0);
+        assertTrue(meridians.get(0).lumenQi().volume() <= PRECISION_TARGET_VOLUME);
+        assertEquals(initial.totalQi(), completed.totalQi() + advanced.releasedQi().totalQi(), PRECISION_QI_TOLERANCE);
+        assertEquals(0, advanced.releasedQi().totalQi(), 0);
+        assertTrue(completed.organStates().get(0).fatigueJoules() > 0);
+        assertTrue(completed.tissueStates().get(0).fatigue() > 0);
+        assertTrue(completed.transits().isEmpty());
+    }
+
     @Test
     public void sessionChecksOriginalRevisionBeforeSettlingAndReauthorizesRetries() {
         // UI 使用旧区间末尾的快照；入口结时不能制造必然冲突，也不能接受本已过期的版本。
@@ -278,6 +319,31 @@ public class OpeningRuntimeTest {
         assertEquals(pressurized.totalQi(), interrupted.totalQi() + store.environmentQi().totalQi(), 1e-9);
         assertArrayEquals(response, handler.handleHealthEffect("owner", request));
         assertEquals(interrupted, current(store));
+    }
+
+    private static BodySnapshot mixedGuidanceBody() {
+        // 80% 的目标门槛恰为 0.7 体积；未开源脉持有两条可独立扣除的正常余额。
+        var original = BodyProtobuf.toMessage(body());
+        var targetDefinition = original.getStructure().getMeridians(0).toBuilder()
+                .setLumenVolume(PRECISION_TARGET_VOLUME)
+                .build();
+        var structure = original.getStructure().toBuilder()
+                .setMeridians(0, targetDefinition)
+                .build();
+        var target = original.getMeridianStates(0).toBuilder()
+                .setLumenQi(BodyMessages.QiInventory.getDefaultInstance())
+                .build();
+        QiInventory mixed = new QiInventory(List.of(new Qi(Qi.QiAttribute.FIRE, 1, PRECISION_DENSITY),
+                new Qi(Qi.QiAttribute.WOOD, 1, PRECISION_DENSITY)));
+        var source = original.getMeridianStates(1).toBuilder()
+                .setLumenQi(BodyProtobuf.toInventory(mixed))
+                .build();
+        var message = original.toBuilder()
+                .setStructure(structure)
+                .setMeridianStates(0, target)
+                .setMeridianStates(1, source)
+                .build();
+        return BodyProtobuf.fromMessage(message);
     }
 
     private static BodySnapshot body() {

@@ -29,6 +29,7 @@ public final class OrganIntake {
         if (incoming.entries().isEmpty()) {
             throw MeridianErrors.invalid(Environment.INTAKE_POSITIVE);
         }
+        QiAccounting.validateTransferable(incoming);
         if (body.vitality().dead() || body.vitality().remainingSeconds() == 0) {
             throw MeridianErrors.rejectIntake(FailureCode.BODY_DEAD);
         }

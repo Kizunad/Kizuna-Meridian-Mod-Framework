@@ -87,6 +87,7 @@ public final class EnvironmentAbsorption {
 
         // 原始吸收先扣真实库存；同笔加工释放不能为这次摄入垫资。
         QiInventory absorbed = BodyProtobuf.fromInventory(exchange.getAbsorbedQi());
+        QiAccounting.validateTransferable(absorbed);
         QiInventory remaining = QiAccounting.debit(BodyProtobuf.fromInventory(source.getInventory()), absorbed);
         if (exchange.getContactCapture()) {
             // 接触摄入只扣实际库存；保留原有持续摄入用量，不能借新事件重置旧预算。

@@ -105,12 +105,14 @@ public final class QiTransport {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.THROUGHPUT_EXCEEDED);
         }
         // 体积来自数量除以密度；边界处允许一小段浮点尾差，避免同一份容量计算在再次校验时被舍入拒绝。
-        if (request.cargo().volume() > capacity.targetVolume() + CAPACITY_TOLERANCE) {
+        QiInventory cargo = request.cargo();
+        if (cargo.volume() > capacity.targetVolume() + CAPACITY_TOLERANCE) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.CAPACITY_EXCEEDED);
         }
 
         // 3. 逐相态、逐属性扣源并计算到达时间；外壁不参与余额检查，失败不产生新快照。
-        QiInventory remainingSourceQi = QiAccounting.debit(accounts.inventory(source), request.cargo());
+        QiAccounting.validateTransferable(cargo);
+        QiInventory remainingSourceQi = QiAccounting.debit(accounts.inventory(source), cargo);
         long transportDurationMillis = durationMillis(connection, request);
         if (transportDurationMillis > Long.MAX_VALUE - atMillis) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.NUMERIC_LIMIT);
@@ -131,7 +133,7 @@ public final class QiTransport {
             transitId = baseId + "-" + suffix;
         }
         var updatedTransits = new ArrayList<>(transits);
-        updatedTransits.add(new QiTransit(transitId, connection.id(), request.cargo(),
+        updatedTransits.add(new QiTransit(transitId, connection.id(), cargo,
                 arrivalMillis, request.throughputPerSecond(), QiTransit.Status.MOVING));
 
         accounts.replace(source, remainingSourceQi);

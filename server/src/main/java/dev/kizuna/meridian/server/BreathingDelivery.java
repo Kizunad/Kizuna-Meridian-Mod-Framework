@@ -5,11 +5,13 @@ import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.QiTransport;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
+import dev.kizuna.meridian.protocol.QiDensity;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.*;
 import dev.kizuna.meridian.protocol.pb.BreathingMessages.BreathingProfile;
 import dev.kizuna.meridian.protocol.pb.GatheringMessages.GatheringChoice;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.*;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -19,6 +21,8 @@ import java.util.stream.Collectors;
 
 /** 将实际器官产物送入经脉；在途只保存统计关联，货物仍属于身体唯一账本。 */
 final class BreathingDelivery<C> {
+    private static final double MINIMUM_DELIVERY_QI = 1e-9;
+
     private final GatheringSession<C> session;
     private final BreathingProfile profile;
     private final Map<String, Double> arrivals = new HashMap<>();
@@ -83,48 +87,81 @@ final class BreathingDelivery<C> {
     private void dispatchOutput(GatheringChoice choice, List<GatheringChoice> choices) {
         // 每次发送读取最新候选身体；前一个出口已经占用的容量和吞吐不可再次申请。
         BodySnapshot current = session.read();
-        var snapshot = BodyProtobuf.toMessage(current);
-        OrganState organ = snapshot.getOrganStatesList().stream()
-                .filter(state -> state.getId().equals(choice.getOrganId())).findFirst().orElseThrow();
-
-        // 一个出口可承接多个配方的不同产物，不能只识别排序第一项的属性。
-        List<Qi> outputKinds = choices.stream()
-                .filter(candidate -> candidate.getConnectionId().equals(choice.getConnectionId()))
-                .filter(candidate -> profile.getRecipeIdsList().contains(candidate.getRecipe().getId()))
-                .flatMap(candidate -> candidate.getRecipe().getOutput().getEntriesList().stream()).toList();
-        List<Qi> output = organ.getBuffer().getEntriesList().stream()
-                .filter(item -> outputKinds.stream().anyMatch(kind -> dev.kizuna.meridian.protocol.QiDensity.phase(kind.getDensity()) == dev.kizuna.meridian.protocol.QiDensity.phase(item.getDensity())
-                        && kind.getAttribute().equals(item.getAttribute())))
-                .toList();
+        List<Qi> output = outputFor(current, choice, choices);
         double availableQi = output.stream().mapToDouble(Qi::getAmount).sum();
-        double outputVolume = output.stream().mapToDouble(qi -> qi.getAmount() / qi.getDensity()).sum();
-        double fraction = outputVolume == 0 ? 0 : Math.min(1, choice.getTargetRemainingVolume() / outputVolume);
-        double deliveredQi = availableQi * fraction;
-        double rate = QiTransport.availableThroughputPerSecond(current, new Anatomy.ConnectionId(choice.getConnectionId()));
-        if (availableQi <= 1e-9) {
+        if (availableQi <= MINIMUM_DELIVERY_QI) {
             return;
         }
-        if (deliveredQi <= 1e-9) {
+        double outputVolume = output.stream().mapToDouble(qi -> qi.getAmount() / qi.getDensity()).sum();
+        if (outputVolume == 0) {
             failure = FailureCode.CAPACITY_EXCEEDED;
             return;
         }
+        double fraction = Math.min(1, choice.getTargetRemainingVolume() / outputVolume);
+        QiInventory cargo = outputCargo(output, fraction);
+        double deliveredQi = cargo.getEntriesList().stream().mapToDouble(Qi::getAmount).sum();
+        if (deliveredQi <= MINIMUM_DELIVERY_QI) {
+            failure = FailureCode.CAPACITY_EXCEEDED;
+            return;
+        }
+        double rate = QiTransport.availableThroughputPerSecond(current,
+                new Anatomy.ConnectionId(choice.getConnectionId()));
         if (rate <= 0) {
             failure = FailureCode.THROUGHPUT_EXCEEDED;
             return;
         }
 
-        // 所有属性等比例装箱；统计只关联新批次身份，货物仍由权威在途账本保存。
-        double outputFraction = deliveredQi / availableQi;
-        QiInventory cargo = QiInventory.newBuilder().addAllEntries(output.stream()
-                .map(qi -> qi.toBuilder().setAmount(qi.getAmount() * outputFraction).build()).toList()).build();
+        dispatchCargo(current, choice, cargo, rate);
+    }
+
+    private List<Qi> outputFor(BodySnapshot current, GatheringChoice choice, List<GatheringChoice> choices) {
+        // 一个出口可承接多个配方的不同产物，不能只识别排序第一项的属性。
+        var snapshot = BodyProtobuf.toMessage(current);
+        OrganState organ = snapshot.getOrganStatesList().stream()
+                .filter(state -> state.getId().equals(choice.getOrganId())).findFirst().orElseThrow();
+        List<String> recipeIds = profile.getRecipeIdsList();
+        List<Qi> outputKinds = choices.stream()
+                .filter(candidate -> candidate.getConnectionId().equals(choice.getConnectionId()))
+                .map(GatheringChoice::getRecipe)
+                .filter(recipe -> recipeIds.contains(recipe.getId()))
+                .flatMap(recipe -> recipe.getOutput().getEntriesList().stream())
+                .toList();
+        return organ.getBuffer().getEntriesList().stream()
+                .filter(item -> outputKinds.stream().anyMatch(kind ->
+                        QiDensity.phase(kind.getDensity()) == QiDensity.phase(item.getDensity())
+                        && kind.getAttribute().equals(item.getAttribute())))
+                .toList();
+    }
+
+    private static QiInventory outputCargo(List<Qi> output, double fraction) {
+        // 逐种按比例取货，复用最小单位及实际可扣性；被跳过的尘埃继续留在器官缓存。
+        QiInventory wireInventory = QiInventory.newBuilder().addAllEntries(output).build();
+        dev.kizuna.meridian.core.QiInventory sources = BodyProtobuf.fromInventory(wireInventory);
+        var entries = new ArrayList<dev.kizuna.meridian.core.Qi>();
+        for (dev.kizuna.meridian.core.Qi source : sources.entries()) {
+            var inventory = new dev.kizuna.meridian.core.QiInventory(List.of(source));
+            dev.kizuna.meridian.core.QiInventory selected = inventory.take(source.amount() * fraction,
+                    Double.POSITIVE_INFINITY);
+            entries.addAll(selected.entries());
+        }
+        return BodyProtobuf.toInventory(new dev.kizuna.meridian.core.QiInventory(entries));
+    }
+
+    private void dispatchCargo(BodySnapshot current, GatheringChoice choice, QiInventory cargo, double rate) {
+        // 统计只关联新批次身份，货物仍由权威在途账本保存。
         Set<String> previousTransitIds = current.transits().stream()
                 .map(transit -> transit.id()).collect(Collectors.toSet());
+        var transport = TransportQi.newBuilder()
+                .setConnectionId(choice.getConnectionId())
+                .setCargo(cargo)
+                .setThroughputPerSecond(rate)
+                .build();
         try {
-            session.execute(BodyCommand.newBuilder().setTransportQi(TransportQi.newBuilder()
-                    .setConnectionId(choice.getConnectionId()).setCargo(cargo).setThroughputPerSecond(rate)));
+            session.execute(BodyCommand.newBuilder().setTransportQi(transport));
             for (var transit : session.read().transits()) {
-                if (!previousTransitIds.contains(transit.id())) {
-                    arrivals.put(transit.id(), transit.cargo().totalQi());
+                String transitId = transit.id();
+                if (!previousTransitIds.contains(transitId)) {
+                    arrivals.put(transitId, transit.cargo().totalQi());
                 }
             }
         } catch (MeridianErrors.GatheringRejected rejection) {

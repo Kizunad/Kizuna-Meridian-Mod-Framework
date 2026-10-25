@@ -46,13 +46,16 @@ public record QiInventory(List<Qi> entries) {
         double remainingQi = Math.max(0, maximumQi);
         double remainingVolume = Math.max(0, maximumVolume);
         for (Qi entry : entries) {
-            double amount = Math.min(entry.amount(), Math.min(remainingQi, remainingVolume * entry.density()));
-            if (amount > 0) {
-                Qi selected = entry.withAmount(amount);
-                cargo.add(selected);
-                remainingQi = Math.max(0, remainingQi - amount);
-                remainingVolume = Math.max(0, remainingVolume - selected.volume());
+            double availableAmount = entry.amount();
+            double amount = Math.min(availableAmount, Math.min(remainingQi, remainingVolume * entry.density()));
+            if (amount < QiAccounting.MIN_TRANSFER_QI || availableAmount - amount == availableAmount) {
+                // 尘埃不占用预算；大余额可能连高于最小单位的数量也扣不动，仍须检查实际减法。
+                continue;
             }
+            Qi selected = entry.withAmount(amount);
+            cargo.add(selected);
+            remainingQi = Math.max(0, remainingQi - amount);
+            remainingVolume = Math.max(0, remainingVolume - selected.volume());
             if (remainingQi == 0 || remainingVolume == 0) {
                 break;
             }

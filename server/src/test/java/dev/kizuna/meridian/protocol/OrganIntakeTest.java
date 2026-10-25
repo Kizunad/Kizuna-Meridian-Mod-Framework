@@ -21,6 +21,13 @@ import static org.junit.Assert.*;
 /** 整体回归：公开摄入契约、共享来源、恢复与两本账的原子性。 */
 public class OrganIntakeTest {
     @Test
+    public void subQuantumIntakeLeavesBodyEnvironmentAndTimeUntouched() {
+        // 新取用不能把旧环境尘埃搬进空器官，整笔拒绝也不能消费时间和共享预算。
+        double belowUnit = Math.nextDown(QiAccounting.MIN_TRANSFER_QI);
+        assertRejected(body("a", 0), wood(belowUnit), FailureCode.NUMERIC_LIMIT);
+    }
+
+    @Test
     public void intakeLoadsPreserveOtherTissuesRecoveryAndRollbackTogether() {
         // 同一段摄入里，实际做功组织只承担代价，另一块休息组织必须保留恢复结果。
         var message = BodyProtobuf.toMessage(body("a", 0));
