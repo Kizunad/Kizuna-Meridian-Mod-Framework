@@ -69,7 +69,8 @@ def serverLibraries = [
     'kizuna-meridian-human-addon': 'Kizuna-Meridian-Human-Addon/server/build/libs/kizuna-meridian-human-addon-server-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-ui-addon': 'Kizuna-Meridian-UI-Addon/server/build/libs/kizuna-meridian-ui-addon-server-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-vanilla-damage-addon': 'Kizuna-Meridian-Vanilla-Damage-Addon/server/build/libs/kizuna-meridian-vanilla-damage-addon-server-0.1.0-SNAPSHOT.jar',
-    'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/server/build/libs/kizuna-meridian-vanilla-healing-addon-server-0.1.0-SNAPSHOT.jar'
+    'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/server/build/libs/kizuna-meridian-vanilla-healing-addon-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-vanilla-humanoid-threatening': 'Kizuna-Meridian-Vanilla-Humanoid-Threatening/server/build/libs/kizuna-meridian-vanilla-humanoid-threatening-server-0.1.0-SNAPSHOT.jar'
 ]
 serverLibraries.each { repository, artifact ->
     boolean builtFromSource = repository == rootProject.name ||
