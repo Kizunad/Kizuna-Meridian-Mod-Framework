@@ -12,8 +12,11 @@ final class BodyResourceEvents {
     record Result(List<MeridianState> meridians, List<AnatomyState.Organ> organs,
                   List<QiTransit> transits, QiInventory released) { }
 
-    static Result advance(BodySnapshot body, long untilMillis, boolean includeBoundary) {
+    enum Boundary { INCLUDED, EXCLUDED }
+
+    static Result advance(BodyView body, long untilMillis, Boundary boundary) {
         // 阻塞记录只在本次显式唤醒的起点尝试；后续到达和加工完成也可以腾出容量。
+        boolean includeBoundary = boundary == Boundary.INCLUDED;
         long startMillis = body.settledAt().elapsedMillis();
         var eventTimes = new TreeSet<Long>();
         List<Anatomy.Connection> passiveConnections = PassiveQiDiffusion.passiveConnections(body);

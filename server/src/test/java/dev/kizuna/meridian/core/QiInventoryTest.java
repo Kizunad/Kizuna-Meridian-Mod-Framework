@@ -93,6 +93,11 @@ public class QiInventoryTest {
         Qi dust = new Qi(Qi.QiAttribute.FIRE, belowUnit, 1);
         Qi unit = new Qi(Qi.QiAttribute.WOOD, QiAccounting.MIN_TRANSFER_QI, 1);
         QiInventory stock = new QiInventory(List.of(dust, unit));
+        // 空账户入账也必须保留低于流转单位的旧明细，空货物不能改变任何余额。
+        QiInventory empty = QiInventory.empty();
+        assertEquals(stock, QiAccounting.credit(empty, stock));
+        assertEquals(stock, QiAccounting.credit(stock, empty));
+        assertEquals(0, empty.volume(), 0);
         QiInventory cargo = stock.take(QiAccounting.MIN_TRANSFER_QI, QiAccounting.MIN_TRANSFER_QI);
         assertEquals(List.of(unit), cargo.entries());
         QiInventory remaining = QiAccounting.debit(stock, cargo);

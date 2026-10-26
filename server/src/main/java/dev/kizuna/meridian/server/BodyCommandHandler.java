@@ -278,7 +278,7 @@ public final class BodyCommandHandler<C> {
             }
             // 先执行纯计算基础校验，私有策略无权跳过余额、死亡或版本上限约束。
             after = switch (command.getOperationCase()) {
-                case EXECUTE_ACTIVITY -> BodyActivityExecution.apply(body, command.getExecuteActivity());
+                case EXECUTE_ACTIVITY -> BodyActivityExecution.apply(body, command.getExecuteActivity(), caller);
                 case SET_ADDON_PROGRESS -> dev.kizuna.meridian.core.AddonProgress.replace(body,
                         command.getSetAddonProgress().getId(), command.getSetAddonProgress().getProgress());
                 case SPEND_LIFESPAN -> LifespanSpending.apply(body, command.getSpendLifespan().getSeconds());

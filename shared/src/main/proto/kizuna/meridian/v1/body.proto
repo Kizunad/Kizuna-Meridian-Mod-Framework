@@ -270,6 +270,25 @@ message TimeCursor {
   optional int64 elapsed_millis = 3; // 非负模拟毫秒，不是系统时间戳。
 }
 
+// 分段线性曲线；首尾可非零，常值曲线表示固定倍率。
+message CurvePoint {
+  int64 offset_millis = 1; // 相对 start_millis；首点为 0，之后严格递增。
+  double value = 2; // 有限数，范围 [-1, 1]。
+}
+
+// 可信附属施加的临时组织能力倍率；起止为阶跃，到期和死亡由权威核心清理。
+message CapabilityModifier {
+  string id = 1; // namespace:path，身体内唯一。
+  string source = 2; // 必须匹配授权器返回的 namespace:path 调用身份。
+  string tissue_id = 3; // 实际构型中的局部组织 ID。
+  int64 start_millis = 4; // 身体时钟；添加时不得早于当前结算游标。
+  repeated CurvePoint curve = 5; // 2–16 点，末点即到期；生效区间 [start, end)。
+  double strength_peak = 6; // 倍率 = 1 + (peak - 1) × 曲线值；1 表示不变。
+  double burst_peak = 7;
+  double endurance_peak = 8;
+  double recovery_peak = 9;
+}
+
 message BodySnapshot {
   int32 schema_version = 1; // 当前为 3；密度模型不兼容旧的独立相态字段。
   string id = 2;
@@ -287,6 +306,7 @@ message BodySnapshot {
   repeated ActiveAction actions = 14; // 同时执行的动作实例；定义固定，跨动作的组织占用取并集。
   OpeningTask opening_task = 15; // 可缺省；保留最近任务结果。
   map<string, google.protobuf.Any> addon_progress = 16; // 附属命名空间 ID → 附属自己的版本化进度；属于唯一身体存档。
+  repeated CapabilityModifier modifiers = 17; // 每具身体最多 32 条；同组织倍率相乘后统一截断。
   // 全身真元和剩余寿命由明细派生，不传另一份可修改总账。
 }
 

@@ -2,6 +2,7 @@ package dev.kizuna.meridian.protocol;
 
 import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.BodySnapshot;
+import dev.kizuna.meridian.core.CapabilityModifier;
 import dev.kizuna.meridian.core.DefinitionId;
 import dev.kizuna.meridian.core.OrganProcess;
 import dev.kizuna.meridian.core.OrganRecipe;
@@ -14,6 +15,43 @@ import dev.kizuna.meridian.protocol.pb.MeridianMessages;
 public final class CapabilityProtobuf {
     private CapabilityProtobuf() {
         // 映射不执行配方注册、学习授权或账户提交。
+    }
+
+    public static CapabilityModifier fromModifier(BodyMessages.CapabilityModifier modifier) {
+        // 身份使用现有内容和局部组织规则，组织存在性与期限由完整快照检查。
+        ProtoWire.validate(modifier);
+        var points = modifier.getCurveList().stream()
+                .map(point -> new CapabilityModifier.CurvePoint(point.getOffsetMillis(), point.getValue()))
+                .toList();
+        var curve = new CapabilityModifier.Curve(modifier.getStartMillis(), points);
+        var peaks = new CapabilityModifier.Peaks(modifier.getStrengthPeak(), modifier.getBurstPeak(),
+                modifier.getEndurancePeak(), modifier.getRecoveryPeak());
+        return new CapabilityModifier(new DefinitionId(modifier.getId()), new DefinitionId(modifier.getSource()),
+                new Anatomy.TissueId(modifier.getTissueId()), curve, peaks);
+    }
+
+    public static BodyMessages.CapabilityModifier toModifier(CapabilityModifier modifier) {
+        // 存档保留来源、曲线和四项峰值，不把派生能力写回基础值。
+        var points = modifier.curve().points().stream().map(CapabilityProtobuf::toCurvePoint).toList();
+        return BodyMessages.CapabilityModifier.newBuilder()
+                .setId(modifier.id().value())
+                .setSource(modifier.source().value())
+                .setTissueId(modifier.tissueId().value())
+                .setStartMillis(modifier.curve().startMillis())
+                .addAllCurve(points)
+                .setStrengthPeak(modifier.peaks().strength())
+                .setBurstPeak(modifier.peaks().burst())
+                .setEndurancePeak(modifier.peaks().endurance())
+                .setRecoveryPeak(modifier.peaks().recovery())
+                .build();
+    }
+
+    private static BodyMessages.CurvePoint toCurvePoint(CapabilityModifier.CurvePoint point) {
+        // 曲线点单独构造，保留负值与相对毫秒，不转换为采样帧。
+        return BodyMessages.CurvePoint.newBuilder()
+                .setOffsetMillis(point.offsetMillis())
+                .setValue(point.value())
+                .build();
     }
 
     public static byte[] encodeRecipe(BodyMessages.OrganRecipe recipe) {

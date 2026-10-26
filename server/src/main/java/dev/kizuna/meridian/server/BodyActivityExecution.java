@@ -13,25 +13,37 @@ import java.util.List;
 
 /** 可信活动的最小原子算子集合：资源计划不能携带身体快照或跳过容量、疲劳与守恒。 */
 public final class BodyActivityExecution {
+    private static final int MAX_ACCOUNT_CHANGES = 256;
+    private static final int MAX_CIRCUIT_CHANGES = 16;
+    private static final int MAX_EFFORTS = 32;
+    private static final int MAX_COMPLETIONS = 128;
+    private static final int MAX_RECIPES = 16;
+    private static final double BALANCE_TOLERANCE = 1e-8;
+
     private BodyActivityExecution() {
         // 附属只产生计划，权威提交和回执复算均调用同一个执行器。
     }
 
     public static void validate(BodyActivity plan) {
         // 限制单笔工作量；具体账户和余额必须在事务内结合身体检查。
-        if (plan.getAccountsCount() > 256 || plan.getCircuitsCount() > 16 || plan.getEffortsCount() > 32
-                || plan.getCompletionsCount() > 128 || plan.getRecipesCount() > 16
-                || plan.getStartActionsCount() > 32 || plan.getStopActionsCount() > 32) {
+        if (plan.getAccountsCount() > MAX_ACCOUNT_CHANGES || plan.getCircuitsCount() > MAX_CIRCUIT_CHANGES
+                || plan.getEffortsCount() > MAX_EFFORTS || plan.getCompletionsCount() > MAX_COMPLETIONS
+                || plan.getRecipesCount() > MAX_RECIPES
+                || plan.getStartActionsCount() > BodyActions.MAX_ACTIVE_ACTIONS
+                || plan.getStopActionsCount() > BodyActions.MAX_ACTIVE_ACTIONS
+                || plan.getAddModifiersCount() > CapabilityModifier.MAX_PER_BODY
+                || plan.getRemoveModifiersCount() > CapabilityModifier.MAX_PER_BODY) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
         plan.getProgressMap().forEach(AddonProgress::validateEntry);
         if (plan.hasDamage() && plan.getDamage().getLethal()) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
+        // 释放明细仅在此校验，数值或重复条目非法时抛 IllegalArgumentException。
         BodyProtobuf.fromInventory(plan.getReleasedQi());
     }
 
-    public static BodySnapshot apply(BodySnapshot body, BodyActivity plan) {
+    public static BodySnapshot apply(BodySnapshot body, BodyActivity plan, String callerId) {
         // 先校验整笔的身份和资源差额，后续失败只丢弃候选，不留下半次转移。
         validate(plan);
         if (body.vitality().dead() || body.vitality().remainingSeconds() == 0) {
@@ -40,7 +52,27 @@ public final class BodyActivityExecution {
         if (body.revision() == Long.MAX_VALUE) {
             throw MeridianErrors.rejectIntake(MeridianMessages.FailureCode.REVISION_EXHAUSTED);
         }
+        BodySnapshot resources = applyResources(body, plan, callerId);
+        BodySnapshot worked = applyModules(resources, plan);
+        BodySnapshot injured = applyInjuries(worked, plan);
+
+        // 附属进度与最终身体一起发布，内部各算子的版本递增折合为一次提交。
+        var result = BodyProtobuf.toMessage(injured).toBuilder();
+        if (plan.hasRealm()) {
+            if (plan.getRealmValue() != result.getRealmValue() + 1) {
+                throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
+            }
+            result.setRealm(plan.getRealm());
+        }
+        result.putAllAddonProgress(plan.getProgressMap());
+        result.setRevision(body.revision() + 1);
+        return BodyProtobuf.fromMessage(result.build());
+    }
+
+    private static BodySnapshot applyResources(BodySnapshot body, BodyActivity plan, String callerId) {
+        // 修正先完整校验，资源变更再核对余额与守恒，全部通过后才允许做功。
         var candidate = BodyProtobuf.toMessage(body).toBuilder();
+        updateModifiers(body, candidate, plan, callerId);
         var accounts = new HashSet<String>();
         for (QiAccountChange change : plan.getAccountsList()) {
             if (!accounts.add(change.getAccountCase() + ":" + accountId(change))) {
@@ -57,59 +89,147 @@ public final class BodyActivityExecution {
         }
         BodySnapshot updated = BodyProtobuf.fromMessage(candidate.build());
         double released = BodyProtobuf.fromInventory(plan.getReleasedQi()).totalQi();
-        double balanceError = body.totalQi() - updated.totalQi() - released;
-        if (Math.abs(balanceError) > 1e-8 * Math.max(1, body.totalQi())) {
+        double previousTotalQi = body.totalQi();
+        double balanceError = previousTotalQi - updated.totalQi() - released;
+        if (Math.abs(balanceError) > BALANCE_TOLERANCE * Math.max(1, previousTotalQi)) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
         validateReservations(body, updated);
+        return updated;
+    }
 
+    private static BodySnapshot applyModules(BodySnapshot body, BodyActivity plan) {
         // 动作占用、做功、器官加工沿用既有算子，避免活动建立第二套疲劳或加工账。
+        BodySnapshot acted = applyActions(body, plan);
+        BodySnapshot worked = applyEfforts(acted, plan.getEffortsList());
+        BodySnapshot expanded = completeMeridians(worked, plan.getCompletionsList());
+        return startRecipes(expanded, plan.getRecipesList());
+    }
+
+    private static BodySnapshot applyActions(BodySnapshot body, BodyActivity plan) {
+        // 先停止再启动，活动内的占用替换仍由动作算子验证。
+        BodySnapshot updated = body;
         for (String instance : plan.getStopActionsList()) {
             updated = BodyActions.stop(updated, instance);
         }
         for (ActivityAction action : plan.getStartActionsList()) {
-            updated = BodyActions.start(updated, action.getInstanceId(), ActionProtobuf.fromDefinition(action.getDefinition()));
+            BodyAction.Definition definition = ActionProtobuf.fromDefinition(action.getDefinition());
+            updated = BodyActions.start(updated, action.getInstanceId(), definition);
         }
-        for (ActivityEffort effort : plan.getEffortsList()) {
+        return updated;
+    }
+
+    private static BodySnapshot applyEfforts(BodySnapshot body, List<ActivityEffort> efforts) {
+        // 各项费用顺序作用于同一候选，后续组织不能跳过此前已消耗的预算。
+        BodySnapshot updated = body;
+        for (ActivityEffort effort : efforts) {
             updated = exert(updated, effort);
         }
-        for (CompleteMeridian completion : plan.getCompletionsList()) {
+        return updated;
+    }
+
+    private static BodySnapshot completeMeridians(BodySnapshot body, List<CompleteMeridian> completions) {
+        // 按实际构型逐项扩容，未知经脉或非法体积使整个候选失败。
+        BodySnapshot updated = body;
+        for (CompleteMeridian completion : completions) {
             var id = new Anatomy.MeridianId(completion.getMeridianId());
-            var definition = updated.structure().meridians().stream().filter(item -> item.id().equals(id))
-                    .findFirst().orElseThrow(() -> MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY));
-            if (!Double.isFinite(completion.getAddedVolume()) || completion.getAddedVolume() <= 0) {
+            Anatomy.MeridianDefinition definition = updated.structure().meridians().stream()
+                    .filter(item -> item.id().equals(id))
+                    .findFirst()
+                    .orElseThrow(() -> MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY));
+            double addedVolume = completion.getAddedVolume();
+            if (!Double.isFinite(addedVolume) || addedVolume <= 0) {
                 throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
             }
-            updated = OpeningRuntime.complete(updated, id, definition.lumenVolume() + completion.getAddedVolume());
+            updated = OpeningRuntime.complete(updated, id, definition.lumenVolume() + addedVolume);
         }
-        for (ActivityRecipe processing : plan.getRecipesList()) {
+        return updated;
+    }
+
+    private static BodySnapshot startRecipes(BodySnapshot body, List<ActivityRecipe> recipes) {
+        // 加工启动使用已完成费用与构型变更的候选，配方仍执行原有守恒校验。
+        BodySnapshot updated = body;
+        for (ActivityRecipe processing : recipes) {
             updated = OrganProcessing.start(updated, new Anatomy.OrganId(processing.getOrganId()),
                     CapabilityProtobuf.fromRecipe(processing.getRecipe()));
         }
+        return updated;
+    }
 
+    private static BodySnapshot applyInjuries(BodySnapshot body, BodyActivity plan) {
         // 器官损伤复用健康结算；经脉没有 HP，用独立伤势状态表示失能。
         if (plan.hasDamage() || plan.getMeridianInjuriesCount() > 0) {
-            var damage = HealthMessages.DamageBody.newBuilder().setSourceId("meridian:activity")
-                    .setDamageHp(1).setDamageType("meridian:overload").setKind(HealthMessages.DamageKind.CUSTOM).build();
-            var resolution = plan.getDamage().toBuilder().setLethal(false).addAllMeridianInjuries(plan.getMeridianInjuriesList()).build();
-            var result = BodyHealthExecution.calculate(updated,
-                    MeridianMessages.BodyCommand.newBuilder().setDamageBody(damage).build(), resolution);
+            var damage = HealthMessages.DamageBody.newBuilder()
+                    .setSourceId("meridian:activity")
+                    .setDamageHp(1)
+                    .setDamageType("meridian:overload")
+                    .setKind(HealthMessages.DamageKind.CUSTOM)
+                    .build();
+            var resolution = plan.getDamage().toBuilder()
+                    .setLethal(false /* lethal */)
+                    .addAllMeridianInjuries(plan.getMeridianInjuriesList())
+                    .build();
+            var command = MeridianMessages.BodyCommand.newBuilder().setDamageBody(damage).build();
+            var result = BodyHealthExecution.calculate(body, command, resolution);
             if (result.fact().getDied() || result.fact().getReleasedQi().getEntriesCount() != 0) {
                 // 致死效果必须通过独立健康意图结清，活动负载只表达局部非致死损伤。
                 throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
             }
-            updated = result.body();
+            return result.body();
         }
-        candidate = BodyProtobuf.toMessage(updated).toBuilder();
-        if (plan.hasRealm()) {
-            if (plan.getRealmValue() != candidate.getRealmValue() + 1) {
-                throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
+        return body;
+    }
+
+    private static void updateModifiers(BodySnapshot before, BodyMessages.BodySnapshot.Builder candidate,
+                                         BodyActivity plan, String callerId) {
+        // 只有操作修正时要求命名空间调用身份，普通活动保留原有宿主身份规则。
+        if (plan.getAddModifiersCount() == 0 && plan.getRemoveModifiersCount() == 0) {
+            return;
+        }
+        var source = new DefinitionId(callerId);
+        var removals = modifierRemovals(before, plan, source);
+        var existingIds = new HashSet<>(before.modifiers().stream().map(CapabilityModifier::id).toList());
+
+        // 同笔先撤销再添加；既有 ID 即使撤销也不能重复添加，避免隐式覆盖来源。
+        candidate.clearModifiers();
+        var retained = before.modifiers().stream()
+                .filter(modifier -> !removals.contains(modifier.id()))
+                .map(CapabilityProtobuf::toModifier)
+                .toList();
+        candidate.addAllModifiers(retained);
+        for (BodyMessages.CapabilityModifier addition : plan.getAddModifiersList()) {
+            CapabilityModifier modifier = CapabilityProtobuf.fromModifier(addition);
+            if (!modifier.source().equals(source)) {
+                throw MeridianErrors.rejectIntake(MeridianMessages.FailureCode.ACCESS_DENIED);
             }
-            candidate.setRealm(plan.getRealm());
+            if (modifier.curve().startMillis() < before.settledAt().elapsedMillis()) {
+                throw MeridianErrors.invalid(MeridianErrors.Data.MODIFIER_START_BEFORE_CLOCK);
+            }
+            if (!existingIds.add(modifier.id())) {
+                throw MeridianErrors.invalid(MeridianErrors.Data.INVALID_MODIFIER_STATE);
+            }
+            candidate.addModifiers(addition);
         }
-        candidate.putAllAddonProgress(plan.getProgressMap());
-        candidate.setRevision(body.revision() + 1);
-        return BodyProtobuf.fromMessage(candidate.build());
+        // 完整快照构造在做功前检查数量、组织引用与相对期限，失败不会发布任何候选。
+    }
+
+    private static HashSet<DefinitionId> modifierRemovals(BodySnapshot before, BodyActivity plan, DefinitionId source) {
+        // 未知、重复或跨来源撤销都整笔拒绝，调用方不能删除其他附属的效果。
+        var removals = new HashSet<DefinitionId>();
+        for (String id : plan.getRemoveModifiersList()) {
+            var removal = new DefinitionId(id);
+            CapabilityModifier existing = before.modifiers().stream()
+                    .filter(modifier -> modifier.id().equals(removal))
+                    .findFirst()
+                    .orElseThrow(() -> MeridianErrors.invalid(MeridianErrors.Data.INVALID_MODIFIER_REMOVAL));
+            if (!existing.source().equals(source)) {
+                throw MeridianErrors.rejectIntake(MeridianMessages.FailureCode.ACCESS_DENIED);
+            }
+            if (!removals.add(removal)) {
+                throw MeridianErrors.invalid(MeridianErrors.Data.INVALID_MODIFIER_REMOVAL);
+            }
+        }
+        return removals;
     }
 
     private static String accountId(QiAccountChange change) {

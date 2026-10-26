@@ -5,6 +5,7 @@
 - [身体展示资源](Body-Presentation.md)
 - [身体数据、寿命与存档](Body-and-Persistence.md)
 - [组织耐力与精力恢复](Tissue-Recovery.md)
+- [能力修正推进基准](Capability-Performance.md)
 - [身体动作与模块占用](Actions.md)
 - [伤害、治疗与主动恢复](Health-Effects.md)
 - [经脉与真元](Meridian-and-Qi.md)

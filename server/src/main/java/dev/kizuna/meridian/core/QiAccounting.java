@@ -72,6 +72,14 @@ public final class QiAccounting {
 
     public static QiInventory credit(QiInventory inventory, QiInventory cargo) {
         // 同种入账先检查有限且确有增长，再合并；失败时由上层放弃整个候选状态。
+        boolean inventoryEmpty = inventory.entries().isEmpty();
+        if (cargo.entries().isEmpty()) {
+            return inventory;
+        }
+        if (inventoryEmpty) {
+            // 不可变账户已经校验，空账户之间的转移无需重建明细或重复求和。
+            return cargo;
+        }
         var amountByKind = new HashMap<Kind, Double>();
         for (var entry : inventory.entries()) {
             amountByKind.put(new Kind(entry.phase(), entry.attribute()), entry.amount());

@@ -95,7 +95,8 @@ public final class OrganIntake {
         settledAccounts.replaceOrgan(new AnatomyState.Organ(organId, settledOrgan.hp(), buffer, settledOrgan.process(), settledOrgan.fatigueJoules()));
         var supplied = new BodySnapshot(settled.schemaVersion(), settled.id(), settled.template(), settled.structure(), settled.realm(),
                 settled.partStates(), settled.tissueStates(), settledAccounts.organs(), settled.meridianStates(), settled.transits(),
-                settled.vitality(), settled.settledAt(), settled.revision(), settled.actions(), settled.openingTask(), settled.addonProgress());
+                settled.vitality(), settled.settledAt(), settled.revision(), settled.actions(), settled.openingTask(),
+                settled.addonProgress(), settled.modifiers());
         supplied = OpeningRuntime.recordIntake(supplied, organId, incoming.totalQi());
         return new BodyTimeAdvancement.Result(supplied, false, advanced.releasedQi());
     }

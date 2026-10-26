@@ -93,7 +93,9 @@ Addon 判死后，框架清空动作与开脉任务，将内腔、外壁、在�
 
 `health_host.proto` 定义 `HealthHostRequest` / `HealthHostResponse`。Java 参考入口为 `server.BodyHealthHost.exchange(byte[])`，通过 `HealthHostProtobuf` 有界编解码；这是可信宿主与适配附属的装配边界，不可直接暴露为玩家网络通道。
 
-请求包含协议版本 1、关联 ID、宿主身份 `subject_id`，以及 `inspect = true` 或健康 `RequestEnvelope effect`。外层和内层请求 ID 必须一致，内部命令仍带实际身体 ID 与预期 revision。宿主绑定身份、检查权限并按可信时刻结算；不能替调用方刷新预期 revision 来绕过并发校验。
+请求包含协议版本 1、关联 ID、宿主身份 `subject_id`，以及三选一操作：`inspect = true`、健康 `RequestEnvelope effect = 11`、或 `RequestEnvelope exertion = 12`。`exertion` 只允许 `body_command.exert_tissues`，单组织 `exert_tissue`、其他身体命令和查询都拒绝；`effect` 仍只允许健康命令。做功不归入 `HealthProtobuf.isHealthCommand`，宿主使用自己的可信上下文转交现有普通 `BodyCommandHandler.handle`，维持普通做功入口可用。
+
+外层和内层请求 ID 必须一致，内部命令仍带实际身体 ID 与预期 revision。宿主绑定身份、检查权限并按可信时刻结算；不能替调用方刷新预期 revision 来绕过并发校验。做功按[整个时段的最低倍率](Technique-Addons.md#已实现的组织能力)检查，能力不足返回原有 `TISSUE_LOAD_EXCEEDED` 等能力失败码；成功及成功重试返回当前快照，重试不重复记疲劳。Framework 已提供格式校验和普通执行路径；Human、Threatening 的 `exertion` 转发由各宿主另行接线。
 
 响应为完整当前 `BodySnapshot`、`unbound = true` 或框架 `RequestFailure`。只有未绑定允许继续寻找其他宿主；拒绝、异常或多个宿主认领时不能切换账本执行。成功效果可附 `health = 13`，内容必须取自同一请求的固定 `HealthResult`；查询不附带，失败和未绑定响应禁止携带。成功重试可返回当前快照，但附带事实仍为原始成功回执。需要根据保命事实消费物品的调用方必须要求该字段，并用原命令核验结果，不能从当前 HP 猜测。其他语言宿主按同一 Protobuf 与行为契约提供入口即可。
 

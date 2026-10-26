@@ -100,7 +100,8 @@ final class QiCaptureExecution {
                 state.process(), state.fatigueJoules()));
         BodySnapshot updated = new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), organs, body.meridianStates(), body.transits(), body.vitality(),
-                body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
+                body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
+                body.addonProgress(), body.modifiers());
         updated = OpeningRuntime.recordIntake(updated, organ.id(), rawAmount);
 
         // 原始量先扣环境，损耗回同一来源；两个版本和回执一起提交，不重复进入默认释放账。

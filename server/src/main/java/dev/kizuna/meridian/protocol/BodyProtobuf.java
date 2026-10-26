@@ -10,6 +10,7 @@ import dev.kizuna.meridian.core.DefinitionId;
 import dev.kizuna.meridian.core.MeridianOpening;
 import dev.kizuna.meridian.core.MeridianState;
 import dev.kizuna.meridian.core.OrganProcess;
+import dev.kizuna.meridian.core.OpeningTask;
 import dev.kizuna.meridian.core.Qi;
 import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.QiTransit;
@@ -47,16 +48,21 @@ public final class BodyProtobuf {
     public static BodyMessages.BodySnapshot toMessage(BodySnapshot value) {
         // 仅映射唯一明细账本，不序列化可重新派生的真元总量、HP 比例和剩余寿命。
         var builder = BodyMessages.BodySnapshot.newBuilder()
-                .setSchemaVersion(value.schemaVersion()).setId(value.id().value())
-                .setTemplate(toReference(value.template())).setStructure(toStructure(value.structure()))
+                .setSchemaVersion(value.schemaVersion())
+                .setId(value.id().value())
+                .setTemplate(toReference(value.template()))
+                .setStructure(toStructure(value.structure()))
                 .setRealm(BodyMessages.Realm.valueOf(value.realm().name()))
                 .addAllPartStates(value.partStates().stream().map(BodyProtobuf::toPartState).toList())
                 .addAllTissueStates(value.tissueStates().stream().map(BodyProtobuf::toTissueState).toList())
                 .addAllOrganStates(value.organStates().stream().map(BodyProtobuf::toOrganState).toList())
                 .addAllMeridianStates(value.meridianStates().stream().map(BodyProtobuf::toMeridianState).toList())
                 .addAllTransits(value.transits().stream().map(BodyProtobuf::toTransit).toList())
-                .setVitality(toVitality(value.vitality())).setSettledAt(toTime(value.settledAt()))
-                .setRevision(value.revision()).putAllAddonProgress(value.addonProgress())
+                .setVitality(toVitality(value.vitality()))
+                .setSettledAt(toTime(value.settledAt()))
+                .setRevision(value.revision())
+                .putAllAddonProgress(value.addonProgress())
+                .addAllModifiers(value.modifiers().stream().map(CapabilityProtobuf::toModifier).toList())
                 .addAllActions(value.actions().stream().map(ActionProtobuf::toActive).toList());
         if (value.openingTask() != null) {
             builder.setOpeningTask(OpeningProtobuf.toTask(value.openingTask()));
@@ -69,6 +75,10 @@ public final class BodyProtobuf {
     public static BodySnapshot fromMessage(BodyMessages.BodySnapshot value) {
         // 先拒绝缺失/未知字段，再让原有核心校验统一验证上限、引用和时序。
         ProtoWire.validate(value);
+        OpeningTask openingTask = null;
+        if (value.hasOpeningTask()) {
+            openingTask = OpeningProtobuf.fromTask(value.getOpeningTask());
+        }
         return new BodySnapshot(value.getSchemaVersion(), new BodyId(value.getId()), fromReference(value.getTemplate()),
                 fromStructure(value.getStructure()), Realm.valueOf(value.getRealm().name()),
                 value.getPartStatesList().stream().map(BodyProtobuf::fromPartState).toList(),
@@ -78,8 +88,8 @@ public final class BodyProtobuf {
                 value.getTransitsList().stream().map(BodyProtobuf::fromTransit).toList(),
                 fromVitality(value.getVitality()), fromTime(value.getSettledAt()), value.getRevision(),
                 value.getActionsList().stream().map(ActionProtobuf::fromActive).toList(),
-                value.hasOpeningTask() ? OpeningProtobuf.fromTask(value.getOpeningTask()) : null,
-                value.getAddonProgressMap());
+                openingTask, value.getAddonProgressMap(),
+                value.getModifiersList().stream().map(CapabilityProtobuf::fromModifier).toList());
     }
 
     public static BodyMessages.BodyTemplate toMessage(BodyTemplate value) {
@@ -106,7 +116,7 @@ public final class BodyProtobuf {
         return new BodyTemplate.Reference(new DefinitionId(value.getId()), value.getVersion());
     }
 
-    private static BodyMessages.BodyStructure toStructure(BodyStructure value) {
+    public static BodyMessages.BodyStructure toStructure(BodyStructure value) {
         // 部位、组织、器官、经脉分别序列化，以端口连接而不互相内嵌所有权。
         return BodyMessages.BodyStructure.newBuilder()
                 .addAllParts(value.parts().stream().map(BodyProtobuf::toPart).toList())
@@ -283,10 +293,13 @@ public final class BodyProtobuf {
         return new AnatomyState.Part(new Anatomy.PartId(value.getId()), value.getHp());
     }
 
-    private static BodyMessages.TissueState toTissueState(AnatomyState.Tissue value) {
+    public static BodyMessages.TissueState toTissueState(AnatomyState.Tissue value) {
         // 疲劳与伤势分别持有，不能由一个数值推算另一个。
-        return BodyMessages.TissueState.newBuilder().setId(value.id().value()).setHp(value.hp())
-                .setFatigue(value.fatigue()).build();
+        return BodyMessages.TissueState.newBuilder()
+                .setId(value.id().value())
+                .setHp(value.hp())
+                .setFatigue(value.fatigue())
+                .build();
     }
 
     private static AnatomyState.Tissue fromTissueState(BodyMessages.TissueState value) {
@@ -294,10 +307,13 @@ public final class BodyProtobuf {
         return new AnatomyState.Tissue(new Anatomy.TissueId(value.getId()), value.getHp(), value.getFatigue());
     }
 
-    private static BodyMessages.OrganState toOrganState(AnatomyState.Organ value) {
+    public static BodyMessages.OrganState toOrganState(AnatomyState.Organ value) {
         // 空闲状态不带加工记录；启动后的配方事实和原料账户必须一起存档。
-        var builder = BodyMessages.OrganState.newBuilder().setId(value.id().value()).setHp(value.hp())
-                .setBuffer(toInventory(value.buffer())).setFatigueJoules(value.fatigueJoules());
+        var builder = BodyMessages.OrganState.newBuilder()
+                .setId(value.id().value())
+                .setHp(value.hp())
+                .setBuffer(toInventory(value.buffer()))
+                .setFatigueJoules(value.fatigueJoules());
         if (value.process() != null) {
             builder.setProcess(CapabilityProtobuf.toProcess(value.process()));
         }
@@ -339,13 +355,16 @@ public final class BodyProtobuf {
         return new Qi(Qi.QiAttribute.of(value.getAttribute()), value.getAmount(), value.getDensity());
     }
 
-    private static BodyMessages.MeridianState toMeridianState(MeridianState value) {
+    public static BodyMessages.MeridianState toMeridianState(MeridianState value) {
         // 账户、损伤和开拓事实分别编码，恢复时不从储量反推意念控制能力。
-        return BodyMessages.MeridianState.newBuilder().setId(value.id().value())
-                .setLumenQi(toInventory(value.lumenQi())).setWallQi(toInventory(value.wallQi()))
+        return BodyMessages.MeridianState.newBuilder()
+                .setId(value.id().value())
+                .setLumenQi(toInventory(value.lumenQi()))
+                .setWallQi(toInventory(value.wallQi()))
                 .setFatigue(value.fatigue())
                 .setCondition(BodyMessages.MeridianCondition.valueOf(value.condition().name()))
-                .setOpening(toOpening(value.opening())).build();
+                .setOpening(toOpening(value.opening()))
+                .build();
     }
 
     private static MeridianState fromMeridianState(BodyMessages.MeridianState value) {
@@ -386,11 +405,14 @@ public final class BodyProtobuf {
                 QiTransit.Status.valueOf(value.getStatus().name()), value.hasCircuit() ? value.getCircuit() : null);
     }
 
-    private static BodyMessages.VitalityState toVitality(VitalityState value) {
+    public static BodyMessages.VitalityState toVitality(VitalityState value) {
         // 年龄、寿命上限与额外支出分开存储，零值及存活状态均显式写出。
-        return BodyMessages.VitalityState.newBuilder().setAgeSeconds(value.ageSeconds())
-                .setLifespanLimitSeconds(value.lifespanLimitSeconds()).setSpentLifespanSeconds(value.spentLifespanSeconds())
-                .setDead(value.dead()).build();
+        return BodyMessages.VitalityState.newBuilder()
+                .setAgeSeconds(value.ageSeconds())
+                .setLifespanLimitSeconds(value.lifespanLimitSeconds())
+                .setSpentLifespanSeconds(value.spentLifespanSeconds())
+                .setDead(value.dead())
+                .build();
     }
 
     private static VitalityState fromVitality(BodyMessages.VitalityState value) {

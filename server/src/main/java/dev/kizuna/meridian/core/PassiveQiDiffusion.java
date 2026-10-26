@@ -33,7 +33,7 @@ public final class PassiveQiDiffusion {
         return Optional.empty();
     }
 
-    static List<Anatomy.Connection> passiveConnections(BodySnapshot body) {
+    static List<Anatomy.Connection> passiveConnections(BodyView body) {
         // 分支按连接 ID 稳定处理，结果不依赖模板或存档列表的排列顺序。
         if (body.openingTask() != null && body.openingTask().active()) {
             // 开脉期间由专用引导接管经脉流向，避免自然压差立即把增压真元抽离。
@@ -51,7 +51,7 @@ public final class PassiveQiDiffusion {
                 .toList();
     }
 
-    static List<QiTransit> dispatchDue(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
+    static List<QiTransit> dispatchDue(BodyView body, QiAccounts accounts, List<QiTransit> transits,
                                       List<Anatomy.Connection> connections, long atMillis) {
         // 每次新预约马上加入当前候选账本，后续分支只能使用剩余吞吐和目标容量。
         List<QiTransit> pendingTransits = transits;

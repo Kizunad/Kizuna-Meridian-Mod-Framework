@@ -126,10 +126,16 @@ public final class OpeningProtobuf {
     public static OpeningPolicyMessages.OpeningPolicyDecision decodePolicyDecision(byte[] payload) {
         // 附属不能返回无限量、非法延迟或损坏消息，让权威事件循环失去边界。
         var decision = ProtoWire.read(payload, OpeningPolicyMessages.OpeningPolicyDecision.parser());
+        validatePolicyDecision(decision);
+        return decision;
+    }
+
+    public static void validatePolicyDecision(OpeningPolicyMessages.OpeningPolicyDecision decision) {
+        // 可信 Java 执行器的生成消息仍须校验全部返回字段，不能绕过计划和资源边界。
+        ProtoWire.validate(decision);
         ProtoWire.require(decision.getProtocolVersion() == MeridianProtocol.VERSION
                 && (!decision.hasNextCheckDelayMillis() || decision.getNextCheckDelayMillis() > 0)
                 && decision.getReceiptWindowMillis() >= 0, Opening.POLICY_INVALID);
-        return decision;
     }
 
     private static MeridianOpeningRule.GuidanceTarget fromLimit(BodyMessages.OpeningGuidanceTarget value) {

@@ -334,7 +334,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             if (receipt.getCommand().hasExecuteActivity()) {
                 // 按固定计划重新计算，身体、进度和排放只允许一起发布。
                 var plan = receipt.getCommand().getExecuteActivity();
-                var expected = BodyActivityExecution.apply(original.snapshot(), plan);
+                var expected = BodyActivityExecution.apply(original.snapshot(), plan, receipt.getCallerId());
                 if (!next.equals(expected)) {
                     throw MeridianErrors.inconsistent(MeridianErrors.INVALID_ACTIVITY);
                 }

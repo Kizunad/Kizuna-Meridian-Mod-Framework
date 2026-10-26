@@ -10,6 +10,8 @@ import java.util.Set;
 
 /** 一个合法账户的不可变明细。允许混相、混属性，但同属性同相态区间只能有一行。 */
 public record QiInventory(List<Qi> entries) {
+    private static final QiInventory EMPTY = new QiInventory(List.of());
+
     public QiInventory {
         // 复制后逐项检查，避免账户建成后从外部插入未经校验的明细。
         entries = List.copyOf(entries);
@@ -26,17 +28,29 @@ public record QiInventory(List<Qi> entries) {
     }
 
     public static QiInventory empty() {
-        // 空账户不预填任意相态或属性，防止无意义的零余额行。
-        return new QiInventory(List.of());
+        // 空账户不可变且没有数值，事件切段可共享已校验的空明细，避免反复构造和校验。
+        return EMPTY;
     }
 
     public double totalQi() {
         // 属性与相态只区分明细种类，所有数量统一按元求和。
+        if (entries.isEmpty()) {
+            return 0;
+        }
+        if (entries.size() == 1) {
+            return entries.get(0).amount();
+        }
         return entries.stream().mapToDouble(Qi::amount).sum();
     }
 
     public double volume() {
         // 混相库存逐条按实际密度占容，不按境界倍率估算。
+        if (entries.isEmpty()) {
+            return 0;
+        }
+        if (entries.size() == 1) {
+            return entries.get(0).volume();
+        }
         return entries.stream().mapToDouble(Qi::volume).sum();
     }
 

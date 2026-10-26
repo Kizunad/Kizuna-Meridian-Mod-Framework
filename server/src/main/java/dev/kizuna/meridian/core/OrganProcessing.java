@@ -61,10 +61,11 @@ public final class OrganProcessing {
         // 5. 一次启动只生成一份候选身体；实际发布仍由宿主事务决定。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), accounts.organs(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
+                body.addonProgress(), body.modifiers());
     }
 
-    static QiInventory completeDue(BodySnapshot body, QiAccounts accounts, long atMillis) {
+    static QiInventory completeDue(BodyView body, QiAccounts accounts, long atMillis) {
         // 仅在事件边界检查到期任务；失能只阻塞，恢复后可在同毫秒继续结算。
         QiInventory releasedQi = QiInventory.empty();
         for (Anatomy.OrganDefinition organDefinition : body.structure().organs()) {
@@ -101,6 +102,11 @@ public final class OrganProcessing {
     }
 
     public static Optional<TimeCursor> nextCompletionBoundary(BodySnapshot body) {
+        // 外部调度和内部推进共用相同事件查找。
+        return nextCompletionBoundary((BodyView) body);
+    }
+
+    static Optional<TimeCursor> nextCompletionBoundary(BodyView body) {
         // 已阻塞的任务等状态变化再试，不安排不断唤醒的过去时刻。
         if (body.vitality().dead()) {
             return Optional.empty();

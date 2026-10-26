@@ -334,6 +334,11 @@ public final class MeridianErrors {
         public static final String TRANSIT_BLOCKED_BEFORE_ARRIVAL = "未到达的货物不能标为到达阻塞";
         public static final String CAPACITY_REQUIRED = "必须提供组织基础能力";
         public static final String TISSUE_CONTEXT_INCOMPLETE = "组织能力计算缺少组织状态或所属部位数据";
+        public static final String CAPABILITY_CONFIGURATION = "能力修正需要正时长上限、有限倍率边界，且倍率范围必须包含 1";
+        public static final String INVALID_CAPABILITY_MODIFIER = "能力修正需要合法身份、来源、组织、起点、2–16 个递增曲线点及有界正峰值，各点倍率不得低于下限";
+        public static final String INVALID_MODIFIER_STATE = "能力修正最多 32 条、ID 唯一且须引用实际组织，到期时刻必须晚于身体游标；死体不能保留修正";
+        public static final String INVALID_MODIFIER_REMOVAL = "撤销的能力修正 ID 必须唯一、已存在且属于当前可信来源";
+        public static final String MODIFIER_START_BEFORE_CLOCK = "能力修正的生效时刻不得早于身体游标";
         public static final String RECIPE_REQUIRED = "必须提供器官配方";
         public static final String INVALID_RECIPE = "配方必须有正数版本、时长及输入，输出不能超过输入";
         public static final String INVALID_PROCESS_TIME = "加工运行或阻塞状态必须与结算时间一致";

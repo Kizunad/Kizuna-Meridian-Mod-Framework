@@ -122,7 +122,8 @@ final class BodyHealthExecution {
             updated = new BodySnapshot(updated.schemaVersion(), updated.id(), updated.template(),
                     updated.structure(), updated.realm(), updated.partStates(), updated.tissueStates(), death.organs(),
                     death.meridians(), List.of(), new VitalityState(vitality.ageSeconds(), vitality.lifespanLimitSeconds(),
-                    vitality.spentLifespanSeconds(), true), updated.settledAt(), updated.revision(), List.of(), null, updated.addonProgress());
+                    vitality.spentLifespanSeconds(), true), updated.settledAt(), updated.revision(), List.of(), null,
+                    updated.addonProgress(), List.of());
             released = death.qi();
         } else if (command.hasDamageBody()) {
             BodyTimeAdvancement.Result interrupted = OpeningRuntime.interruptUnavailable(updated);

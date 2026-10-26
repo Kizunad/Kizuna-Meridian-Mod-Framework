@@ -8,14 +8,14 @@ import java.util.Map;
 final class QiAccounts {
     record Endpoint(Object id, double capacity, double throughputPerSecond, Anatomy.PartId organPart) { }
 
-    private final BodySnapshot body;
+    private final BodyView body;
     private final Map<Anatomy.PortId, Endpoint> ports = new HashMap<>();
     private final Map<Anatomy.MeridianId, MeridianState> meridians;
     private final Map<Anatomy.OrganId, AnatomyState.Organ> organs;
     private final Map<Anatomy.PartId, AnatomyState.Part> parts;
     private final Map<Anatomy.ConnectionId, Anatomy.Connection> connections;
 
-    QiAccounts(BodySnapshot body) {
+    QiAccounts(BodyView body) {
         // 不同模块的 record ID 类型保留身份空间，器官和经脉同名也不会串账。
         this.body = body;
         meridians = DataChecks.index(body.meridianStates(), MeridianState::id, "经脉状态");
@@ -113,15 +113,25 @@ final class QiAccounts {
 
     List<MeridianState> meridians() {
         // 保持原始顺序，减少存档与差异比较中的无意义变化。
-        return body.meridianStates().stream()
+        List<MeridianState> states = body.meridianStates();
+        List<MeridianState> updated = states.stream()
                 .map(state -> meridians.get(state.id()))
                 .toList();
+        if (updated.equals(states)) {
+            return states;
+        }
+        return updated;
     }
 
     List<AnatomyState.Organ> organs() {
         // 返回不可变结果，临时索引不会成为宿主可写接口。
-        return body.organStates().stream()
+        List<AnatomyState.Organ> states = body.organStates();
+        List<AnatomyState.Organ> updated = states.stream()
                 .map(state -> organs.get(state.id()))
                 .toList();
+        if (updated.equals(states)) {
+            return states;
+        }
+        return updated;
     }
 }

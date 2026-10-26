@@ -9,3 +9,43 @@ test {
     // 现有整体回归随权威计算迁入服务端，保留相同的 JUnit 执行方式。
     useJUnit()
 }
+
+// 基准复用整体测试的非人体构型和策略，但不接入 check 或默认 test。
+sourceSets {
+    benchmark {
+        compileClasspath += sourceSets.main.output + sourceSets.test.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.test.output
+    }
+}
+
+configurations {
+    benchmarkImplementation.extendsFrom testImplementation
+    benchmarkRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+tasks.register('capabilityBenchmark', JavaExec) {
+    group = 'verification'
+    description = '在 Java 17 上测量单次身体推进，独立于默认整体测试。'
+    dependsOn testClasses, benchmarkClasses
+    classpath = sourceSets.benchmark.runtimeClasspath
+    mainClass = 'dev.kizuna.meridian.protocol.CapabilityAdvanceBenchmark'
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    maxHeapSize = '512m'
+    minHeapSize = '512m'
+    // 使用服务器常规的后台编译；同步编译仅用于复现 JIT 等待造成的尾样本。
+    if (project.hasProperty('benchmarkBatchCompile')) {
+        jvmArgs '-Xbatch'
+    }
+    if (project.hasProperty('benchmarkJfr')) {
+        def settings = project.findProperty('benchmarkJfrSettings') ?: 'profile'
+        jvmArgs '-XX:StartFlightRecording=settings=' + settings + ',filename=' + project.property('benchmarkJfr')
+    }
+    ['Warmup', 'Samples', 'Scenario'].each { suffix ->
+        def property = 'benchmark' + suffix
+        if (project.hasProperty(property)) {
+            systemProperty property, project.property(property)
+        }
+    }
+}

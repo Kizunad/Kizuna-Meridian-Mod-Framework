@@ -78,7 +78,8 @@ public final class QiDebugging {
             }
             return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                     body.partStates(), body.tissueStates(), body.organStates(), accounts.meridians(), body.transits(),
-                    body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
+                    body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
+                    body.addonProgress(), body.modifiers());
         }
         for (Anatomy.MeridianDefinition definition : targets) {
             MeridianState state = accounts.meridian(definition.id());
@@ -117,6 +118,7 @@ public final class QiDebugging {
         // 只创建一次版本变更；扩散由同一身体的事件调度接手，不瞬移平均分账。
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), body.organStates(), accounts.meridians(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
+                body.addonProgress(), body.modifiers());
     }
 }

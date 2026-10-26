@@ -67,7 +67,8 @@ final class OrganIntakeExecution {
             updatedBody = new BodySnapshot(updatedBody.schemaVersion(), updatedBody.id(), updatedBody.template(),
                     updatedBody.structure(), updatedBody.realm(), updatedBody.partStates(), combinedTissues,
                     updatedBody.organStates(), updatedBody.meridianStates(), updatedBody.transits(), updatedBody.vitality(),
-                    updatedBody.settledAt(), updatedBody.revision(), updatedBody.actions(), updatedBody.openingTask(), updatedBody.addonProgress());
+                    updatedBody.settledAt(), updatedBody.revision(), updatedBody.actions(), updatedBody.openingTask(),
+                    updatedBody.addonProgress(), updatedBody.modifiers());
         }
         var offer = EnvironmentAbsorption.offer(source, body.id().value(), BodyProtobuf.toTime(body.settledAt()), plan.getTarget());
         var exchange = EnvironmentQiExchange.newBuilder().setExchangeId("intake-" + result.body().revision())

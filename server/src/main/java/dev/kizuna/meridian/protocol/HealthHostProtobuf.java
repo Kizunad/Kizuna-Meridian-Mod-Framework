@@ -31,6 +31,14 @@ public final class HealthHostProtobuf {
             require(request.getInspect());
             return;
         }
+        if (request.hasExertion()) {
+            // 做功仍走普通命令入口，不能借宿主操作夹带健康或其他身体命令。
+            var exertion = request.getExertion();
+            MeridianProtocol.encodeRequest(exertion);
+            require(exertion.getRequestId().equals(request.getRequestId()));
+            require(exertion.hasBodyCommand() && exertion.getBodyCommand().hasExertTissues());
+            return;
+        }
         var effect = request.getEffect();
         MeridianProtocol.encodeRequest(effect);
         require(effect.getRequestId().equals(request.getRequestId()));

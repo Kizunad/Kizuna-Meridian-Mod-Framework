@@ -20,6 +20,8 @@ message BodyActivity {
   repeated string stop_actions = 10;
   repeated MeridianInjury meridian_injuries = 11;
   DamageResolution damage = 12;
+  repeated CapabilityModifier add_modifiers = 13;
+  repeated string remove_modifiers = 14; // 按唯一 ID 撤销，不存在则整笔拒绝。
 }
 message QiAccountChange {
   oneof account {

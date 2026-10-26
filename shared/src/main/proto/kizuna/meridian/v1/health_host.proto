@@ -17,6 +17,7 @@ message HealthHostRequest {
   oneof operation {
     bool inspect = 10; // 必须为 true，读取当前绑定的权威身体。
     RequestEnvelope effect = 11; // 只允许健康命令，内外 request_id 必须一致。
+    RequestEnvelope exertion = 12; // 只允许 exert_tissues，内外 request_id 必须一致。
   }
 }
 

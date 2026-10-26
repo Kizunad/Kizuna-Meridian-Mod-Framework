@@ -1,8 +1,12 @@
 package dev.kizuna.meridian.protocol;
 
 import com.google.protobuf.UnknownFieldSet;
+import dev.kizuna.meridian.core.OpeningPolicy;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.OpeningMessages;
+import dev.kizuna.meridian.protocol.pb.OpeningPolicyMessages.OpeningPolicyDecision;
+import dev.kizuna.meridian.protocol.pb.OpeningPolicyMessages.OpeningPolicyPhase;
+import dev.kizuna.meridian.protocol.pb.OpeningPolicyMessages.OpeningPolicyRequest;
 import org.junit.Test;
 
 import java.util.HexFormat;
@@ -12,6 +16,46 @@ import static org.junit.Assert.*;
 
 /** 长期保护开拓内容与意图的跨语言边界；实际推进由运行回归覆盖。 */
 public class MeridianOpeningContractTest {
+    @Test
+    public void generatedPolicyMessagesRetainTheValidatedByteAdapter() {
+        // Java 消息调用和跨语言字节调用得到相同裁定，字节边界仍拒绝损坏输入及返回值。
+        var body = CapabilityModifiersTest.holdingOpening(CapabilityModifiersTest.recoveringBody());
+        var request = OpeningPolicyRequest.newBuilder()
+                .setProtocolVersion(1)
+                .setBody(BodyProtobuf.toMessage(body))
+                .setRule(OpeningProtobuf.toRule(body.openingTask().rule()))
+                .setPhase(OpeningPolicyPhase.CHECK_OPENING)
+                .setIntervalMillis(1)
+                .build();
+        OpeningPolicy policy = new SampleOpeningPolicy();
+        OpeningPolicyDecision decision = policy.evaluate(request);
+        assertEquals(decision, OpeningProtobuf.decodePolicyDecision(policy.evaluate(request.toByteArray())));
+        var invalidRequest = request.toBuilder().setProtocolVersion(0).build();
+        assertThrows(IllegalArgumentException.class, () -> policy.evaluate(invalidRequest.toByteArray()));
+
+        var invalidDecisions = List.of(decision.toBuilder().setNextCheckDelayMillis(0).build(),
+                decision.toBuilder().setReceiptWindowMillis(-1).build(),
+                decision.toBuilder().setUnknownFields(unknown()).build());
+        for (OpeningPolicyDecision invalid : invalidDecisions) {
+            OpeningPolicy invalidPolicy = new FixedPolicy(invalid);
+            assertThrows(IllegalArgumentException.class, () -> invalidPolicy.evaluate(request.toByteArray()));
+        }
+    }
+
+    private record FixedPolicy(OpeningPolicyDecision decision) implements OpeningPolicy {
+        @Override
+        public String id() {
+            // 仅用作返回损坏消息的测试执行器，不注册为生产策略。
+            return "sample:invalid_decision";
+        }
+
+        @Override
+        public OpeningPolicyDecision evaluate(OpeningPolicyRequest request) {
+            // 故意返回指定消息，让公共字节适配器执行完整返回值校验。
+            return decision;
+        }
+    }
+
     @Test
     public void nonHumanRulesPreserveMixedQiAndExactActionReferences() {
         // 引导明细可以混相；条件是不透明的附属 Protobuf，不由框架解释。

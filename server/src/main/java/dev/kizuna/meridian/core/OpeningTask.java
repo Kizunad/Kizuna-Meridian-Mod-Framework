@@ -49,6 +49,9 @@ public record OpeningTask(MeridianOpeningRule rule, String actionInstanceId,
 
     public OpeningTask progress(long held, Status nextStatus, List<IntakeSample> samples) {
         // 保留启动事实；进度更新不能改变容量增量或本轮要求。
+        if (held == heldMillis && nextStatus == status && samples.equals(intakeSamples)) {
+            return this;
+        }
         return new OpeningTask(rule, actionInstanceId, participants, requiredMillis, targetStableVolume,
                 startedMillis, held, nextStatus, samples, observedOrganIds, receiptWindowMillis);
     }

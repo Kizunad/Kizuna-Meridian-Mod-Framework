@@ -56,16 +56,17 @@ public final class QiTransport {
                 body.settledAt().elapsedMillis(), DispatchMode.ACTIVE);
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), accounts.organs(), accounts.meridians(), updatedTransits,
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), body.addonProgress());
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
+                body.addonProgress(), body.modifiers());
     }
 
-    static List<QiTransit> dispatchPassive(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
+    static List<QiTransit> dispatchPassive(BodyView body, QiAccounts accounts, List<QiTransit> transits,
                                           Anatomy.Connection connection, Request request, long atMillis) {
         // 生理扩散使用构型声明的通路，不申请意念主动调用权限。
         return dispatch(body, accounts, transits, connection, request, atMillis, DispatchMode.PASSIVE);
     }
 
-    static List<QiTransit> dispatchGuided(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
+    static List<QiTransit> dispatchGuided(BodyView body, QiAccounts accounts, List<QiTransit> transits,
                                          Anatomy.Connection connection, Request request, long atMillis) {
         // 专用权限仅供身体内部已受校验的开脉任务使用，网络请求没有此标志。
         if (body.openingTask() == null || !body.openingTask().active()) {
@@ -74,7 +75,7 @@ public final class QiTransport {
         return dispatch(body, accounts, transits, connection, request, atMillis, DispatchMode.OPENING_GUIDANCE);
     }
 
-    private static List<QiTransit> dispatch(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits,
+    private static List<QiTransit> dispatch(BodyView body, QiAccounts accounts, List<QiTransit> transits,
                                           Anatomy.Connection connection, Request request, long atMillis,
                                           DispatchMode mode) {
         // 内部事件与公开意图使用同一校验和扣账顺序；被动权限只由可信构型声明。
@@ -211,7 +212,7 @@ public final class QiTransport {
         return new DispatchCapacity(availableThroughputPerSecond, availableTargetCapacity);
     }
 
-    static List<QiTransit> arrive(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits, long atMillis) {
+    static List<QiTransit> arrive(BodyView body, QiAccounts accounts, List<QiTransit> transits, long atMillis) {
         // 由资源事件合并器按时间调用；同一时刻按稳定 ID 入账，阻塞记录可以重新尝试。
         var connections = DataChecks.index(body.structure().connections(), Anatomy.Connection::id, "连接");
         var pendingTransits = new ArrayList<QiTransit>();
@@ -263,6 +264,11 @@ public final class QiTransport {
     }
 
     public static Optional<TimeCursor> nextArrivalBoundary(BodySnapshot body) {
+        // 外部调度和内部推进按同一规则选择下个到达。
+        return nextArrivalBoundary((BodyView) body);
+    }
+
+    static Optional<TimeCursor> nextArrivalBoundary(BodyView body) {
         // 阻塞批次等待相关状态变化后显式触发结算；只为仍在移动的货物安排到达唤醒。
         MeridianErrors.required(body, Data.BODY_REQUIRED);
         if (body.vitality().dead()) {

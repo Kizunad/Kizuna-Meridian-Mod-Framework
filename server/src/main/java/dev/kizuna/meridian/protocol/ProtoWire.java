@@ -132,8 +132,18 @@ final class ProtoWire {
                 require(field.getFullName().equals("google.protobuf.Any.value"),
                         Protocol.unsupportedFieldType(field.getFullName()));
             }
-            case DOUBLE -> require(Double.isFinite((double) value) && (double) value >= 0,
-                    Protocol.invalidNumber(field.getFullName()));
+            case DOUBLE -> {
+                // 只有能力曲线振幅允许负数；其他资源和剂量继续要求非负。
+                double minimum = 0;
+                double maximum = Double.MAX_VALUE;
+                if (field.getFullName().equals("kizuna.meridian.v1.CurvePoint.value")) {
+                    minimum = -1;
+                    maximum = 1;
+                }
+                double number = (double) value;
+                require(Double.isFinite(number) && number >= minimum && number <= maximum,
+                        Protocol.invalidNumber(field.getFullName()));
+            }
             case INT -> require((int) value >= 0, Protocol.negativeInteger(field.getFullName()));
             case LONG -> require((long) value >= 0, Protocol.negativeLong(field.getFullName()));
             case BOOLEAN -> {

@@ -17,12 +17,12 @@ final class OpeningGuidance {
 
     private record Dispatch(Anatomy.Connection connection, QiTransport.Request request) { }
 
-    static boolean canDispatch(BodySnapshot body) {
+    static boolean canDispatch(BodyView body) {
         // 满载、断路和吞吐占用时不安排空唤醒。
         return plan(body, new QiAccounts(body), body.transits()).isPresent();
     }
 
-    static List<QiTransit> dispatchDue(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits, long atMillis) {
+    static List<QiTransit> dispatchDue(BodyView body, QiAccounts accounts, List<QiTransit> transits, long atMillis) {
         // 每个新批次立即占用共享吞吐和目标容量，后续路径只能申请剩余额度。
         List<QiTransit> pending = transits;
         Optional<Dispatch> dispatch = plan(body, accounts, pending);
@@ -34,7 +34,7 @@ final class OpeningGuidance {
         return pending;
     }
 
-    private static Optional<Dispatch> plan(BodySnapshot body, QiAccounts accounts, List<QiTransit> transits) {
+    private static Optional<Dispatch> plan(BodyView body, QiAccounts accounts, List<QiTransit> transits) {
         // 先满足目标，再补其他参与脉；组外经脉可以贡献真实内腔余额。
         OpeningTask task = body.openingTask();
         if (task == null || !task.active() || task.rule().guidanceQiPerSecond() == 0) {
@@ -104,7 +104,7 @@ final class OpeningGuidance {
         return Optional.empty();
     }
 
-    private static Map<Object, Double> organSupplyReservations(BodySnapshot body, QiAccounts accounts,
+    private static Map<Object, Double> organSupplyReservations(BodyView body, QiAccounts accounts,
                                                               List<QiTransit> transits) {
         // 有器官缓存等候输入时，为入口经脉让出至多一半吞吐；另一半仍能抽走存量腾出空间。
         // 不能只降低单批引导速度，否则同一事件的下一批会再次吃满剩余吞吐。

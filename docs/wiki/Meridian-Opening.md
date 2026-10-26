@@ -35,6 +35,10 @@
 
 Java 参考实现通过 `OpeningPolicy` SPI 与 `ServiceLoader` 发现执行器，登记文件为 `META-INF/services/dev.kizuna.meridian.core.OpeningPolicy`，策略 ID 不可重复。适配器也可转发相同 Protobuf 到其他语言；其他语言宿主须实现对应策略，安装 Java JAR 不自动获得跨语言执行能力。
 
+Java 执行器实现 `OpeningPolicyDecision evaluate(OpeningPolicyRequest request)`，直接使用 protoc 生成的不可变消息。原字节调用由接口提供的 `evaluate(byte[])` 适配，仍完整校验请求和返回值；跨语言协议及字段不变。旧 Java 策略实现须将方法签名改为生成消息类型并重新编译；Human 已同步迁移。策略配置 Any 仍由内容方校验。
+
+一次推进只在初始化策略上下文时完整映射并校验输入快照，随后按状态变化替换消息子树。任务的规则、参与组和稳定容量不变时复用原消息；进度变化只更新适应时长、状态与收据，经脉库存未变时复用库存消息。内部候选不会直接暴露给策略。每次策略调用及其顺序保持一致，不缓存策略裁定，所有返回字段仍逐次通过完整协议校验，计划引用及资源约束继续由业务执行器检查。相关性能数据见[推进基准](Capability-Performance.md)。
+
 新启动缺少执行器返回 `OPENING_POLICY_UNAVAILABLE = 45`。已保存的活动任务缺少策略时安全暂停并解除动作占用，保留合法的身体容量和真元余额；保存原规则与进度事实，不套用其他生物规则。数据解码只做结构一致性校验，不要求策略已安装，也不推进身体。
 
 ## 意图、授权与事务

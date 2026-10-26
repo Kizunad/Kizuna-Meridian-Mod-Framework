@@ -39,6 +39,7 @@ public final class AddonProgress {
         updated.put(id, progress);
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), body.tissueStates(), body.organStates(), body.meridianStates(), body.transits(),
-                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(), updated);
+                body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
+                updated, body.modifiers());
     }
 }

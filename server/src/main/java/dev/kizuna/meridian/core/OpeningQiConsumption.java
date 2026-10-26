@@ -8,7 +8,7 @@ final class OpeningQiConsumption {
         // 不保留第二份余额，费用与唤醒都从固定规则和实际内腔派生。
     }
 
-    static QiInventory consume(BodySnapshot body, QiAccounts accounts, long millis) {
+    static QiInventory consume(BodyView body, QiAccounts accounts, long millis) {
         // 在到达与加工之前扣除这一段费用；新货物只支持之后的维持，不倒填过去区间。
         OpeningTask task = body.openingTask();
         if (task == null || task.status() != OpeningTask.Status.HOLDING || millis == 0

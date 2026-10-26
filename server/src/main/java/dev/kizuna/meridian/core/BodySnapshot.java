@@ -5,6 +5,7 @@ import dev.kizuna.meridian.error.MeridianErrors.Data;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /** 不可变且构造即校验的身体数据；不是允许客户端直接覆盖权威状态的命令。 */
@@ -17,8 +18,21 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
                            List<QiTransit> transits,
                            VitalityState vitality, TimeCursor settledAt, long revision,
                            List<BodyAction.Active> actions, OpeningTask openingTask,
-                           Map<String, com.google.protobuf.Any> addonProgress) {
+                           Map<String, com.google.protobuf.Any> addonProgress,
+                           List<CapabilityModifier> modifiers) implements BodyView {
     public static final int CURRENT_SCHEMA_VERSION = 3;
+
+    public BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference template, BodyStructure structure,
+                        Realm realm, List<AnatomyState.Part> partStates, List<AnatomyState.Tissue> tissueStates,
+                        List<AnatomyState.Organ> organStates, List<MeridianState> meridianStates,
+                        List<QiTransit> transits,
+                        VitalityState vitality, TimeCursor settledAt, long revision, List<BodyAction.Active> actions,
+                        OpeningTask openingTask, Map<String, com.google.protobuf.Any> addonProgress) {
+        // 旧出生入口没有临时修正，已有身体的算子必须显式保留修正列表。
+        this(schemaVersion, id, template, structure, realm, partStates, tissueStates, organStates,
+                meridianStates, transits, vitality, settledAt, revision, actions, openingTask,
+                addonProgress, List.of());
+    }
 
     public BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference template, BodyStructure structure,
                         Realm realm, List<AnatomyState.Part> partStates, List<AnatomyState.Tissue> tissueStates,
@@ -65,6 +79,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         transits = List.copyOf(transits);
         actions = List.copyOf(actions);
         addonProgress = Map.copyOf(addonProgress);
+        modifiers = List.copyOf(modifiers);
         AddonProgress.validate(addonProgress);
         MeridianErrors.required(vitality, Data.VITALITY_REQUIRED);
         MeridianErrors.required(settledAt, Data.SETTLED_AT_REQUIRED);
@@ -75,6 +90,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         var tissues = match(structure.tissues(), Anatomy.TissueDefinition::id, tissueStates, AnatomyState.Tissue::id, "组织");
         var organs = match(structure.organs(), Anatomy.OrganDefinition::id, organStates, AnatomyState.Organ::id, "器官");
         var meridians = match(structure.meridians(), Anatomy.MeridianDefinition::id, meridianStates, MeridianState::id, "经脉");
+        validateModifiers(modifiers, tissues.keySet(), settledAt, vitality);
         // 多动作允许共用同一组织；同实例只记一次，死体或未来动作不能伪装成当前占用。
         DataChecks.index(actions, BodyAction.Active::instanceId, "动作实例");
         if (actions.size() > BodyActions.MAX_ACTIVE_ACTIONS || (vitality.dead() && !actions.isEmpty())) {
@@ -197,6 +213,20 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         return organStates.stream()
                 .mapToDouble(AnatomyState.Organ::occupiedQi)
                 .sum();
+    }
+
+    private static void validateModifiers(List<CapabilityModifier> modifiers, Set<Anatomy.TissueId> tissueIds,
+                                          TimeCursor time, VitalityState vitality) {
+        // 修正与实际构型及身体时钟一起校验，解码和运行时构造遵循同一规则。
+        if (modifiers.size() > CapabilityModifier.MAX_PER_BODY || (vitality.dead() && !modifiers.isEmpty())) {
+            throw MeridianErrors.invalid(Data.INVALID_MODIFIER_STATE);
+        }
+        DataChecks.index(modifiers, CapabilityModifier::id, "能力修正");
+        for (CapabilityModifier modifier : modifiers) {
+            if (!tissueIds.contains(modifier.tissueId()) || modifier.curve().endMillis() <= time.elapsedMillis()) {
+                throw MeridianErrors.invalid(Data.INVALID_MODIFIER_STATE);
+            }
+        }
     }
 
     public double partHpRatio() {

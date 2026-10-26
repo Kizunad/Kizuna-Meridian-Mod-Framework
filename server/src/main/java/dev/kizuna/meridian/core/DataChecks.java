@@ -72,7 +72,11 @@ final class DataChecks {
         // 建索引时拒绝覆盖旧值，避免重复模块被静默丢失。
         Map<K, V> result = new LinkedHashMap<>();
         for (V value : values) {
-            K id = MeridianErrors.required(key.apply(value), Data.missingIdentifier(label));
+            K id = key.apply(value);
+            if (id == null) {
+                // 缺失身份仍按原异常拒绝，合法索引不反复分配错误文案。
+                MeridianErrors.required(id, Data.missingIdentifier(label));
+            }
             if (result.putIfAbsent(id, value) != null) {
                 throw MeridianErrors.invalid(Data.duplicateIdentifier(label, id));
             }
