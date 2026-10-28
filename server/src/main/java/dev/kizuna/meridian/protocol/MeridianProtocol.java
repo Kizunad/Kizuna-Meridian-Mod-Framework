@@ -165,6 +165,8 @@ public final class MeridianProtocol {
         // 存在性、有限数和非负 revision 已由公共遍历校验，额外约束实际操作的剂量。
         new BodyId(command.getBodyId());
         switch (command.getOperationCase()) {
+            case FILL_MODULE_TAGS ->
+                    dev.kizuna.meridian.server.ModuleTagExecution.validate(command.getFillModuleTags());
             case EXECUTE_ACTIVITY -> dev.kizuna.meridian.server.BodyActivityExecution.validate(command.getExecuteActivity());
             case SPEND_LIFESPAN -> ProtoWire.require(command.getSpendLifespan().getSeconds() > 0,
                     Protocol.LIFESPAN_POSITIVE);

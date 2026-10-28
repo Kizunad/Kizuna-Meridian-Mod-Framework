@@ -57,6 +57,8 @@ public final class BodyCommandHandler<C> {
     private final java.util.function.Predicate<C> debugAccess;
     private final BodyDamageHandler damageHandler;
 
+    private enum Entry { NORMAL, CAPTURE, HEALTH, PROGRESS, ACTIVITY, MODULE_TAGS }
+
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit) {
         // 不安装内容的宿主仍可运行基础身体命令，加工请求会明确返回配方不存在。
@@ -129,46 +131,41 @@ public final class BodyCommandHandler<C> {
 
     public byte[] handle(C trustedContext, byte[] payload) {
         // 普通协议入口不接受客户端宣称命中；接触事件必须由可信宿主单独提交。
-        return handle(trustedContext, payload, false, false, false);
+        return handle(trustedContext, payload, Entry.NORMAL);
     }
 
     public byte[] handleCapturedQi(C trustedContext, byte[] payload) {
         // 仅供已完成权威碰撞检查的宿主调用，仍经过身份、私有策略与原子事务。
-        return handle(trustedContext, payload, true, false, false);
+        return handle(trustedContext, payload, Entry.CAPTURE);
     }
 
     public byte[] handleHealthEffect(C trustedContext, byte[] payload) {
         // 宿主确认攻击或治疗来源后使用此入口；不注册成接受玩家自报剂量的网络处理器。
-        return handle(trustedContext, payload, false, true, false);
+        return handle(trustedContext, payload, Entry.HEALTH);
     }
 
     public byte[] handleAddonProgress(C trustedContext, byte[] payload) {
         // 可信附属校验进度含义后提交；普通网络不能调用此入口写解锁事实。
-        return handle(trustedContext, payload, false, false, true);
+        return handle(trustedContext, payload, Entry.PROGRESS);
     }
 
     public byte[] handleActivity(C trustedContext, byte[] payload) {
         // 只由可信附属策略调用；网络层不能把客户端计划转交此入口。
-        return handle(trustedContext, payload, false, false, false, true);
+        return handle(trustedContext, payload, Entry.ACTIVITY);
     }
 
-    private byte[] handle(C trustedContext, byte[] payload, boolean trustedCapture, boolean trustedHealth,
-                          boolean trustedProgress) {
-        // 既有入口默认拒绝活动计划，避免新增权限隐式扩散。
-        return handle(trustedContext, payload, trustedCapture, trustedHealth, trustedProgress, false);
+    public byte[] handleModuleTags(C trustedContext, byte[] payload) {
+        // 可信宿主核对内容模板后补齐标签；身份、私有策略和回执仍走普通命令事务。
+        return handle(trustedContext, payload, Entry.MODULE_TAGS);
     }
 
-    private byte[] handle(C trustedContext, byte[] payload, boolean trustedCapture, boolean trustedHealth,
-                          boolean trustedProgress, boolean trustedActivity) {
+    private byte[] handle(C trustedContext, byte[] payload, Entry entry) {
         // 解析失败不进入业务异常分支，避免从不可信字节伪造关联 ID 或调用宿主。
         var request = MeridianProtocol.decodeRequest(payload);
         if (!request.hasBodyCommand()) {
             throw MeridianErrors.invalid(Host.COMMAND_ONLY);
         }
-        if (request.getBodyCommand().hasCaptureQi() != trustedCapture
-                || HealthProtobuf.isHealthCommand(request.getBodyCommand()) != trustedHealth
-                || request.getBodyCommand().hasSetAddonProgress() != trustedProgress
-                || request.getBodyCommand().hasExecuteActivity() != trustedActivity) {
+        if (entryFor(request.getBodyCommand()) != entry) {
             return failure(request.getRequestId(), MeridianMessages.FailureCode.ACCESS_DENIED);
         }
         if (trustedContext == null) {
@@ -206,6 +203,20 @@ public final class BodyCommandHandler<C> {
             LOGGER.log(System.Logger.Level.ERROR, Host.COMMAND_FAILED, exception);
             return failure(request.getRequestId(), MeridianMessages.FailureCode.INTERNAL_ERROR);
         }
+    }
+
+    private static Entry entryFor(MeridianMessages.BodyCommand command) {
+        // 每个可信入口只接纳自己的操作，普通网络授权不会隐式获得构型维护权限。
+        if (HealthProtobuf.isHealthCommand(command)) {
+            return Entry.HEALTH;
+        }
+        return switch (command.getOperationCase()) {
+            case CAPTURE_QI -> Entry.CAPTURE;
+            case SET_ADDON_PROGRESS -> Entry.PROGRESS;
+            case EXECUTE_ACTIVITY -> Entry.ACTIVITY;
+            case FILL_MODULE_TAGS -> Entry.MODULE_TAGS;
+            default -> Entry.NORMAL;
+        };
     }
 
     private Execution execute(C trustedContext, String caller, String requestId,
@@ -278,6 +289,7 @@ public final class BodyCommandHandler<C> {
             }
             // 先执行纯计算基础校验，私有策略无权跳过余额、死亡或版本上限约束。
             after = switch (command.getOperationCase()) {
+                case FILL_MODULE_TAGS -> ModuleTagExecution.apply(body, command.getFillModuleTags());
                 case EXECUTE_ACTIVITY -> BodyActivityExecution.apply(body, command.getExecuteActivity(), caller);
                 case SET_ADDON_PROGRESS -> dev.kizuna.meridian.core.AddonProgress.replace(body,
                         command.getSetAddonProgress().getId(), command.getSetAddonProgress().getProgress());
@@ -397,6 +409,9 @@ public final class BodyCommandHandler<C> {
                 }
                 case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
             };
+        } catch (MeridianErrors.ModuleTagsRejected rejected) {
+            // 模块缺失或标签不一致时整批拒绝，原构型与回执保持原样。
+            return Execution.conflict(rejected.code());
         } catch (MeridianErrors.HealthRejected rejected) {
             // 一笔效果中任一模块不可用即整笔拒绝，不保存部分回血或疲劳变化。
             return Execution.conflict(rejected.code());

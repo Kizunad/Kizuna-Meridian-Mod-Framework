@@ -2,6 +2,7 @@ package dev.kizuna.meridian.protocol;
 
 import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.Qi;
+import dev.kizuna.meridian.core.QiAccounting;
 import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.Realm;
 import dev.kizuna.meridian.error.MeridianErrors;
@@ -14,6 +15,7 @@ import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 import dev.kizuna.meridian.server.InMemoryBodyStore;
 import org.junit.Test;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.BiFunction;
 import java.util.stream.IntStream;
@@ -22,6 +24,45 @@ import static org.junit.Assert.*;
 
 /** 整体回归：可信宿主区域入账、默认释放账户归位及失败时的两账原子性。 */
 public class InMemoryBodyStoreTest {
+    private static final int BATCH_REGIONS = 4;
+    private static final double BATCH_DENSITY = 0.01;
+
+    @Test
+    public void batchReleaseTransfersMinimumSharesAndRejectsWholeBatchOnFailure() {
+        // 四份最小单位的逐笔减法会积累尾差，批量扣除必须等于各区域明细的同一次合计。
+        double minimum = QiAccounting.MIN_TRANSFER_QI;
+        QiInventory released = inventory(new Qi(Qi.QiAttribute.WOOD, BATCH_REGIONS * minimum, BATCH_DENSITY));
+        var store = new InMemoryBodyStore(List.of(), List.of(), released);
+        var transfers = new LinkedHashMap<String, QiInventory>();
+        for (int index = 0; index < BATCH_REGIONS; index++) {
+            String id = "region_" + index;
+            var template = source(QiInventory.empty());
+            var space = template.getSpace().toBuilder().setSourceId(id).build();
+            store.registerEnvironmentSource(template.toBuilder().setSpace(space).build());
+            transfers.put(id, inventory(new Qi(Qi.QiAttribute.WOOD, minimum, BATCH_DENSITY)));
+        }
+        var before = store.environmentSources();
+        var invalid = new LinkedHashMap<>(transfers);
+        invalid.put("missing", transfers.values().iterator().next());
+        assertThrows(MeridianErrors.TransportRejected.class, () -> store.transferReleasedToSources(invalid));
+        invalid.remove("region_0");
+        assertEquals(FailureCode.ENVIRONMENT_UNAVAILABLE,
+                assertThrows(MeridianErrors.IntakeRejected.class,
+                        () -> store.transferReleasedToSources(invalid)).code());
+        assertEquals(before, store.environmentSources());
+        assertEquals(released, store.environmentQi());
+        var committed = store.transferReleasedToSources(transfers);
+        assertTrue(store.environmentQi().entries().isEmpty());
+        double credited = 0;
+        for (var entry : committed.entrySet()) {
+            QiInventory inventory = BodyProtobuf.fromInventory(entry.getValue().getInventory());
+            assertEquals(transfers.get(entry.getKey()), inventory);
+            assertEquals(1, entry.getValue().getRevision());
+            credited += inventory.totalQi();
+        }
+        assertEquals(released.totalQi(), credited, 0);
+    }
+
     @Test
     public void externalReleasedCreditsPreserveAccountsAndRejectNestedOrFailedWrites() {
         // 无区域释放仍走唯一 Store，保留自定义属性和相态，且不改变区域版本。

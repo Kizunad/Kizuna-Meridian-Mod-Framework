@@ -10,6 +10,8 @@ public final class MeridianErrors {
     public static final String INVALID_ACTIVITY = "活动计划的账户、闭环、负载或资源守恒不成立";
     public static final String INVALID_ADDON_PROGRESS = "附属进度需要有效内容 ID、Protobuf 类型、非空载荷，最多 64 项且单项不超过 64 KiB";
     public static final String ADDON_PROGRESS_STAGE = "附属进度事务改变了进度以外的身体事实";
+    public static final String INVALID_MODULE_TAGS = "模块标签补齐需要唯一实际模块、非空合法标签及一致的已有标签";
+    public static final String MODULE_TAGS_STAGE = "标签补齐事务改变了标签与版本以外的身体事实";
     public static final String INVALID_QI_CAPTURE = "接触摄入需要有效器官、单种输入配方和正数采样体积";
     public static final String QI_CAPTURE_FACT = "接触摄入回执与环境、身体或配方不一致";
     public static final String INVALID_DEBUG_QI = "真元调试模式、目标或剂量无效";
@@ -17,6 +19,26 @@ public final class MeridianErrors {
     public static final String INVALID_GATHERING = "聚气请求或宿主配置无效";
     public static final String INVALID_TISSUE_LOADS = "组织负载必须包含 1 至 32 个不同组织";
     public static final String INVALID_BREATHING = "吐纳配置必须引用有效器官、组织与配方，参数须有限且为正";
+
+    public static ModuleTagsRejected rejectModuleTags(FailureCode code) {
+        // 标签维护失败使用协议类别，不把构型诊断文本作为线协议。
+        return new ModuleTagsRejected(code);
+    }
+
+    public static final class ModuleTagsRejected extends RuntimeException {
+        private final FailureCode code;
+
+        private ModuleTagsRejected(FailureCode code) {
+            // 区分非法替换、未知模块及版本耗尽，供命令处理器整笔拒绝。
+            super(required(code, INVALID_MODULE_TAGS).name());
+            this.code = code;
+        }
+
+        public FailureCode code() {
+            // 业务调用方读取固定错误码，避免解析异常文本。
+            return code;
+        }
+    }
 
     public static final class Health {
         public static final String REQUEST = "健康操作的来源、目标、剂量或批次数量无效";
@@ -214,6 +236,7 @@ public final class MeridianErrors {
         public static final String CONFIG_TEXT_REQUIRED = "环境 TOML 文本不能为空引用";
         public static final String CONFIG_PATH_REQUIRED = "环境配置路径不能为空";
         public static final String INVENTORY_REQUIRED = "环境库存不能为空";
+        public static final String RELEASE_TRANSFERS_REQUIRED = "释放归位批次不能为空";
         public static final String CREDIT_EMPTY = "环境入账必须包含正数真元明细";
         public static final String SPACE_VERSION = "不支持的环境空间或边界缓存协议版本";
         public static final String SPACE_VOLUME = "独立环境空间的体积必须为正有限数";

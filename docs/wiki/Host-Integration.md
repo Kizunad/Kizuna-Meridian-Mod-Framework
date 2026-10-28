@@ -59,11 +59,18 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 `InMemoryBodyStore` 是可运行的参考适配，也实现 `BodySnapshotReader`。无环境历史时用快照与回执初始化；已有时间、开脉或健康命令的环境释放时，通过三参数构造器恢复 `QiInventory` 默认释放账户。区域摄入使用四参数构造器，同时传入完整 `List<EnvironmentQiSource>`；有摄入回执却缺少对应来源时拒绝恢复，不重放回执扣账。`environmentSource(id)` 读取已提交来源，`renewEnvironmentWindow` 用预期版本续窗，保留库存。`environmentQi()` 表示时间、开脉和健康命令共用的默认释放账户；摄入区间加工损耗直接回选定区域，不重复进入该账户。它用一个监视器隔离所有身体与来源，拒绝嵌套写事务、跨线程及回调结束后使用事务。它不写磁盘，没有 TTL；正式宿主需实现原子持久化、恢复及实际并发策略。
 
-事务外的区域入账与默认账户接收由三个可信宿主方法提供；两个区域相关方法返回提交后的完整 `EnvironmentQiSource`：
+事务外的区域入账与默认账户接收由以下可信宿主方法提供；区域相关方法返回提交后的完整来源：
 
 - `creditEnvironmentSource(sourceId, credited)`：将其他宿主已经释放的真元记入指定区域，不改默认释放账户。
 - `creditReleasedQi(credited)`：将没有区域归属的外部释放记入默认释放账户，不改变任何区域库存或版本；同样禁止嵌套于身体事务，拒绝空明细和数值溢出，调用方负责释放 ID 去重与保存。
 - `transferReleasedToSource(sourceId, amount)`：从默认释放账户扣除指定明细并记入区域；按 `QiAccounting.debit` 逐属性、逐相态核对余额且要求密度匹配，不能用其他种类抵扣。
+- `transferReleasedToSources(amounts)`：按传入 Map 的迭代顺序处理一批区域归位。每份先用
+  `QiAccounting.select` 核对最小可流转量及余额，并采用默认账户实际密度；再以
+  `QiInventory.combine` 合计所有份额，严格选取并一次扣款。全部目的地候选均通过校验后一起发布，
+  任一失败保留整批旧账；返回来源 ID 到已提交来源的 Map。
+
+批量归位不会调整传入数量，也不放宽余额或最小单位校验。宿主分配共享余额时应复用同一合计规则，
+让尾笔承接可表示的实际余量，并将同一份候选交给批量入口，避免先预检合计、后逐份扣款产生不同尾差。
 
 这些方法与身体事务、登记和续窗共用监视器；事务回调内调用抛 `NESTED_TRANSACTION`，来源不存在时拒绝为 `ENVIRONMENT_UNAVAILABLE`，来源版本已达 `Long.MAX_VALUE` 时拒绝为 `REVISION_EXHAUSTED`。明细必须非空，每项由 `QiInventory` 保证正数且有限，允许混相与自定义属性。区域入账先计算候选并通过 `EnvironmentProtobuf.validateSource`，再一次发布；余额不足、数值极限或协议校验失败均保留全部旧账。区域入账增加来源库存和版本，不改变供给窗口、固定速率或已用预算；默认账户接收只改变默认账户，归位同时扣减默认释放账户。
 
@@ -80,6 +87,14 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 这些 Java 回调仅用于进程内装配，不是第二套跨语言协议。持久化回执由 protoc 生成的 `CommandReceipt` 表达；其他语言自行实现相同事务语义，不要求加载 Java 类。时间回执中的释放账户必须纳入环境事务，实体死亡动作的可靠记录也由宿主一起保存；审计回调只是提交后的尽力通知。
 
 `InMemoryBodyStore.receipts()` 返回全部已提交成功回执的不可变列表。宿主可在自身串行事件边界，将它与身体快照和环境余额一起持久化；读取这三个入口并不构成跨调用的自动事务，并发宿主须另行隔离。审计回调仍不能替代已提交回执作为持久化事实来源。
+
+可信内容宿主通过 `BodyCommandHandler.handleModuleTags` 提交 `BodyCommand.fill_module_tags`（字段 30）。
+`FillModuleTags.modules` 每项用 `tissue_id`、`organ_id`、`meridian_id` 的 oneof 指定种类与实际 ID，
+并提供非空、无重复的合法内容标签。重复目标或未知模块拒绝；已有非空标签按集合比较，
+一致则保留原顺序，不一致返回 `INVALID_REQUEST`，整批不提交。只给空标签补值，成功 revision +1。
+资源、伤势、动作、时间、其他构型参数和历史回执保留。普通 `handle` 拒绝此操作，专用入口仍执行
+身份授权、私有安全策略、`expected_revision`、成功回执重放和事务候选复算；不读取或推进身体时钟。
+宿主负责比对自身模板、在成功后标脏并将快照与回执一起保存。相同请求重放不会再增加版本。
 
 可信宿主可用 `registerBody` 登记首次出生、用 `registerEnvironmentSource` 登记首次生成区域，二者拒绝重复身份和事务内嵌套写入。所有身体共用同一 Store 才能共享区域库存与供给预算。保存时一起读取身体、回执、`environmentSources()` 与默认释放账户；恢复直接使用这些事实，不重抽环境或重新发放历史损耗。
 

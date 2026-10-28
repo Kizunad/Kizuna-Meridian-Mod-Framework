@@ -29,6 +29,7 @@ import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.CommandReceipt;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -205,6 +206,31 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         return updated;
     }
 
+    /** 多区域归位按完整批次扣除共享余额，避免逐笔扣款引入另一套求和尾差。 */
+    public synchronized Map<String, EnvironmentQiSource> transferReleasedToSources(Map<String, QiInventory> amounts) {
+        // 先按实际账户密度选取每份，再用同一合并规则验证整批；不发布任何中间余额。
+        MeridianErrors.required(amounts, MeridianErrors.Environment.RELEASE_TRANSFERS_REQUIRED);
+        if (amounts.isEmpty()) {
+            throw MeridianErrors.invalid(MeridianErrors.Environment.CREDIT_EMPTY);
+        }
+        var selected = new LinkedHashMap<String, QiInventory>();
+        for (var entry : amounts.entrySet()) {
+            selected.put(entry.getKey(), QiAccounting.select(environmentQi, entry.getValue()));
+        }
+        QiInventory combined = QiInventory.combine(List.copyOf(selected.values()));
+        QiInventory debit = QiAccounting.select(environmentQi, combined);
+        QiInventory remaining = QiAccounting.debit(environmentQi, debit);
+
+        // 任一目的地失败即放弃整批，来源版本、默认余额和各区域保持原样。
+        var updated = new LinkedHashMap<String, EnvironmentQiSource>();
+        for (var entry : selected.entrySet()) {
+            updated.put(entry.getKey(), prepareEnvironmentCredit(entry.getKey(), entry.getValue()));
+        }
+        sources.putAll(updated);
+        environmentQi = remaining;
+        return Map.copyOf(updated);
+    }
+
     private EnvironmentQiSource prepareEnvironmentCredit(String sourceId, QiInventory credited) {
         // 调用者已持有 Store 监视器；禁止在身体回调中写账，否则外层暂存状态会覆盖这里的入账。
         if (transactionOpen) {
@@ -331,6 +357,13 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                 throw MeridianErrors.inconsistent(Host.STAGE_MISMATCH);
             }
             var nextEnvironment = stagedEnvironment;
+            if (receipt.getCommand().hasFillModuleTags()) {
+                // 用同一补齐规则复算，防止借标签维护修改资源、伤势或其他构型事实。
+                var expected = ModuleTagExecution.apply(original.snapshot(), receipt.getCommand().getFillModuleTags());
+                if (!next.equals(expected)) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.MODULE_TAGS_STAGE);
+                }
+            }
             if (receipt.getCommand().hasExecuteActivity()) {
                 // 按固定计划重新计算，身体、进度和排放只允许一起发布。
                 var plan = receipt.getCommand().getExecuteActivity();
