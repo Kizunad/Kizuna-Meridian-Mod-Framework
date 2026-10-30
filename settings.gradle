@@ -5,5 +5,8 @@ pluginManagement {
     }
 }
 
+// Framework 自身也从同仓版本目录取版本；被其他仓 includeBuild 时同样注册本构建的 libs。
+apply from: new File(rootDir, 'scripts/workspace.gradle')
+
 rootProject.name = 'kizuna-meridian-mod-framework'
 include 'client', 'server'

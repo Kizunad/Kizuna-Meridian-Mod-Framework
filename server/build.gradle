@@ -1,8 +1,8 @@
 description = '权威身体计算、协议处理与宿主接入接口。'
 
 dependencies {
-    implementation 'org.tomlj:tomlj:1.1.1'
-    testImplementation 'junit:junit:4.13.2'
+    implementation libs.tomlj
+    testImplementation libs.junit4
 }
 
 test {
@@ -30,7 +30,7 @@ tasks.register('capabilityBenchmark', JavaExec) {
     classpath = sourceSets.benchmark.runtimeClasspath
     mainClass = 'dev.kizuna.meridian.protocol.CapabilityAdvanceBenchmark'
     javaLauncher = javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(libs.versions.java.get())
     }
     maxHeapSize = '512m'
     minHeapSize = '512m'

@@ -1,15 +1,12 @@
 plugins {
     id 'base'
-    id 'com.google.protobuf' version '0.9.6' apply false
+    alias(libs.plugins.protobuf) apply false
 }
 
 allprojects {
     group = 'dev.kizuna.meridian'
     version = '0.1.0-SNAPSHOT'
 }
-
-// 与其他 Kizuna 框架保持一致，编译器和运行库使用相同版本。
-ext.protobufVersion = '4.36.2'
 
 subprojects {
     apply plugin: 'java-library'
@@ -19,7 +16,7 @@ subprojects {
 
     java {
         toolchain {
-            languageVersion = JavaLanguageVersion.of(17)
+            languageVersion = JavaLanguageVersion.of(libs.versions.java.get())
         }
     }
 
@@ -28,7 +25,7 @@ subprojects {
     }
 
     dependencies {
-        api "com.google.protobuf:protobuf-java:${rootProject.protobufVersion}"
+        api libs.protobuf.java
     }
 
     // 两端各自生成消息类，共用一份协议源；客户端无需依赖服务端身体实现。
@@ -36,7 +33,8 @@ subprojects {
     sourceSets.main.java.srcDir(rootProject.file('shared/src/main/java'))
     def protocolDescriptor = layout.buildDirectory.file('descriptors/meridian-v1.desc')
     protobuf {
-        protoc { artifact = "com.google.protobuf:protoc:${rootProject.protobufVersion}" }
+        // 编译器和运行库取版本目录中的同一版本。
+        protoc { artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.java.get()}" }
         generateProtoTasks {
             ofSourceSet('main').configureEach { task ->
                 // 描述集包含导入和源码信息，供其他语言生成同版本消息。
@@ -59,7 +57,7 @@ subprojects {
     }
 
     tasks.withType(JavaCompile).configureEach {
-        options.release = 17
+        options.release = libs.versions.java.get().toInteger()
         options.encoding = 'UTF-8'
     }
 }

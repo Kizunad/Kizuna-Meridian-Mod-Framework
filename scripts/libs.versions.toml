@@ -1,0 +1,37 @@
+# Kizuna 工作区第三方版本的唯一来源；各仓 settings 应用同目录 workspace.gradle 后以 libs 引用。
+# gradle 一项供各仓 wrapper 对齐，升级时同步 gradle/wrapper/gradle-wrapper.properties。
+[versions]
+gradle = "8.14.6"
+java = "17"
+minecraft = "1.20.1"
+yarn = "1.20.1+build.10"
+fabric-loader = "0.16.10"
+fabric-api = "0.92.3+1.20.1"
+loom = "1.13.6"
+owo = "0.11.2+1.20"
+protobuf-java = "4.36.2"
+protobuf-gradle = "0.9.6"
+tomlj = "1.1.1"
+antlr = "4.11.1"
+gson = "2.10.1"
+junit4 = "4.13.2"
+junit-jupiter = "5.11.4"
+junit-platform = "1.11.4"
+
+[libraries]
+minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
+fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-loader" }
+fabric-junit = { module = "net.fabricmc:fabric-loader-junit", version.ref = "fabric-loader" }
+fabric-api = { module = "net.fabricmc.fabric-api:fabric-api", version.ref = "fabric-api" }
+owo = { module = "io.wispforest:owo-lib", version.ref = "owo" }
+protobuf-java = { module = "com.google.protobuf:protobuf-java", version.ref = "protobuf-java" }
+tomlj = { module = "org.tomlj:tomlj", version.ref = "tomlj" }
+antlr-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+junit4 = { module = "junit:junit", version.ref = "junit4" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+junit-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junit-platform" }
+
+[plugins]
+fabric-loom = { id = "fabric-loom", version.ref = "loom" }
+protobuf = { id = "com.google.protobuf", version.ref = "protobuf-gradle" }
