@@ -37,15 +37,28 @@ def artifactOf = { String id, String modulePath, boolean development ->
     return new File(moduleDirectory, "build/libs/${basename}-${version}.jar")
 }
 
-// 本构建以源码组合进来的清单模块（「仓库 id:模块路径」→ 替换坐标），只有 settings 中 includeSource 会登记。
+// 以源码组合进来的清单模块（「仓库 id:模块路径」→ 替换坐标），只有 settings 中 includeSource 会登记。
+// 每次登记同时汇总到最外层构建：下游 → Damage → 功法库这类嵌套组合由各自 settings 登记，最外层的完整装配
+// 据此按坐标装入整条组合闭包；同一模块以先登记（最外层 settings 先求值）的坐标为准，与实际生效的替换规则一致。
 Map<String, String> sourceModules = [:]
+def outermostGradle = gradle
+while (outermostGradle.parent != null) {
+    outermostGradle = outermostGradle.parent
+}
+def compositeRegistry = outermostGradle.extensions.extraProperties
+if (!compositeRegistry.has('kizunaSourceModules')) {
+    compositeRegistry.set('kizunaSourceModules', [:])
+}
+Map<String, String> compositeSourceModules = compositeRegistry.get('kizunaSourceModules')
+// 嵌套构建只看自己的登记，否则其完整装配会按坐标反向依赖组合它的下游仓库。
+boolean outermostBuild = gradle.parent == null
 def workspace = [
         manifest     : manifest,
         codeDirectory: codeDirectory,
         repository   : repositoryById,
         directory    : directoryOf,
         artifact     : artifactOf,
-        sourceModules: sourceModules
+        sourceModules: outermostBuild ? compositeSourceModules : sourceModules
 ]
 ext.kizunaWorkspace = workspace
 
@@ -63,7 +76,9 @@ if (rootProject instanceof org.gradle.api.initialization.ProjectDescriptor) {
             }
         }
         substitutions.each { String modulePath, String coordinate ->
-            sourceModules.put("${id}:${modulePath}".toString(), coordinate)
+            String key = "${id}:${modulePath}".toString()
+            sourceModules.put(key, coordinate)
+            compositeSourceModules.putIfAbsent(key, coordinate)
         }
     }
 
