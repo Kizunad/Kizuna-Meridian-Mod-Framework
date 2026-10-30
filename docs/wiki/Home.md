@@ -4,11 +4,11 @@
 
 Framework、Human、UI、Items、Vanilla-Damage、Vanilla-Healing、Human-UI、Progression、Qi-Variants、Vanilla-Humanoid-Threatening、Technique-Framework、Basic-Techniques、Door-Breaker、Combat-UI 与 Kizuna-Players-Animation 按适用端整套必装。拆仓用于职责和代码管理，缺少宿主、效果集成或客户端接线是装配错误；未绑定身体的实体继续原版。运行时必装不改变通用核心与人体内容的源码边界。
 
-`scripts/full-assembly.gradle` 集中声明开发运行所需产物：Qi-Variants 的 server 与 shared JAR 作为纯 Java 库放入 `localRuntime`，Threatening、功法库、基础功法、破门斩、战斗 UI、Debug 的 Fabric JAR 放入 `modLocalRuntime`。功法库的 server/shared、战斗 UI 的 core/shared 与 Debug 的 server 额外进入 `localRuntime`，因为 Loom 开发重映射不保留安装包的嵌套库。同仓源码输出沿用原有排重规则；缺少必装产物时拒绝启动。先构建各相邻工作区安装产物，再运行开发客户端或 GameTest；加载成功不代表 Human/Threatening 的所有执行效果均已验收。
+`scripts/assembly.json` 是 25 个工作区仓库的统一装配清单，按跨仓构建顺序列出目录、根工程名与模块；`scripts/workspace.gradle` 从清单解析相邻仓库目录和产物路径，settings 与工程脚本都可应用，默认在当前构建根目录的上一级查找，`-PkizunaCodeDir` 整体改指，`-Pkizuna.dir.<清单 id>` 改指单个仓库。`scripts/full-assembly.gradle` 按清单的 `runtime` 字段集中声明开发运行所需产物：Fabric JAR 放入 `modLocalRuntime`；Qi-Variants、功法库、战斗 UI、Debug 等仓的 server/shared/core 纯 Java 库放入 `localRuntime`，因为 Loom 开发重映射不保留安装包的嵌套库；Items 宿主库使用 named 开发 JAR。bs3d 的 Vanilla、Pocket、Weights 附属同时装入 server 与 client JAR，开发环境按 `environment` 只加载适用的一个。同仓源码输出沿用原有排重规则；缺少任一装入产物时拒绝启动。先构建各相邻工作区安装产物，再运行开发客户端或 GameTest；加载成功不代表 Human/Threatening 的所有执行效果均已验收。
 
 完整装配回归放在基础功法仓的独立 `gametest` 模块，正式基础功法数据包与测试入口分开加载。经过真实 Human 登录、创造栏、卷轴交互和战斗 UI 自定义载荷入口验证轻步位移、蓄力曲线、劈木门与铁斧耐久、叩门生物实伤；真炁卫道士由原版 AI 自行决策，对在线玩家施放破门斩，并在 `mobGriefing` 开启时劈门。11 项 GameTest 已通过，细节边界继续由各宿主单仓回归保护。
 
-Windows 候选打包入口在战斗 UI 仓 `scripts/package_windows_candidate.py`，从 19 个当前工作区构建，包含 PA Mobs-Addon 与调试库 `meridian_debug`，不替换现用 `combat.args`。候选清单保存提交、未提交源码摘要、JAR 哈希与构建日志。客户端烟测使用隔离游戏目录，只核对主菜单、完整加载与 Mixin 错误；结果单独记录，服务端 GameTest 不代表按键、镜头与动画已经实机验收。
+Windows 候选打包入口在战斗 UI 仓 `scripts/package_windows_candidate.py`，按同一份清单的 `candidate` 字段从 25 个当前工作区构建，包含 PA Mobs-Addon、调试库 `meridian_debug`、bs3d 三个附属的客户端 JAR、Burden、Humanoid Dummy 与 Humanoid Taunts，不替换现用 `combat.args`。候选清单保存提交、未提交源码摘要、JAR 哈希与构建日志。客户端烟测使用隔离游戏目录，只核对主菜单、完整加载与 Mixin 错误；结果单独记录，服务端 GameTest 不代表按键、镜头与动画已经实机验收。
 
 > 当前已实现 Java 17 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输与[被动扩散](Meridian-and-Qi.md)、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。框架自身为两端库，没有独立 Fabric 加载入口或正式版本；Human 提供玩家宿主，伤害和治疗由对应 Addon 接线。肌肉真元增益/攻击、连续流等后续能力仍按模块边界推进。
 

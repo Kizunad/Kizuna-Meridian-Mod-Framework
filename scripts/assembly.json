@@ -1,0 +1,241 @@
+{
+  "description": "Kizuna 工作区统一装配清单：仓库按跨仓构建顺序排列。directory 为相对代码根目录的仓库目录，project 为根工程名（也是产物文件名前缀）；模块 path 为空表示根工程。candidate 是 Windows 候选的装入方式，runtime 是 full-assembly.gradle 的开发运行装入方式，ownProjects 列出同仓内仍按文件装入该模块的子工程。",
+  "version": "0.1.0-SNAPSHOT",
+  "repositories": [
+    {
+      "id": "framework",
+      "directory": "Kizuna-Meridian-Mod-Framework",
+      "project": "kizuna-meridian-mod-framework",
+      "modules": [
+        {"path": "server", "candidate": "library"},
+        {"path": "client", "candidate": "library"}
+      ]
+    },
+    {
+      "id": "qi-variants",
+      "directory": "Kizuna-Meridian-Qi-Variants-Addon",
+      "project": "kizuna-meridian-qi-variants-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "shared", "candidate": "library", "runtime": "library"}
+      ]
+    },
+    {
+      "id": "technique",
+      "directory": "Kizuna-Meridian-Technique-Framework",
+      "project": "kizuna-meridian-technique-framework",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "shared", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "inventory-ui",
+      "directory": "Kizuna-Inventory-UI-Framework",
+      "project": "kizuna-inventory-ui-framework",
+      "modules": [
+        {"path": "", "candidate": "mod", "runtime": "mod"},
+        {"path": "server", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "bs3d",
+      "directory": "backpack-and-storage-3D",
+      "project": "backpack-storage-3d",
+      "modules": [
+        {"path": "server", "candidate": "mod", "runtime": "mod"},
+        {"path": "client", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "bs3d-vanilla",
+      "directory": "bs3d-Vanilla-Addon",
+      "project": "bs3d-vanilla-addon",
+      "modules": [
+        {"path": "server", "runtime": "mod"},
+        {"path": "client", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "bs3d-pocket",
+      "directory": "bs3d-Pocket-Addon",
+      "project": "bs3d-pocket-addon",
+      "modules": [
+        {"path": "server", "runtime": "mod"},
+        {"path": "client", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "bs3d-weights",
+      "directory": "bs3d-Weights-Addon",
+      "project": "bs3d-weights-addon",
+      "modules": [
+        {"path": "server", "runtime": "mod"},
+        {"path": "client", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "players-animation",
+      "directory": "Kizuna-Players-Animation",
+      "project": "kizuna-players-animation",
+      "modules": [
+        {"path": "", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "players-animation-mobs",
+      "directory": "Kizuna-Players-Animation-Mobs-Addon",
+      "project": "kizuna-players-animation-mobs-addon",
+      "modules": [
+        {"path": "", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "items",
+      "directory": "Kizuna-Meridian-Items-Addon",
+      "project": "kizuna-meridian-items-addon",
+      "modules": [
+        {"path": "", "candidate": "named-library", "runtime": "named-library"}
+      ]
+    },
+    {
+      "id": "progression",
+      "directory": "Kizuna-Meridian-Progression-Addon",
+      "project": "kizuna-meridian-progression-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library", "ownProjects": ["client"]},
+        {"path": "shared", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod", "ownProjects": ["client"]},
+        {"path": "client", "candidate": "mod", "runtime": "mod", "ownProjects": ["fabric"]}
+      ]
+    },
+    {
+      "id": "ui",
+      "directory": "Kizuna-Meridian-UI-Addon",
+      "project": "kizuna-meridian-ui-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "client", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "vanilla-damage",
+      "directory": "Kizuna-Meridian-Vanilla-Damage-Addon",
+      "project": "kizuna-meridian-vanilla-damage-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "vanilla-healing",
+      "directory": "Kizuna-Meridian-Vanilla-Healing-Addon",
+      "project": "kizuna-meridian-vanilla-healing-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "human",
+      "directory": "Kizuna-Meridian-Human-Addon",
+      "project": "kizuna-meridian-human-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "shared", "candidate": "library", "runtime": "library", "ownProjects": ["fabric"]},
+        {"path": "client", "candidate": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "human-ui",
+      "directory": "Kizuna-Meridian-Human-UI-Addon",
+      "project": "kizuna-meridian-human-ui-addon",
+      "modules": [
+        {"path": "client", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "humanoid-threatening",
+      "directory": "Kizuna-Meridian-Vanilla-Humanoid-Threatening",
+      "project": "kizuna-meridian-vanilla-humanoid-threatening",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "debug",
+      "directory": "Kizuna-Meridian-Debug-Addon",
+      "project": "kizuna-meridian-debug-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"},
+        {"path": "shared"},
+        {"path": "verification"}
+      ]
+    },
+    {
+      "id": "basic-techniques",
+      "directory": "Kizuna-Meridian-Basic-Techniques-Addon",
+      "project": "kizuna-meridian-basic-techniques-addon",
+      "modules": [
+        {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
+        {"path": "shared"},
+        {"path": "verification"},
+        {"path": "gametest"}
+      ]
+    },
+    {
+      "id": "door-breaker",
+      "directory": "Kizuna-Meridian-Door-Breaker-Addon",
+      "project": "kizuna-meridian-door-breaker-addon",
+      "modules": [
+        {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
+        {"path": "shared"},
+        {"path": "verification"},
+        {"path": "gametest"}
+      ]
+    },
+    {
+      "id": "burden",
+      "directory": "Kizuna-Meridian-Burden-Addon",
+      "project": "kizuna-meridian-burden-addon",
+      "modules": [
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "humanoid-dummy",
+      "directory": "Kizuna-Meridian-Humanoid-Dummy-Addon",
+      "project": "kizuna-meridian-humanoid-dummy-addon",
+      "modules": [
+        {"path": "shared", "candidate": "library", "runtime": "library"},
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "humanoid-taunts",
+      "directory": "Kizuna-Meridian-Humanoid-Taunts-Addon",
+      "project": "kizuna-meridian-humanoid-taunts-addon",
+      "modules": [
+        {"path": "shared"},
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "combat-ui",
+      "directory": "Kizuna-Meridian-Combat-UI-Addon",
+      "project": "kizuna-meridian-combat-ui-addon",
+      "version": "0.1.1-SNAPSHOT",
+      "modules": [
+        {"path": "core", "candidate": "library", "runtime": "library"},
+        {"path": "shared", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    }
+  ]
+}

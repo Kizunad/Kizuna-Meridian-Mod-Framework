@@ -1,0 +1,46 @@
+// Kizuna 工作区跨仓目录与产物位置的唯一来源，仓库与模块列表在同目录 assembly.json。
+// settings 脚本和工程脚本都可以应用；应用后通过 kizunaWorkspace 查询，不再各自声明 meridianFrameworkDir 一类属性。
+// 代码根目录默认是当前构建根目录的上一级，-PkizunaCodeDir 整体改指；-Pkizuna.dir.<清单 id> 只改指单个仓库。
+import groovy.json.JsonSlurper
+
+def manifest = new JsonSlurper().parse(new File(buildscript.sourceFile.parentFile, 'assembly.json'), 'UTF-8')
+def codeDirectory = providers.gradleProperty('kizunaCodeDir')
+        .map { String value -> rootDir.toPath().resolve(value).normalize().toFile() }
+        .getOrElse(rootDir.parentFile)
+
+def repositoryById = { String id ->
+    // 清单 id 写错时立即失败，不能拼出一个不存在的兄弟目录。
+    def repository = manifest.repositories.find { it.id == id }
+    if (repository == null) {
+        throw new GradleException("装配清单 assembly.json 没有仓库：${id}")
+    }
+    return repository
+}
+
+def directoryOf = { String id ->
+    // 单仓改指优先（例如审阅快照），其余仓库都在代码根目录下按清单目录名查找。
+    def repository = repositoryById(id)
+    return providers.gradleProperty("kizuna.dir.${id}")
+            .map { String value -> rootDir.toPath().resolve(value).normalize().toFile() }
+            .getOrElse(new File(codeDirectory, repository.directory))
+}
+
+def artifactOf = { String id, String modulePath, boolean development ->
+    // 产物名为「根工程名[-模块]-版本」；Loom 的 named 开发 JAR 在 build/devlibs，安装 JAR 和纯 Java 库在 build/libs。
+    def repository = repositoryById(id)
+    String version = repository.version ?: manifest.version
+    String basename = modulePath ? "${repository.project}-${modulePath}" : repository.project
+    File moduleDirectory = modulePath ? new File(directoryOf(id), modulePath) : directoryOf(id)
+    if (development) {
+        return new File(moduleDirectory, "build/devlibs/${basename}-${version}-dev.jar")
+    }
+    return new File(moduleDirectory, "build/libs/${basename}-${version}.jar")
+}
+
+ext.kizunaWorkspace = [
+        manifest     : manifest,
+        codeDirectory: codeDirectory,
+        repository   : repositoryById,
+        directory    : directoryOf,
+        artifact     : artifactOf
+]

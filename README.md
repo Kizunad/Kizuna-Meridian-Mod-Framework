@@ -37,7 +37,7 @@
 
 ## 当前可运行的检查
 
-文档检查需要 Python 3.10 或更新版本，无第三方 Python 依赖；数据层测试需要本机安装 JDK 17。Gradle Wrapper 使用 8.8，首次运行会下载 Gradle 和测试依赖。
+文档检查需要 Python 3.10 或更新版本，无第三方 Python 依赖；数据层测试需要本机安装 JDK 17。Gradle Wrapper 使用 8.14.6，首次运行会下载 Gradle 和测试依赖。
 
 ```bash
 python3 scripts/wiki.py check
