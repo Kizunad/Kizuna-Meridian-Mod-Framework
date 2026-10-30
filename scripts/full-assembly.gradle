@@ -1,11 +1,15 @@
 // 所有 Fabric 开发入口使用同一套安装产物；装入哪些仓库和模块由同目录 assembly.json 列出，与 Windows 候选共用一份清单。
 // 源码依赖仍由各仓库独立声明。localRuntime 只装配本工程运行环境，不沿 composite 的发布变体再次传递整套 JAR。
 // 先构建各仓库安装 JAR，再运行客户端或 GameTest。不存在缺包启动模式。
-apply from: new File(buildscript.sourceFile.parentFile, 'workspace.gradle')
+// settings 已应用工作区脚本时沿用其结果（含源码组合登记），否则在工程内单独应用。
+if (!project.hasProperty('kizunaWorkspace')) {
+    apply from: new File(buildscript.sourceFile.parentFile, 'workspace.gradle')
+}
 
 repositories { maven { url = 'https://maven.wispforest.io/releases' } }
 
 def workspace = kizunaWorkspace
+Map<String, String> sourceModules = workspace.sourceModules ?: [:]
 // Healing 已通过 composite 构建提供 Damage 的源码输出，避免重复加载。
 def sourceProvidedRepositories = ['kizuna-meridian-vanilla-healing-addon': ['vanilla-damage']]
 def skippedRepositories = sourceProvidedRepositories.getOrDefault(rootProject.name, [])
@@ -24,6 +28,13 @@ workspace.manifest.repositories.each { repository ->
 
         // 模组走 Loom 开发重映射；纯 Java 库直接上类路径，Items 宿主库本身已是 named 开发 JAR。
         boolean namedLibrary = module.runtime == 'named-library'
+        String runtimeConfiguration = module.runtime == 'mod' ? 'modLocalRuntime' : 'localRuntime'
+        String sourceCoordinate = sourceModules.get("${repository.id}:${module.path}".toString())
+        if (sourceCoordinate != null && !namedLibrary) {
+            // 已组合为源码工程的模块按替换坐标装入，与源码依赖解析为同一组件；再读同名文件会被重映射成第二份模组。
+            dependencies.add(runtimeConfiguration, sourceCoordinate)
+            return
+        }
         File artifact = workspace.artifact(repository.id, module.path, namedLibrary)
         def runtimeArtifact = files(artifact)
         if (sameRepository) {
@@ -31,7 +42,6 @@ workspace.manifest.repositories.each { repository ->
             String packagingTask = module.runtime == 'mod' ? 'remapJar' : 'jar'
             runtimeArtifact.builtBy(module.path ? ":${module.path}:${packagingTask}" : ":${packagingTask}")
         }
-        String runtimeConfiguration = module.runtime == 'mod' ? 'modLocalRuntime' : 'localRuntime'
         dependencies.add(runtimeConfiguration, runtimeArtifact)
         runtimeArtifacts.add(artifact)
     }
