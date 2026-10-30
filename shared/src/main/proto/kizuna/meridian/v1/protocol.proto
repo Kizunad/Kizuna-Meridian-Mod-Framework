@@ -68,6 +68,7 @@ message BodyCommand {
     SetAddonProgress set_addon_progress = 28; // 仅可信附属入口；客户端不能自报解锁。
     BodyActivity execute_activity = 29; // 仅可信活动入口，整体守恒、容量及负载校验。
     FillModuleTags fill_module_tags = 30; // 仅可信构型维护入口，补齐空标签，不覆盖已有标签。
+    ReviveBody revive_body = 31; // 仅可信健康入口；死体复活与寿元支出原子提交。
   }
 }
 
@@ -288,4 +289,6 @@ enum FailureCode {
   OPENING_NOT_ACTIVE = 44;
   OPENING_POLICY_UNAVAILABLE = 45;
   DAMAGE_HANDLER_UNAVAILABLE = 46;
+  BODY_PAUSED = 47; // 宿主已认领但暂停此身体；调用方停止自动操作，不能回退为未绑定。
+  BODY_ALIVE = 48; // 复活只接受死态身体。
 }

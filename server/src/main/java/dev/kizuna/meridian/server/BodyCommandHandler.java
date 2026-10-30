@@ -270,7 +270,7 @@ public final class BodyCommandHandler<C> {
             // 瞬时发运、加工启动和做功使用已结算时刻；摄入自身消费可信活动区间。
             if (command.hasTransportQi() || command.hasStartOrganRecipe() || command.hasExertTissue() || command.hasExertTissues()
                     || command.hasCaptureQi() || command.hasExecuteActivity()
-                    || HealthProtobuf.isHealthCommand(command)
+                    || (HealthProtobuf.isHealthCommand(command) && !command.hasReviveBody())
                     || command.hasStartAction() || command.hasStopAction()
                     || command.hasStartMeridianOpening() || command.hasPauseMeridianOpening() || command.hasDebugQi()) {
                 requireActiveSettledTime(trustedContext, body);
@@ -280,7 +280,7 @@ public final class BodyCommandHandler<C> {
                 if (!security.allows(trustedContext, command, body)) {
                     return Execution.conflict(MeridianMessages.FailureCode.ACCESS_DENIED);
                 }
-                if (body.vitality().dead() || body.vitality().remainingSeconds() == 0) {
+                if (!command.hasReviveBody() && (body.vitality().dead() || body.vitality().remainingSeconds() == 0)) {
                     return Execution.conflict(MeridianMessages.FailureCode.BODY_DEAD);
                 }
                 if (body.revision() == Long.MAX_VALUE) {
@@ -289,6 +289,12 @@ public final class BodyCommandHandler<C> {
             }
             // 先执行纯计算基础校验，私有策略无权跳过余额、死亡或版本上限约束。
             after = switch (command.getOperationCase()) {
+                case REVIVE_BODY -> {
+                    var plan = TimeProtobuf.fromMessage(timeSource.resolve(trustedContext, body));
+                    BodyHealthExecution.Result result = BodyRevivalExecution.calculate(body, command, plan.target());
+                    healthFact = result.fact();
+                    yield result.body();
+                }
                 case FILL_MODULE_TAGS -> ModuleTagExecution.apply(body, command.getFillModuleTags());
                 case EXECUTE_ACTIVITY -> BodyActivityExecution.apply(body, command.getExecuteActivity(), caller);
                 case SET_ADDON_PROGRESS -> dev.kizuna.meridian.core.AddonProgress.replace(body,

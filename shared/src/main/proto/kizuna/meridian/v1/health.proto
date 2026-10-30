@@ -58,6 +58,15 @@ message DamageResolution {
   repeated HpLoss losses = 1; // 0..64 个唯一目标，空列表可表示完全免疫。
   optional bool lethal = 2; // 由 Addon 判死；框架负责死亡清账，不能直接覆盖身体快照。
   repeated MeridianInjury meridian_injuries = 3; // 经脉没有 HP，用渗漏/断裂状态表示损伤。
+  DamageSpillover spillover = 4; // 策略已算出的蔓延事实；核心仍只执行 losses，不再分配。
+}
+
+message DamageSpillover {
+  HealthTarget source = 1;
+  double overflow_hp = 2; // 来源目标无法承受的原始余量。
+  double multiplier = 3; // 只在来源处应用一次。
+  repeated HpLoss losses = 4; // resolution.losses 中属于蔓延的明确剂量。
+  double unabsorbed_hp = 5; // 没有剩余接收容量时舍弃的蔓延量。
 }
 
 message MeridianInjury { string meridian_id = 1; MeridianCondition condition = 2; }
@@ -87,6 +96,17 @@ message ConfirmBodyDeath {
   string source_id = 1;
 }
 
+message ReviveBody {
+  string source_id = 1;
+  double lifespan_seconds = 2; // 正数；余额不足仍复活，实际扣款止于剩余寿元。
+}
+
+message RevivalResult {
+  double spent_lifespan_seconds = 1;
+  bool lifespan_exhausted = 2; // 下一次时间推进按寿尽判死。
+  TimeCursor revived_at = 3; // 固定复活边界，事务复核不重新读取宿主时钟。
+}
+
 message FatigueRelief {
   oneof module {
     string tissue_id = 1;
@@ -101,4 +121,5 @@ message HealthResult {
   QiInventory released_qi = 2; // 死亡或中止增压释放，与身体及回执原子入环境账。
   DamageResolution damage_resolution = 3; // 仅伤害必填，固定可信 Addon 的处理结果以供事务复核。
   bool death_prevented = 4; // 先阻止本次死亡清账，宿主再落实已经确认的保命物品副作用。
+  RevivalResult revival = 5; // 仅复活必填，重放不再次支出寿元。
 }

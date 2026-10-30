@@ -1,10 +1,10 @@
 # 服务端实现与宿主接入
 
-状态：Java 查询、寿元支出/推进、经脉与器官运输、组织能力/做功、器官配方、通用环境摄入与原子交换、宿主事务/策略的内存参考已实现。跨语言查询已完成一次性验证；本次变更的跨语言宿主接入、实际调度/实体死亡、网络与磁盘持久化尚未实现。
+状态：Java 查询、寿元支出/推进、复活、经脉与器官运输、组织能力/做功、器官配方、通用环境摄入与原子交换、宿主事务/策略的内存参考已实现。跨语言查询已完成一次性验证；完整跨语言宿主仍需自行实现。Human 的 Fabric 宿主已接入玩家调度、实体死亡重生、网络与世界持久化。
 
 目前已提供宿主无关的 [Protobuf v1 数据、查询与变更契约](Protocol-and-Security.md)。Java 消息由 protoc 生成；其他语言使用同一 `.proto` 或构建描述集生成类型，并遵守相同授权、版本、原子性和重试语义。
 
-Java 参考实现和宿主处理器位于 `server/` 子项目，`client/` 目前只生成客户端协议消息；共用 `.proto` 位于 `shared/src/main/proto/`。目录拆分后的产物仍是宿主调用的 Java 库，Fabric 服务端加载入口与世界接入尚未实现，详见[仓库布局](Architecture.md)。
+Java 参考实现和宿主处理器位于 `server/` 子项目，`client/` 目前只生成客户端协议消息；共用 `.proto` 位于 `shared/src/main/proto/`。目录拆分后的产物仍是宿主调用的 Java 库，Fabric 服务端加载和世界接入归 Human 等宿主附属，详见[仓库布局](Architecture.md)。
 
 ## 一个身体，一个权威执行方
 
@@ -51,7 +51,7 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 健康操作通过 `handleHealthEffect(context, payload)` 接入，普通 `handle` 默认拒绝。宿主先确认攻击命中或治疗、药效事实，再构造请求，不能接受玩家自报剂量。完整构造器的最后一个参数是 `BodyDamageHandler`：接收 `DamageContext` bytes，返回 `DamageResolution` bytes。宿主按实际生物模板选择 Addon；减伤、分配和生物特定死亡条件由该处理器计算，框架校验及提交局部变化。回调在事务内只计算一次方案，不写账、不调用外界副作用；其他语言按相同 Protobuf 实现即可。省略最后参数时使用 `DefaultBodyDamageHandler`：可省略命中点以随机选择尚有 HP 的部位，全部部位归零时判死。已装配策略失败时不改用兜底。治疗与主动疲劳恢复不依赖伤害处理器。
 
-健康回执固定 Addon 原方案；Store 复算与成功重试不再调用 Addon。死亡及开脉因伤中断的真元释放与身体、回执原子保存到默认释放账户，恢复时必须带回该余额。宿主确定普通时间释放和健康释放的位置归属后，可用下述 `transferReleasedToSource` 归位；位置记录与调度仍由宿主负责。字段、剂量及失能规则见[伤害、治疗与主动恢复](Health-Effects.md)。
+健康回执固定 Addon 原方案；Store 复算与成功重试不再调用 Addon。`ReviveBody` 同样只允许 `handleHealthEffect`，先校验授权与版本，再在一个事务内恢复死体和扣寿元。它使用可信时间源固定复活时刻并写入 `HealthResult.revival.revived_at`，Store 按该时刻复核，成功重试不重新读时钟或扣款。死亡及开脉因伤中断的真元释放与身体、回执原子保存到默认释放账户，恢复时必须带回该余额。宿主确定普通时间释放和健康释放的位置归属后，可用下述 `transferReleasedToSource` 归位；位置记录与调度仍由宿主负责。字段、剂量及失能规则见[伤害、治疗与主动恢复](Health-Effects.md)。
 
 独立伤害适配可以通过 `BodyHealthHost.exchange(byte[])` 交换 `health_host.proto` 消息，查询实际身份绑定后向同一宿主提交健康命令。`ConfirmBodyDeath` 用于已经发生的外部死亡，保留局部 HP 与伤势。只有明确 `unbound = true` 允许寻找其他宿主；拒绝和重复认领均停止，不换账本。Fabric entrypoint 与原版事件接线属于独立 Addon，核心仍不依赖 Minecraft。详细可信边界见[健康宿主交换](Health-Effects.md#跨附属健康宿主交换)。
 

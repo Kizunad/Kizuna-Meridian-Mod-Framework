@@ -74,6 +74,8 @@ final class ProtoWire {
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.qi_capture")
                     || field.getFullName().equals("kizuna.meridian.v1.CommandReceipt.health")
                     || field.getFullName().equals("kizuna.meridian.v1.HealthResult.damage_resolution")
+                    || field.getFullName().equals("kizuna.meridian.v1.HealthResult.revival")
+                    || field.getFullName().equals("kizuna.meridian.v1.DamageResolution.spillover")
                     || field.getFullName().equals("kizuna.meridian.v1.DamageBody.hit")
                     || field.getFullName().equals("kizuna.meridian.v1.DamageBody.death_protection")
                     || field.getFullName().equals("kizuna.meridian.v1.HealthHostResponse.health")

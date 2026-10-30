@@ -11,7 +11,13 @@ def modules = [
     'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/fabric/build/libs/kizuna-meridian-vanilla-healing-addon-fabric-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-qi-variants-addon': 'Kizuna-Meridian-Qi-Variants-Addon/server/build/libs/kizuna-meridian-qi-variants-addon-server-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-vanilla-humanoid-threatening': 'Kizuna-Meridian-Vanilla-Humanoid-Threatening/fabric/build/libs/kizuna-meridian-vanilla-humanoid-threatening-fabric-0.1.0-SNAPSHOT.jar',
-    'kizuna-players-animation': 'Kizuna-Players-Animation/build/libs/kizuna-players-animation-0.1.0-SNAPSHOT.jar'
+    'kizuna-meridian-debug-addon': 'Kizuna-Meridian-Debug-Addon/fabric/build/libs/kizuna-meridian-debug-addon-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-players-animation': 'Kizuna-Players-Animation/build/libs/kizuna-players-animation-0.1.0-SNAPSHOT.jar',
+    'kizuna-players-animation-mobs-addon': 'Kizuna-Players-Animation-Mobs-Addon/build/libs/kizuna-players-animation-mobs-addon-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-technique-framework': 'Kizuna-Meridian-Technique-Framework/fabric/build/libs/kizuna-meridian-technique-framework-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-basic-techniques-addon': 'Kizuna-Meridian-Basic-Techniques-Addon/fabric/build/libs/kizuna-meridian-basic-techniques-addon-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-door-breaker-addon': 'Kizuna-Meridian-Door-Breaker-Addon/fabric/build/libs/kizuna-meridian-door-breaker-addon-fabric-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-combat-ui-addon': 'Kizuna-Meridian-Combat-UI-Addon/fabric/build/libs/kizuna-meridian-combat-ui-addon-fabric-0.1.1-SNAPSHOT.jar'
 ]
 modules.each { repository, artifact ->
     // 当前工程使用源码输出；Healing 已通过 composite 构建提供 Damage，避免重复加载。
@@ -70,12 +76,26 @@ def serverLibraries = [
     'kizuna-meridian-ui-addon': 'Kizuna-Meridian-UI-Addon/server/build/libs/kizuna-meridian-ui-addon-server-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-vanilla-damage-addon': 'Kizuna-Meridian-Vanilla-Damage-Addon/server/build/libs/kizuna-meridian-vanilla-damage-addon-server-0.1.0-SNAPSHOT.jar',
     'kizuna-meridian-vanilla-healing-addon': 'Kizuna-Meridian-Vanilla-Healing-Addon/server/build/libs/kizuna-meridian-vanilla-healing-addon-server-0.1.0-SNAPSHOT.jar',
-    'kizuna-meridian-vanilla-humanoid-threatening': 'Kizuna-Meridian-Vanilla-Humanoid-Threatening/server/build/libs/kizuna-meridian-vanilla-humanoid-threatening-server-0.1.0-SNAPSHOT.jar'
+    'kizuna-meridian-vanilla-humanoid-threatening': 'Kizuna-Meridian-Vanilla-Humanoid-Threatening/server/build/libs/kizuna-meridian-vanilla-humanoid-threatening-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-debug-addon': 'Kizuna-Meridian-Debug-Addon/server/build/libs/kizuna-meridian-debug-addon-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-technique-framework': 'Kizuna-Meridian-Technique-Framework/server/build/libs/kizuna-meridian-technique-framework-server-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-combat-ui-addon': 'Kizuna-Meridian-Combat-UI-Addon/core/build/libs/kizuna-meridian-combat-ui-addon-core-0.1.1-SNAPSHOT.jar'
 ]
 serverLibraries.each { repository, artifact ->
     boolean builtFromSource = repository == rootProject.name ||
             (rootProject.name == 'kizuna-meridian-vanilla-healing-addon' && repository == 'kizuna-meridian-vanilla-damage-addon')
     if (!builtFromSource) {
+        dependencies.add('localRuntime', files(new File(codeDirectory, artifact)))
+    }
+}
+
+// 功法协议和战斗协议同样是嵌套纯 Java 库，开发装配不能依赖 Loom 保留它们。
+def protocolLibraries = [
+    'kizuna-meridian-technique-framework': 'Kizuna-Meridian-Technique-Framework/shared/build/libs/kizuna-meridian-technique-framework-shared-0.1.0-SNAPSHOT.jar',
+    'kizuna-meridian-combat-ui-addon': 'Kizuna-Meridian-Combat-UI-Addon/shared/build/libs/kizuna-meridian-combat-ui-addon-shared-0.1.1-SNAPSHOT.jar'
+]
+protocolLibraries.each { repository, artifact ->
+    if (repository != rootProject.name) {
         dependencies.add('localRuntime', files(new File(codeDirectory, artifact)))
     }
 }
@@ -88,6 +108,7 @@ tasks.withType(JavaExec).configureEach {
         def required = modules.values().collect { new File(codeDirectory, it) }
         required.addAll(progressionArtifacts.values().collect { new File(codeDirectory, it) })
         required.addAll(serverLibraries.values().collect { new File(codeDirectory, it) })
+        required.addAll(protocolLibraries.values().collect { new File(codeDirectory, it) })
         required.add(qiVariantsShared)
         required.add(new File(codeDirectory, 'Kizuna-Meridian-Items-Addon/build/libs/kizuna-meridian-items-addon-0.1.0-SNAPSHOT.jar'))
         required.each { artifact ->

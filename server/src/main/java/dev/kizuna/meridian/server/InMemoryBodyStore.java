@@ -24,6 +24,7 @@ import dev.kizuna.meridian.protocol.EnvironmentProtobuf;
 import dev.kizuna.meridian.environment.EnvironmentAbsorption;
 import dev.kizuna.meridian.environment.EnvironmentQiRules;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
+import dev.kizuna.meridian.protocol.pb.HealthMessages;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.TimeCursor;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.CommandReceipt;
@@ -386,8 +387,18 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             if (receipt.hasHealth()) {
                 // 使用已固定的附属处理结果复算，不再次调用可能已卸载或升级的伤害实现。
                 var fact = receipt.getHealth();
-                var expected = BodyHealthExecution.calculate(original.snapshot(), receipt.getCommand(),
-                        fact.hasDamageResolution() ? fact.getDamageResolution() : null);
+                BodyHealthExecution.Result expected;
+                if (receipt.getCommand().hasReviveBody()) {
+                    var target = BodyProtobuf.fromTime(fact.getRevival().getRevivedAt());
+                    expected = BodyRevivalExecution.calculate(original.snapshot(), receipt.getCommand(), target);
+                } else {
+                    HealthMessages.DamageResolution resolution = null;
+                    if (fact.hasDamageResolution()) {
+                        resolution = fact.getDamageResolution();
+                    }
+                    expected = BodyHealthExecution.calculate(original.snapshot(), receipt.getCommand(),
+                            resolution);
+                }
                 if (!next.equals(expected.body()) || !fact.equals(expected.fact())) {
                     throw MeridianErrors.inconsistent(MeridianErrors.Health.STAGE);
                 }

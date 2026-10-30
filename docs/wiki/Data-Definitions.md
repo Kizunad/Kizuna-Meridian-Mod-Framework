@@ -26,7 +26,7 @@
 
 `activity.proto / BodyActivity` 是可信附属的原子计划：显式账户旧值与替换值、闭环变化、能力修正、做功、器官配方、开脉完成、局部伤势、升境、附属进度。普通网络拒绝，宿主通过 `handleActivity` 提交。框架重验旧值、非负余额、体积、预约、有效功率/能量及 `旧总量 = 新总量 + 环境释放`；Store 复算后一次 revision 提交。不能上传完整身体或改寿命。具体生物的路线、密度曲线和突破门槛属于附属。
 
-`DamageResolution.meridian_injuries` 使用既有健康接口记录渗漏/断裂，不虚构经脉 HP。`DebugQi.SET_INVENTORY` 允许已授权 OP 精确设置内腔或外壁的数量与密度，仍检查体积和在途预约；全身模式的数量为总量，按扣除在途预约后的可用体积分配，不能把库存单独灌到含在途的总容量。
+`DamageResolution.meridian_injuries` 使用既有健康接口记录渗漏/断裂，不虚构经脉 HP。`DebugQi.SET_INVENTORY` 允许已授权 OP 精确设置内腔或外壁的数量与密度，仍检查体积和在途预约；全身模式的数量为总量，按扣除在途预约后的可用体积分配，不能把库存单独灌到含在途的总容量。总量检查容许 `1e-8` 体积余量，逐条写入时截到该经脉自身可用体积。
 
 状态：已实现 Java 17 不可变数据值与构造校验，源码位于 `server/src/main/java/dev/kizuna/meridian/core/`；对外数据交换采用 [Protobuf v1](Protocol-and-Security.md)，源码在 `shared/src/main/proto/`，生成类与核心值之间由服务端的 `BodyProtobuf` 映射。工程分为 `client`、`server` 两个 Gradle 子项目；`meridian-core` 是服务端数据层的职责名称，没有独立子项目或已发布依赖坐标。
 
@@ -151,7 +151,9 @@
 | `BodySnapshot.revision` | 非负 `long`，整个权威身体状态的版本 |
 | `schemaVersion`、模板内容版本 | 分开记录；当前只接受身体 schema 3，线协议仍为 1 |
 
-寿命使用 `VitalityState(ageSeconds, lifespanLimitSeconds, spentLifespanSeconds, dead)`：剩余寿命为 `max(0, 上限 − 年龄 − 额外支出)`。`dead` 记录已完成的生命状态判定；构造数据本身不触发死亡，寿尽与释放由 `BodyTimeAdvancement` 和事务入口执行，复活尚未实现。
+寿命使用 `VitalityState(ageSeconds, lifespanLimitSeconds, spentLifespanSeconds, dead)`：剩余寿命为 `max(0, 上限 − 年龄 − 额外支出)`。`dead` 记录已完成的生命状态判定；构造数据本身不触发死亡，寿尽与释放由 `BodyTimeAdvancement` 和事务入口执行。可信 `ReviveBody` 只接受死体，将局部 HP 抬至至少 10%、有做功能力的组织疲劳置满，并原子增加寿元支出；其他资源和进度保留。
+
+`ReviveBody.source_id` 为可信来源，`lifespan_seconds` 为调用方提供的正数生理秒。`HealthResult.revival` 中 `spent_lifespan_seconds` 记录实际扣款，`lifespan_exhausted` 标记余额为零，`revived_at` 固定可信复活时刻用于事务复核。死态等待不补算年龄或疲劳恢复；余额不足仍复活，下一次时间推进寿尽判死。成功 revision 只加一，活体请求拒绝为 `BODY_ALIVE`。
 
 `TimeCursor` 另外记录时钟域与世代；只有域和世代相同的时间位置才可比较。快照已结算到该位置，移动中在途须在未来，已到达受阻货物显式保留阻塞状态。模拟/生物时间折算、冻结模式和防止重复推进已由[时间算子与宿主时间源](Body-and-Persistence.md)实现；具体离线调度与跨世代迁移仍由后续宿主接入完成。查询、客户端插值和寿元支出不会隐式推进年龄或移动真元。
 

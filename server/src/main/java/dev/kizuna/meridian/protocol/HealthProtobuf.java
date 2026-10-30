@@ -4,7 +4,18 @@ import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.DefinitionId;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.HealthTarget;
-import dev.kizuna.meridian.protocol.pb.HealthMessages.*;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageBody;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageContext;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageKind;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageResolution;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.DeathProtection;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.FatigueRelief;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.HealBody;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.Healing;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.HealthResult;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.HpLoss;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.PartHealthLimit;
+import dev.kizuna.meridian.protocol.pb.HealthMessages.RestoreFatigue;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.BodyCommand;
 
 import java.util.HashSet;
@@ -18,7 +29,7 @@ public final class HealthProtobuf {
     public static boolean isHealthCommand(BodyCommand command) {
         // 宿主可信入口与回执都使用同一操作集合，避免新操作漏过默认拒绝。
         return command.hasDamageBody() || command.hasHealBody() || command.hasRestoreFatigue()
-                || command.hasConfirmBodyDeath() || command.hasSetPartHealthLimits();
+                || command.hasConfirmBodyDeath() || command.hasSetPartHealthLimits() || command.hasReviveBody();
     }
 
     public static void validateCommand(BodyCommand command) {
@@ -27,6 +38,10 @@ public final class HealthProtobuf {
         switch (command.getOperationCase()) {
             case DAMAGE_BODY -> validateDamage(command.getDamageBody());
             case CONFIRM_BODY_DEATH -> new DefinitionId(command.getConfirmBodyDeath().getSourceId());
+            case REVIVE_BODY -> {
+                new DefinitionId(command.getReviveBody().getSourceId());
+                require(positive(command.getReviveBody().getLifespanSeconds()));
+            }
             case SET_PART_HEALTH_LIMITS -> {
                 var request = command.getSetPartHealthLimits();
                 new DefinitionId(request.getSourceId());
@@ -144,6 +159,9 @@ public final class HealthProtobuf {
             validateTarget(loss.getTarget());
             ProtoWire.require(targets.add(loss.getTarget()) && positive(loss.getHp()), MeridianErrors.Health.RESOLUTION);
         }
+        if (resolution.hasSpillover()) {
+            DamageSpilloverProtobuf.validate(resolution);
+        }
         var meridians = new HashSet<String>();
         ProtoWire.require(resolution.getMeridianInjuriesCount() <= 128, MeridianErrors.Health.RESOLUTION);
         for (var injury : resolution.getMeridianInjuriesList()) {
@@ -160,6 +178,17 @@ public final class HealthProtobuf {
         ProtoWire.validate(result);
         BodyProtobuf.fromInventory(result.getReleasedQi());
         ProtoWire.require(result.hasDamageResolution() == command.hasDamageBody(), MeridianErrors.Health.RECEIPT);
+        ProtoWire.require(result.hasRevival() == command.hasReviveBody(), MeridianErrors.Health.RECEIPT);
+        if (result.hasRevival()) {
+            var revival = result.getRevival();
+            // 转换校验时钟域、世代和非负时刻，非法回执在进入存储前抛出协议异常。
+            BodyProtobuf.fromTime(revival.getRevivedAt());
+            double spent = revival.getSpentLifespanSeconds();
+            double requested = command.getReviveBody().getLifespanSeconds();
+            ProtoWire.require(spent >= 0 && spent <= requested
+                    && (revival.getLifespanExhausted() || spent == requested)
+                    && result.getReleasedQi().getEntriesCount() == 0, MeridianErrors.Health.RECEIPT);
+        }
         if (command.hasDamageBody()) {
             validateResolution(result.getDamageResolution());
             boolean prevented = result.getDamageResolution().getLethal() && command.getDamageBody().hasDeathProtection();
