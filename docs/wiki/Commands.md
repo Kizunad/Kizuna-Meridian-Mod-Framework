@@ -21,7 +21,7 @@ Meridian 的全部服务端指令都挂在 `/meridian` 一个根下，由 Framew
 
 ## 可选目标
 
-`[<targets>]` 紧跟动作字面量。省略时作用于执行者本人，指定他人时要权限 2。三个辅助方法都会先注册省略目标的分支，再注册目标分支：
+`[<targets>]` 紧跟动作字面量。省略时作用于执行者本人（唯一例外是 `humanoid aggro clear`，见下表），指定他人时要权限 2。三个辅助方法都会先注册省略目标的分支，再注册目标分支：
 
 ```java
 MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommands.GAMEMASTER, (node, context) ->
@@ -94,7 +94,7 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 | `/meridian humanoid spawn <species> [<realm>] [<pos>]` | 2 | Threatening | 物种写实体 ID，补全列出七种内置生人和全部登记物种（含假人 `meridian_humanoid_dummy:dummy`），原版生物可省略命名空间；境界为 `mortal\|wandering_qi\|true_qi`。省略境界时，登记物种用物种表的默认档位，内置生人按自然出生抽档；省略位置时用命令源位置。登记物种可由所属附属提供放置钩子 |
 | `/meridian humanoid realm <targets> <realm>` | 2 | Dummy | 改换假人境界；目标不是假人时报错 |
 | `/meridian humanoid aggro <A> <B> [mutual\|oneway]` | 2 | Debug | 让 A 与 B 互相（或单向）敌对 |
-| `/meridian humanoid aggro clear [<targets>]` | 2 | Debug | 清除敌对链接 |
+| `/meridian humanoid aggro clear [<targets>]` | 2 | Debug | 清除敌对链接；链接两端都是生物、不含玩家，所以省略目标时清除全部，不按「作用于执行者本人」处理 |
 | `/meridian humanoid taunt <target> [player\|entity]` | 2 | Taunts | 立即说一句垃圾话 |
 
 ### combat
