@@ -26,14 +26,12 @@ def directoryOf = { String id ->
 }
 
 def artifactOf = { String id, String modulePath, boolean development ->
-    // 产物名为「根工程名[-模块]-版本」；Loom 的 named 开发 JAR 在 build/devlibs，安装 JAR 和纯 Java 库在 build/libs。
+    // 产物名为「根工程名[-模块]-版本」，模组和纯 Java 库都在 build/libs。26.2 不重映射，开发运行与安装用同一个 JAR，
+    // 第三个参数（是否取开发 JAR）已不影响结果，保留只为各仓迁移前的调用不报错。
     def repository = repositoryById(id)
     String version = repository.version ?: manifest.version
     String basename = modulePath ? "${repository.project}-${modulePath}" : repository.project
     File moduleDirectory = modulePath ? new File(directoryOf(id), modulePath) : directoryOf(id)
-    if (development) {
-        return new File(moduleDirectory, "build/devlibs/${basename}-${version}-dev.jar")
-    }
     return new File(moduleDirectory, "build/libs/${basename}-${version}.jar")
 }
 

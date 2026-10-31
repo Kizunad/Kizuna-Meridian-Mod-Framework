@@ -2,13 +2,27 @@
 // 源码依赖仍由各仓库独立声明。localRuntime 只装配本工程运行环境，不沿 composite 的发布变体再次传递整套 JAR。
 // 先构建各仓库安装 JAR，再运行客户端或 GameTest。不存在缺包启动模式。
 // settings 已应用工作区脚本时沿用其结果（含源码组合登记），否则在工程内单独应用。
+import groovy.json.JsonSlurper
+
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipInputStream
+
 if (!project.hasProperty('kizunaWorkspace')) {
     apply from: new File(buildscript.sourceFile.parentFile, 'workspace.gradle')
 }
 
-repositories { maven { url = 'https://maven.wispforest.io/releases' } }
+repositories {
+    maven { url = 'https://maven.wispforest.io/releases' }
+    // owo 0.13 依赖的 kdl4j 只发布在 JitPack，只从那里取这一组。
+    maven {
+        url = 'https://jitpack.io'
+        content { includeGroup 'com.github.kdl-org' }
+    }
+}
 
 def workspace = kizunaWorkspace
+def catalog = extensions.getByType(VersionCatalogsExtension).named('libs')
 Map<String, String> sourceModules = workspace.sourceModules ?: [:]
 def runtimeArtifacts = []
 workspace.manifest.repositories.each { repository ->
@@ -20,29 +34,27 @@ workspace.manifest.repositories.each { repository ->
             return
         }
 
-        // 模组走 Loom 开发重映射；纯 Java 库直接上类路径，Items 宿主库本身已是 named 开发 JAR。
-        boolean namedLibrary = module.runtime == 'named-library'
-        String runtimeConfiguration = module.runtime == 'mod' ? 'modLocalRuntime' : 'localRuntime'
+        // 26.2 不重映射：模组、纯 Java 库和 Items 宿主库（清单写 named-library）都是 build/libs 下的同一种 JAR，
+        // 一律放进 localRuntime。
         String sourceCoordinate = sourceModules.get("${repository.id}:${module.path}".toString())
-        if (sourceCoordinate != null && !namedLibrary) {
-            // 已组合为源码工程的模块按替换坐标装入，与源码依赖解析为同一组件；再读同名文件会被重映射成第二份模组。
-            dependencies.add(runtimeConfiguration, sourceCoordinate)
+        if (sourceCoordinate != null) {
+            // 已组合为源码工程的模块按替换坐标装入，与源码依赖解析为同一组件；再读同名文件会装入第二份。
+            dependencies.add('localRuntime', sourceCoordinate)
             return
         }
-        File artifact = workspace.artifact(repository.id, module.path, namedLibrary)
+        File artifact = workspace.artifact(repository.id, module.path, false)
         def runtimeArtifact = files(artifact)
         if (sameRepository) {
             // 同仓产物必须声明任务依赖，build 与 GameTest 同次执行也不能读取尚未打包的文件。
-            String packagingTask = module.runtime == 'mod' ? 'remapJar' : 'jar'
-            runtimeArtifact.builtBy(module.path ? ":${module.path}:${packagingTask}" : ":${packagingTask}")
+            runtimeArtifact.builtBy(module.path ? ":${module.path}:jar" : ':jar')
         }
-        dependencies.add(runtimeConfiguration, runtimeArtifact)
+        dependencies.add('localRuntime', runtimeArtifact)
         runtimeArtifacts.add(artifact)
     }
 }
 
 dependencies {
-    modLocalRuntime 'io.wispforest:owo-lib:0.11.2+1.20'
+    localRuntime catalog.findLibrary('owo').get()
 }
 if (rootProject.name == 'kizuna-meridian-progression-addon') {
     // 本仓通过文件调用公共库，开发运行需显式补齐安装时的嵌套核心和 TOML 依赖。
@@ -55,15 +67,62 @@ if (rootProject.name == 'kizuna-meridian-progression-addon') {
     runtimeArtifacts.add(frameworkServer)
 }
 
+String nestedDirectory = 'META-INF/jars/'
+def generatedLibraryId = { ZipFile outer, ZipEntry entry ->
+    // 读嵌套 JAR 的 fabric.mod.json；只有 Loom 为纯 Java 库生成的元数据才返回 ID，嵌套的正式模组由 Loader 按自身 ID 去重。
+    new ZipInputStream(outer.getInputStream(entry)).withCloseable { ZipInputStream nested ->
+        for (ZipEntry inner = nested.nextEntry; inner != null; inner = nested.nextEntry) {
+            if (inner.name != 'fabric.mod.json') {
+                continue
+            }
+            def metadata = new JsonSlurper().parseText(new String(nested.readAllBytes(), 'UTF-8'))
+            if (metadata.custom?.get('fabric-loom:generated') == true) {
+                return metadata.id as String
+            }
+            return null
+        }
+        return null
+    }
+}
+def duplicatedNestedLibraries = { Set<File> classpathFiles ->
+    // 找出安装 JAR 嵌套、同时类路径上已有同名 JAR 的纯 Java 库，返回 Loader 给嵌套那份的模组 ID。
+    Set<String> classpathNames = classpathFiles.collect { it.name } as Set
+    Set<String> ids = new TreeSet<>()
+    classpathFiles.findAll { it.isFile() && it.name.endsWith('.jar') }.each { File jar ->
+        new ZipFile(jar).withCloseable { ZipFile outer ->
+            outer.entries().toList().findAll { ZipEntry entry ->
+                entry.name.startsWith(nestedDirectory)
+                        && classpathNames.contains(entry.name.substring(nestedDirectory.length()))
+            }.each { ZipEntry entry ->
+                String id = generatedLibraryId(outer, entry)
+                if (id != null) {
+                    ids.add(id)
+                }
+            }
+        }
+    }
+    return ids
+}
+
 tasks.withType(JavaExec).configureEach {
-    // 开发客户端和 GameTest 与框架共同使用 Java 17，不跟随 Gradle 守护进程版本。
-    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    // 开发客户端和 GameTest 与框架共同使用版本目录的 Java 版本，不跟随 Gradle 守护进程版本。
+    javaLauncher = javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(catalog.findVersion('java').get().requiredVersion)
+    }
     doFirst {
         // 文件依赖缺失不会被 Gradle 自动拒绝，开发运行前必须检查整套安装产物。
         runtimeArtifacts.each { File artifact ->
             if (!artifact.isFile()) {
                 throw new GradleException("缺少完整装配产物，请先构建对应仓库：${artifact}")
             }
+        }
+        // 26.2 不重映射，安装 JAR 里 include 的纯 Java 库原样嵌套。Loader 会解出嵌套的那份，与类路径上的同一库并存且优先用它；
+        // 按文件装入的 JAR 可能早于源码组合的产物构建，旧库会盖住新代码。停用这些嵌套副本，
+        // 与 1.20.1（开发重映射剥掉嵌套库）一样由类路径上的库生效。
+        Set<String> duplicated = duplicatedNestedLibraries(classpath.files)
+        if (!duplicated.isEmpty()) {
+            logger.lifecycle("完整装配停用与类路径重复的嵌套库：${duplicated.join(',')}")
+            systemProperty 'fabric.debug.disableModIds', duplicated.join(',')
         }
     }
 }
