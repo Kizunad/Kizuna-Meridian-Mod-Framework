@@ -8,7 +8,7 @@
 ./gradlew :server:capabilityBenchmark --console=plain
 ```
 
-独立 `benchmark` 源集复用整体回归中的非人体构型及策略，不进入默认 `test`、`check` 或分发 JAR。任务强制 Java 17，固定 512 MiB 初始和最大堆，默认采用 JVM 常规后台编译。只计一次 `BodyTimeAdvancement.apply`；构型生成、计划生成、结果检查和存档对照均在计时之外。结果存入 volatile 引用，避免计算被消除。
+独立 `benchmark` 源集复用整体回归中的非人体构型及策略，不进入默认 `test`、`check` 或分发 JAR。任务强制 Java 25，固定 512 MiB 初始和最大堆，默认采用 JVM 常规后台编译。只计一次 `BodyTimeAdvancement.apply`；构型生成、计划生成、结果检查和存档对照均在计时之外。结果存入 volatile 引用，避免计算被消除。
 
 日常组每种模式预热 100000 次、采样 501 次；最坏组每种模式预热 200 次、采样 51 次。输出 CSV 包含中位数、p95、最大值及其一基采样序号 `max_sample`，单位毫秒；统计包含全部采样。可用相同参数在两份代码上独立复测：
 

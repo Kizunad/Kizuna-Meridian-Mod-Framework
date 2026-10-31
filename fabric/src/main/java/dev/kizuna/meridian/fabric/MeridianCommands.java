@@ -22,6 +22,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.selector.EntitySelector;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.PermissionCheck;
 import net.minecraft.world.entity.Entity;
 
 /**
@@ -40,7 +41,9 @@ public final class MeridianCommands {
     public static final int GAMEMASTER = 2;
 
     private static final String ROOT = "meridian";
-    private static final int HIGHEST_PERMISSION = 4;
+    /** 下标就是原版权限等级 0 到 4。 */
+    private static final List<PermissionCheck> LEVEL_CHECKS = List.of(Commands.LEVEL_ALL, Commands.LEVEL_MODERATORS,
+            Commands.LEVEL_GAMEMASTERS, Commands.LEVEL_ADMINS, Commands.LEVEL_OWNERS);
     private static final Pattern NODE_NAME = Pattern.compile("[a-z0-9_]+");
     private static final Map<Branch, Map<String, Registration>> NODES = new EnumMap<>(Branch.class);
     private static final Map<Branch, BranchCommand> BRANCH_COMMANDS = new EnumMap<>(Branch.class);
@@ -233,7 +236,7 @@ public final class MeridianCommands {
         if (branchCommand != null) {
             int commandPermission = branchCommand.permission();
             branchNode.executes(commandContext -> {
-                if (!commandContext.getSource().hasPermission(commandPermission)) {
+                if (!requirement(commandPermission).test(commandContext.getSource())) {
                     throw CommandSyntaxException.BUILT_IN_EXCEPTIONS.dispatcherUnknownCommand().create();
                 }
                 return branchCommand.command().run(commandContext);
@@ -281,8 +284,8 @@ public final class MeridianCommands {
     }
 
     private static Predicate<CommandSourceStack> requirement(int permission) {
-        // 1.20.1 按来源的权限等级判断；权限 0 对任何来源都成立。
-        return source -> source.hasPermission(permission);
+        // 26.2 按来源的权限集判断：整数等级换成原版同级的检查；权限 0 是总能通过的检查，对任何来源都成立。
+        return Commands.hasPermission(LEVEL_CHECKS.get(permission));
     }
 
     private static void requireNodeName(String name) {
@@ -294,7 +297,7 @@ public final class MeridianCommands {
 
     private static void requirePermission(int permission) {
         // 原版权限等级只有 0 到 4。
-        if (permission < PLAYER || permission > HIGHEST_PERMISSION) {
+        if (permission < PLAYER || permission >= LEVEL_CHECKS.size()) {
             throw MeridianErrors.invalid(MeridianErrors.Commands.PERMISSION);
         }
     }

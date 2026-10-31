@@ -10,7 +10,7 @@ Framework、Human、UI、Items、Vanilla-Damage、Vanilla-Healing、Human-UI、P
 
 Windows 候选打包入口在战斗 UI 仓 `scripts/package_windows_candidate.py`，按同一份清单的 `candidate` 字段从 25 个当前工作区构建，包含 Framework 的指令注册模组 `meridian_framework`、PA Mobs-Addon、调试库 `meridian_debug`、bs3d 三个附属的客户端 JAR、Burden、Humanoid Dummy 与 Humanoid Taunts，不替换现用 `combat.args`。候选清单保存提交、未提交源码摘要、JAR 哈希与构建日志。客户端烟测使用隔离游戏目录，只核对主菜单、完整加载与 Mixin 错误；结果单独记录，服务端 GameTest 不代表按键、镜头与动画已经实机验收。
 
-> 当前已实现 Java 17 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输与[被动扩散](Meridian-and-Qi.md)、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。框架的 client/server 为两端库；`fabric` 模块是 Fabric 模组 `meridian_framework`，只提供 `/meridian` [指令注册点](Commands.md)，尚无正式版本；Human 提供玩家宿主，伤害和治疗由对应 Addon 接线。肌肉真元增益/攻击、连续流等后续能力仍按模块边界推进。
+> 当前已实现 Java 25 基础数据、[Protobuf 查询与变更](Protocol-and-Security.md)、寿命推进、经脉/器官运输与[被动扩散](Meridian-and-Qi.md)、[组织能力与器官加工](Technique-Addons.md)、宿主事务/安全接口及环境释放的内存事务参考。框架的 client/server 为两端库；`fabric` 模块是 Fabric 模组 `meridian_framework`，只提供 `/meridian` [指令注册点](Commands.md)，尚无正式版本；Human 提供玩家宿主，伤害和治疗由对应 Addon 接线。肌肉真元增益/攻击、连续流等后续能力仍按模块边界推进。
 
 ## 阅读入口
 
@@ -37,6 +37,6 @@ Windows 候选打包入口在战斗 UI 仓 `scripts/package_windows_candidate.py
 | 了解非商业许可 | [许可与分发](Licensing.md) |
 | 维护和发布本文档 | [文档维护](Documentation.md) |
 
-客户端与单机适配目标为 Minecraft 1.20.1 / Fabric / Java 17，基础操作面板使用 XML/owo；专门的 3D 内景渲染与铺带规划为独立 Addon。两种入口共用真元引导与执行规则。服务端核心实现语言不限，以统一 Protobuf 契约与行为验收接入；Rust 或 JNI 均不是前置要求，每具身体只有一个权威执行方。
+客户端与单机适配目标为 Minecraft 26.2 / Fabric / Java 25，基础操作面板使用 XML/owo；专门的 3D 内景渲染与铺带规划为独立 Addon。两种入口共用真元引导与执行规则。服务端核心实现语言不限，以统一 Protobuf 契约与行为验收接入；Rust 或 JNI 均不是前置要求，每具身体只有一个权威执行方。
 
 项目主页：[Kizuna-Meridian-Mod-Framework](https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework)。

@@ -4,25 +4,25 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.suggestion.Suggestion;
 import com.mojang.brigadier.tree.CommandNode;
 import java.util.List;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 
 /** /meridian 注册点回归：两个测试附属的子树合并补全、未登记附属无节点、同名三级节点报错。 */
-public final class MeridianCommandsGameTest implements FabricGameTest {
+public final class MeridianCommandsGameTest {
     private static final int COMMAND_SUCCEEDED = 1;
     private static final int COMMAND_FAILED = 0;
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    @GameTest
     public void registeredSubtreesCompleteUnderOneRoot(GameTestHelper context) {
         // 两个附属挂在同一个 qi 下，补全同时列出；debug 只对管理员可见，watch 频道同样来自登记。
         MinecraftServer server = context.getLevel().getServer();
         CommandSourceStack operator = server.createCommandSourceStack();
-        CommandSourceStack player = operator.withPermission(MeridianCommands.PLAYER);
+        CommandSourceStack player = operator.withPermission(LevelBasedPermissionSet.ALL);
         context.assertTrue(completions(server, operator, "meridian ").containsAll(List.of("qi", "watch", "debug")),
                 "/meridian 缺少已登记的二级节点");
         // 分发器补全不过滤权限，玩家能看到什么取决于下发的指令树，也就是节点的 requires。
@@ -38,8 +38,8 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
                 "watch 频道或开关没有补全");
 
         // 可选目标：x <word> 走省略目标分支；单词位置写的是合法 UUID 时也按单词解析；x <target> <word> 才指定他人。
-        Entity self = context.spawn(EntityType.PIG, 1, 2, 1);
-        Entity other = context.spawn(EntityType.PIG, 2, 2, 2);
+        Entity self = context.spawn(EntityTypes.PIG, 1, 2, 1);
+        Entity other = context.spawn(EntityTypes.PIG, 2, 2, 2);
         CommandSourceStack asSelf = operator.withEntity(self);
         String otherId = other.getStringUUID();
         context.assertTrue(run(server, asSelf, "meridian qi alpha_probe ren") == COMMAND_SUCCEEDED
@@ -51,7 +51,7 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
         context.assertTrue(run(server, asSelf, "meridian qi alpha_probe " + otherId + " du") == COMMAND_SUCCEEDED
                         && targeted(other) && "du".equals(AlphaProbeAddon.lastWord),
                 "指定目标时没有作用于目标");
-        context.assertTrue(run(server, asSelf.withPermission(MeridianCommands.PLAYER),
+        context.assertTrue(run(server, asSelf.withPermission(LevelBasedPermissionSet.ALL),
                         "meridian qi alpha_probe " + otherId + " du") == COMMAND_FAILED,
                 "权限 0 不应能指定他人目标");
 
@@ -65,7 +65,7 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
         context.succeed();
     }
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    @GameTest
     public void unregisteredAddonHasNoNode(GameTestHelper context) {
         // 丙没有列入入口：它要挂的 combat 二级节点和三级节点都不存在，指令无法执行。
         MinecraftServer server = context.getLevel().getServer();
@@ -82,7 +82,7 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
         context.succeed();
     }
 
-    @GameTest(template = FabricGameTest.EMPTY_STRUCTURE)
+    @GameTest
     public void duplicateThirdLevelNodeFails(GameTestHelper context) {
         // 同名三级节点、同名频道与直接挂到 watch 下都在登记时报错，不进入指令树。
         IllegalStateException duplicateNode = expect(IllegalStateException.class, () ->
@@ -120,8 +120,11 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
     }
 
     private static int run(MinecraftServer server, CommandSourceStack source, String command) {
-        // 与聊天栏执行相同：解析失败或执行失败都返回 0。
-        return server.getCommands().performPrefixedCommand(source, command);
+        // 与聊天栏执行相同；26.2 的执行入口不再返回结果，改由来源的结果回调取得，解析失败或执行失败都返回 0。
+        int[] result = {COMMAND_FAILED};
+        server.getCommands().performPrefixedCommand(
+                source.withCallback((success, value) -> result[0] = success ? value : COMMAND_FAILED), command);
+        return result[0];
     }
 
     private static <T extends RuntimeException> T expect(Class<T> type, Runnable registration) {

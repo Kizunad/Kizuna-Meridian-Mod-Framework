@@ -25,7 +25,7 @@ configurations {
 
 tasks.register('capabilityBenchmark', JavaExec) {
     group = 'verification'
-    description = '在 Java 17 上测量单次身体推进，独立于默认整体测试。'
+    description = '在 Java 25 上测量单次身体推进，独立于默认整体测试。'
     dependsOn testClasses, benchmarkClasses
     classpath = sourceSets.benchmark.runtimeClasspath
     mainClass = 'dev.kizuna.meridian.protocol.CapabilityAdvanceBenchmark'

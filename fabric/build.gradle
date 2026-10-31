@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom'
+    id 'net.fabricmc.fabric-loom'
 }
 
 description = 'Meridian 公共 Minecraft 接线：统一 /meridian 指令注册点。'
@@ -16,10 +16,10 @@ java {
 base.archivesName = "${rootProject.name}-${project.name}"
 
 dependencies {
+    // 26.x 不混淆：直接用官方名编译，没有映射，模组依赖也不经重映射。
     minecraft libs.minecraft
-    mappings loom.officialMojangMappings()
-    modImplementation libs.fabric.loader
-    modImplementation libs.fabric.api
+    implementation libs.fabric.loader
+    implementation libs.fabric.api
     // 登记错误文案统一在服务端库的 MeridianErrors；服务端库由各附属按装配清单装入，这里不嵌套。
     implementation project(':server')
 }

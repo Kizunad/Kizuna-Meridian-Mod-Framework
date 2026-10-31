@@ -15,7 +15,7 @@
 - **简易操作与 3D 内景规划**：基础入口选择来源、目标与配方来引导真元；独立 3D 经脉世界 Addon 尚属规划，拟提供内景铺带与多方块交互，并共用同一运行规则。
 - **权威存档与校验**：寿命、伤势、局部真元和成长不由客户端或功法包另建账本；额外反作弊只提供服务端扩展接口。
 
-首个客户端与单机适配目标为 **Minecraft 1.20.1 / Fabric / Java 17 / owo-lib**。服务端核心可用 Java、Rust 或其他支持该 Protobuf 契约的语言实现，不要求共享 Rust 库或使用 JNI。各实现遵守相同消息语义与行为验收；传输、身份认证及世界接入由宿主提供，Protobuf 本身不执行身体规则。
+首个客户端与单机适配目标为 **Minecraft 26.2 / Fabric / Java 25 / owo-lib**。服务端核心可用 Java、Rust 或其他支持该 Protobuf 契约的语言实现，不要求共享 Rust 库或使用 JNI。各实现遵守相同消息语义与行为验收；传输、身份认证及世界接入由宿主提供，Protobuf 本身不执行身体规则。
 
 窗口与通用交互参考 [Kizuna's Inventory UI Framework](https://github.com/Kizunad/Kizuna-Inventory-UI-Framework)，框架化边界参考 [Kizuna's Botany Framework](https://github.com/Kizunad/Kizuna-Botany-Framework)。本仓库未复制它们的运行时源码或资源。
 
@@ -38,7 +38,7 @@
 
 ## 当前可运行的检查
 
-文档检查需要 Python 3.10 或更新版本，无第三方 Python 依赖；数据层测试需要本机安装 JDK 17。Gradle Wrapper 使用 8.14.6，首次运行会下载 Gradle 和测试依赖。
+文档检查需要 Python 3.10 或更新版本，无第三方 Python 依赖；数据层测试需要本机安装 JDK 25；Gradle 守护进程同样运行在 JDK 25 上，由 `gradle/gradle-daemon-jvm.properties` 指定，Gradle 自动查找本机已安装的 JDK 25。Gradle Wrapper 使用 9.8.0，首次运行会下载 Gradle 和测试依赖。
 
 ```bash
 python3 scripts/wiki.py check
