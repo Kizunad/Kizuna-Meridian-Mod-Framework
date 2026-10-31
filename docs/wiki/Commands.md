@@ -55,7 +55,7 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 | `/meridian body status [<target>]` | 0 | Human | 玩家显示人体动作与数值摘要，末行是负重；目标是类人生物时显示类人身体快照（Threatening 经 Human 的公开入口提供） |
 | `/meridian body status [<target>] full` | 2 | Debug（经 Human 的公开入口） | 完整身体明细；超长时写入服务器运行目录下的 `logs/meridian/` |
 | `/meridian body tissue <id> [<target>]` | 0 | Human | 单个组织的耐力与恢复；组织名可补全 |
-| `/meridian body heal [<targets>] [all\|health\|stamina]` | 2 | Debug | `all` 同时补满真元 |
+| `/meridian body heal [<targets>] [all\|health\|stamina]` | 2 | Debug | `health` 只补部位血量，不补组织和器官；`stamina` 清除疲劳；`all` 补满部位、组织和器官，清除疲劳，并补满真元 |
 | `/meridian body heal [<targets>] limb <part> [<amount>]` | 2 | Debug | 只治疗一个部位 |
 | `/meridian body revive [<targets>]` | 2 | Debug | 复活已判死的身体 |
 
