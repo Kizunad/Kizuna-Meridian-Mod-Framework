@@ -56,7 +56,7 @@ python3 "scripts/wiki.py" check
 | `client/build/libs/kizuna-meridian-mod-framework-client-0.1.0-SNAPSHOT.jar` | 客户端生成消息与协议资源 |
 | `server/build/libs/kizuna-meridian-mod-framework-server-0.1.0-SNAPSHOT.jar` | 服务端身体计算、处理器、生成消息与协议资源 |
 | `build/distributions/kizuna-meridian-mod-framework-0.1.0-SNAPSHOT-proto.zip` | 跨语言契约包 |
-| `fabric/build/libs/kizuna-meridian-mod-framework-fabric-0.1.0-SNAPSHOT.jar` | Fabric 模组 `meridian_framework`（[指令注册点](Commands.md)）；开发运行用 `fabric/build/devlibs/` 下的 `-dev` JAR |
+| `fabric/build/libs/kizuna-meridian-mod-framework-fabric-0.1.0-SNAPSHOT.jar` | Fabric 模组 `meridian_framework`（[指令注册点](Commands.md)与 Protobuf 字节通道）；26.2 不重映射，开发运行直接用这个 JAR |
 
 两端 JAR 均包含原路径 `.proto` 和 `META-INF/kizuna_meridian/protocol/meridian-v1.desc`；ZIP 包含 `.proto` 与 `descriptors/meridian-v1.desc`。描述集包含导入与源码信息。根任务 `verifyProtocolArtifacts` 检查三份产物内的协议与当前源码一致，并验证客户端未带入服务端身体实现，随根工程 `check` 执行。
 
@@ -85,6 +85,15 @@ python3 "scripts/wiki.py" check
 | 独立 `CommandReceipt` 字节 | 宿主内部保存成功回执 | 可信调用者、请求 ID、已解码命令及提交结果一致性；推进命令必须附带 `time_advance` 结算记录 |
 
 `MeridianProtocol.encodeRequest/decodeRequest` 和 `encodeResponse/decodeResponse` 交换整个消息的原始 Protobuf 字节，不外包 JSON、字符串长度或 `writeDelimitedTo` 前缀。每次调用接收一个已经由宿主分帧的完整消息；网络通道和分片策略尚未注册。**1 MiB 是此编解码器的上限，不表示 Minecraft 的任何单包通道可以直接承载 1 MiB；宿主必须遵守实际传输层的更小限制。**
+
+### Fabric 字节通道
+
+`fabric` 模块的 `dev.kizuna.meridian.fabric.ProtobufChannel` 供附属在 Minecraft 自定义载荷上收发自己的 Protobuf 消息。
+构造时给出通道 ID 与读入限长，通道 ID、限长与编解码只在这一个实例里定义，发送端和接收端共用它。
+载荷只带序列化后的字节，不规定消息类型；按哪条消息解析、解析失败怎样处理由收包方决定。读入超过限长属于协议错误，
+连接由原版断开；写出不检查限长，由发送方用有限字段保证。附属在 `onInitialize` 里按用到的方向调用
+`registerClientbound()` 或 `registerServerbound()`（两端都要调用），再用 `type()` 登记收包回调，用 `payload(bytes)` 发送。
+此通道不经过 `MeridianProtocol`，不提供分片、认证或请求授权。
 
 查询 `request_id` 只关联结果；变更请求另外把它纳入去重键，两者都不证明身份、权限或目标归属。完整快照包含内部结构与寿命，不可当作公开广播投影。请求没有上传快照或直接设置 HP、余额、寿命的入口；寿元支出是必须独立授权并执行核心规则的意图。
 
