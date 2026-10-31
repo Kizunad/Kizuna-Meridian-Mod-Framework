@@ -81,10 +81,28 @@ public final class MeridianCommands {
         void build(LiteralArgumentBuilder<CommandSourceStack> node, CommandBuildContext context);
     }
 
+    /** /meridian watch &lt;频道&gt; 之后的开关方向；字面量就是玩家输入的 on 或 off。 */
+    public enum WatchSwitch {
+        ON("on"),
+        OFF("off");
+
+        private final String literal;
+
+        WatchSwitch(String literal) {
+            // 枚举顺序就是频道下字面量的建树和补全顺序。
+            this.literal = literal;
+        }
+
+        public String literal() {
+            // 建树时作为频道下的字面量，文档和测试按同一输入引用。
+            return literal;
+        }
+    }
+
     /** /meridian watch &lt;频道&gt; on|off [&lt;targets&gt;] 的执行入口；省略目标时 targets 只有执行者本人。 */
     @FunctionalInterface
     public interface WatchChannel {
-        int watch(CommandSourceStack source, Collection<? extends Entity> targets, boolean enabled)
+        int watch(CommandSourceStack source, Collection<? extends Entity> targets, WatchSwitch watchSwitch)
                 throws CommandSyntaxException;
     }
 
@@ -236,8 +254,9 @@ public final class MeridianCommands {
         for (Map.Entry<String, WatchRegistration> entry : WATCH_CHANNELS.entrySet()) {
             WatchRegistration registration = entry.getValue();
             LiteralArgumentBuilder<CommandSourceStack> channelNode = Commands.literal(entry.getKey());
-            channelNode.then(watchToggle("on", true, registration.channel()));
-            channelNode.then(watchToggle("off", false, registration.channel()));
+            for (WatchSwitch watchSwitch : WatchSwitch.values()) {
+                channelNode.then(watchToggle(watchSwitch, registration.channel()));
+            }
             channelNode.requires(requirement(registration.permission()));
             watchNode.then(channelNode);
             watchPermission = Math.min(watchPermission, registration.permission());
@@ -246,12 +265,12 @@ public final class MeridianCommands {
         return new BuiltBranch(watchNode, watchPermission);
     }
 
-    private static LiteralArgumentBuilder<CommandSourceStack> watchToggle(String literal, boolean enabled,
+    private static LiteralArgumentBuilder<CommandSourceStack> watchToggle(WatchSwitch watchSwitch,
                                                                          WatchChannel channel) {
         // on 与 off 共用同一个可选目标形状，频道实现只看开关方向和最终目标集合。
-        LiteralArgumentBuilder<CommandSourceStack> toggle = Commands.literal(literal);
+        LiteralArgumentBuilder<CommandSourceStack> toggle = Commands.literal(watchSwitch.literal());
         optionalEntities(toggle, (parent, targets) -> parent.executes(context ->
-                channel.watch(context.getSource(), targets.resolve(context), enabled)));
+                channel.watch(context.getSource(), targets.resolve(context), watchSwitch)));
         return toggle;
     }
 

@@ -32,8 +32,9 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
         context.assertTrue(completions(server, operator, "meridian qi ")
                         .containsAll(List.of(AlphaProbeAddon.NAME, BetaProbeAddon.NAME)),
                 "同一二级节点下两个附属的子树没有同时补全");
+        List<String> switches = completions(server, operator, "meridian watch alpha_probe ");
         context.assertTrue(completions(server, operator, "meridian watch ").contains(AlphaProbeAddon.NAME)
-                        && completions(server, operator, "meridian watch alpha_probe ").containsAll(List.of("on", "off")),
+                        && switches.containsAll(List.of("on", "off")),
                 "watch 频道或开关没有补全");
 
         // 可选目标：x <word> 走省略目标分支；单词位置写的是合法 UUID 时也按单词解析；x <target> <word> 才指定他人。
@@ -56,10 +57,10 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
 
         // 观察频道的开关与可选目标同样生效。
         context.assertTrue(run(server, asSelf, "meridian watch alpha_probe on") == COMMAND_SUCCEEDED
-                        && AlphaProbeAddon.lastWatchEnabled && targeted(self),
+                        && AlphaProbeAddon.lastWatchSwitch == MeridianCommands.WatchSwitch.ON && targeted(self),
                 "watch on 没有作用于执行者");
         context.assertTrue(run(server, asSelf, "meridian watch alpha_probe off " + otherId) == COMMAND_SUCCEEDED
-                        && !AlphaProbeAddon.lastWatchEnabled && targeted(other),
+                        && AlphaProbeAddon.lastWatchSwitch == MeridianCommands.WatchSwitch.OFF && targeted(other),
                 "watch off 没有作用于指定目标");
         context.succeed();
     }
@@ -91,7 +92,7 @@ public final class MeridianCommandsGameTest implements FabricGameTest {
                 "同名三级节点没有报错");
         context.assertTrue(expect(IllegalStateException.class, () ->
                         MeridianCommands.registerWatchChannel(AlphaProbeAddon.NAME, MeridianCommands.PLAYER,
-                                (source, targets, enabled) -> 1)) != null,
+                                (source, targets, watchSwitch) -> 1)) != null,
                 "同名观察频道没有报错");
         context.assertTrue(expect(IllegalArgumentException.class, () ->
                         MeridianCommands.register(MeridianCommands.Branch.WATCH, "direct", MeridianCommands.PLAYER,

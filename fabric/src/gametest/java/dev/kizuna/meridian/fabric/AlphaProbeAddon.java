@@ -11,7 +11,7 @@ public final class AlphaProbeAddon implements ModInitializer {
     static final String NAME = "alpha_probe";
     static volatile Collection<? extends Entity> lastTargets;
     static volatile String lastWord;
-    static volatile boolean lastWatchEnabled;
+    static volatile MeridianCommands.WatchSwitch lastWatchSwitch;
 
     @Override
     public void onInitialize() {
@@ -25,9 +25,9 @@ public final class AlphaProbeAddon implements ModInitializer {
                         }))));
 
         // 频道只记录最后一次开关，验证 watch 下的补全与执行都来自登记。
-        MeridianCommands.registerWatchChannel(NAME, MeridianCommands.PLAYER, (source, targets, enabled) -> {
+        MeridianCommands.registerWatchChannel(NAME, MeridianCommands.PLAYER, (source, targets, watchSwitch) -> {
             lastTargets = targets;
-            lastWatchEnabled = enabled;
+            lastWatchSwitch = watchSwitch;
             return targets.size();
         });
     }

@@ -10,7 +10,7 @@ Meridian 的全部服务端指令都挂在 `/meridian` 一个根下，由 Framew
 |---|---|
 | `register(Branch, name, permission, Subtree)` | 在某个二级节点下登记一个三级节点；`Subtree` 收到的是已经建好的三级字面量，只往下添加参数和执行入口 |
 | `registerBranchCommand(Branch, permission, Command)` | 让二级节点自身可执行，例如 `/meridian opening`；每个二级节点只能有一个 |
-| `registerWatchChannel(channel, permission, WatchChannel)` | 登记 `/meridian watch <channel> on\|off [<targets>]` 的频道；`watch` 下不接受直接挂子树 |
+| `registerWatchChannel(channel, permission, WatchChannel)` | 登记 `/meridian watch <channel> on\|off [<targets>]` 的频道，执行时收到开关方向 `WatchSwitch.ON`/`OFF` 与最终目标集合；`watch` 下不接受直接挂子树 |
 | `optionalEntity` / `optionalEntities` / `optionalPlayers` | 生成「省略目标作用于自己、指定目标要权限 2」的两条分支，见[可选目标](#可选目标) |
 
 约定：
