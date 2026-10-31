@@ -95,6 +95,18 @@ python3 "scripts/wiki.py" check
 `registerClientbound()` 或 `registerServerbound()`（两端都要调用），再用 `type()` 登记收包回调，用 `payload(bytes)` 发送。
 此通道不经过 `MeridianProtocol`，不提供分片、认证或请求授权。
 
+`ProtobufChannel.unframed(id, maxBytes)` 建立不带长度前缀的通道：载荷就是包里剩余的全部字节，读入不按限长断开连接。
+收包方先调用 `accepts(payload)`，空包与超过限长的包直接丢弃，不交给解码器。
+
+身体界面与身体宿主之间的六条 `meridian:*` 通道定义在 `MeridianChannels`，宿主附属与界面附属都从这里取，
+通道 ID 与限长只有这一份。六条通道都不带长度前缀；首次使用该类时两个方向一并登记，与模组初始化顺序无关。
+
+| 通道 | 方向 | 读入限长 |
+| --- | --- | --- |
+| `meridian:body_view_request` | 客户端 → 服务端 | 4096 字节 |
+| `meridian:gathering_request` / `meridian:opening_request` | 客户端 → 服务端 | `MeridianProtocol.MAX_PAYLOAD_BYTES` |
+| `meridian:body_view` / `meridian:gathering_response` / `meridian:opening_response` | 服务端 → 客户端 | `MeridianProtocol.MAX_PAYLOAD_BYTES` |
+
 查询 `request_id` 只关联结果；变更请求另外把它纳入去重键，两者都不证明身份、权限或目标归属。完整快照包含内部结构与寿命，不可当作公开广播投影。请求没有上传快照或直接设置 HP、余额、寿命的入口；寿元支出是必须独立授权并执行核心规则的意图。
 
 两端均可使用以下生成消息 API；服务端接收到字节后，通过 `MeridianProtocol` 执行业务格式校验，再进入处理器授权：
