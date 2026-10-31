@@ -11,11 +11,13 @@ client/                 客户端 Gradle 子项目
 server/                 服务端 Gradle 子项目
   src/main/java/        身体模型、计算、协议校验与宿主处理器
   src/test/java/        服务端整体回归测试
+fabric/                 Fabric 模组 meridian_framework：/meridian 指令注册点
+  src/gametest/         注册点 GameTest 与两个测试附属
 shared/src/main/proto/  两端共用的 Protobuf 定义
 docs/wiki/              文档源
 ```
 
-`client` 与 `server` 分别构建 Java 库 JAR，根工程统一运行构建和检查。`shared/` 是协议源目录，不是第三个 Gradle 子项目；两端从同一份 `.proto` 独立生成消息，客户端无需依赖服务端实现。
+`client` 与 `server` 分别构建 Java 库 JAR，`fabric` 用 Loom 构建 Fabric 模组，根工程统一运行构建和检查。`fabric` 只放 Minecraft 接线（目前是[指令注册点](Commands.md)），依赖 `server` 取错误文案，不放身体计算。`shared/` 是协议源目录，不是第三个 Gradle 子项目；两端从同一份 `.proto` 独立生成消息，客户端无需依赖服务端实现。
 
 `client/` 提供生成的协议消息类，具体界面归独立 Meridian UI Addon，人体专属表现归 Human-UI；Human Fabric 提供玩家网络、生命周期和存档适配。3D 经脉世界规划为独立 Addon。权威模型、纯计算、编解码校验、处理器及整体测试位于 `server/`，本框架两端为普通 Java 库。现有八仓按适用端整套必装，源码依赖仍按职责单向组织。
 

@@ -19,7 +19,7 @@
 
 窗口与通用交互参考 [Kizuna's Inventory UI Framework](https://github.com/Kizunad/Kizuna-Inventory-UI-Framework)，框架化边界参考 [Kizuna's Botany Framework](https://github.com/Kizunad/Kizuna-Botany-Framework)。本仓库未复制它们的运行时源码或资源。
 
-工程按 `client/`、`server/` 两个 Gradle 子项目组织，`shared/` 存放共用 Protobuf 定义。当前客户端产物只包含生成消息，身体计算和请求处理位于服务端；目录与接入状态见[架构与职责](docs/wiki/Architecture.md)。
+工程按 `client/`、`server/`、`fabric/` 三个 Gradle 子项目组织，`shared/` 存放共用 Protobuf 定义；`fabric/` 是 Fabric 模组 `meridian_framework`，提供 `/meridian` [指令注册点](docs/wiki/Commands.md)。当前客户端产物只包含生成消息，身体计算和请求处理位于服务端；目录与接入状态见[架构与职责](docs/wiki/Architecture.md)。
 
 ## 文档入口
 
@@ -32,6 +32,7 @@
 | 为框架编写功法附属 JAR | [功法扩展](docs/wiki/Technique-Addons.md) |
 | 简易经脉操作与 3D 内景规划 | [经脉操作与 3D Addon](docs/wiki/Inner-World.md) |
 | Fabric 单机和 Bong 的接入边界 | [宿主接入](docs/wiki/Host-Integration.md) |
+| 全部 `/meridian` 指令与登记方式 | [指令](docs/wiki/Commands.md) |
 | 请求、校验和私有反作弊接口 | [协议与安全扩展](docs/wiki/Protocol-and-Security.md) |
 | 版本、缺包、升级和发布 | [兼容性](docs/wiki/Compatibility.md) |
 
@@ -45,7 +46,7 @@ python3 scripts/wiki.py check
 ./gradlew test
 ```
 
-前者检查文档结构与链接，后者聚合两端测试，目前整体回归位于 `server/src/test/java/`。Fabric 运行时构建命令将在接入工程加入后提供。
+前者检查文档结构与链接，后者聚合两端测试，目前整体回归位于 `server/src/test/java/`。指令注册点的 GameTest 运行 `./gradlew :fabric:runGametest`。
 
 完整 Java 构建运行 `./gradlew build`，分别生成客户端和服务端库 JAR，并执行查询/变更授权、并发与重试、原子回滚、回执恢复及协议产物检查。构建路径和单端命令见[协议与构建](docs/wiki/Protocol-and-Security.md)。跨语言查询已完成一次性验证，临时脚本已移除；本次变更尚无其他语言宿主验证，范围见[宿主接入](docs/wiki/Host-Integration.md)。
 

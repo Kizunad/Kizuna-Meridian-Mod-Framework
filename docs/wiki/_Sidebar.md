@@ -18,6 +18,7 @@
 - [附属包接入](Addon-Integration.md)
 - [经脉操作与 3D Addon](Inner-World.md)
 - [单机与 Bong 接入](Host-Integration.md)
+- [指令](Commands.md)
 - [协议与安全扩展](Protocol-and-Security.md)
 - [版本与兼容性](Compatibility.md)
 - [实施路线](Roadmap.md)

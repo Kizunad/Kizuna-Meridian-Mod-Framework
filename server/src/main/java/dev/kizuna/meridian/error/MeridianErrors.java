@@ -583,6 +583,33 @@ public final class MeridianErrors {
         }
     }
 
+    /** Fabric 模块 /meridian 注册点的装配错误；附属登记冲突在初始化时直接失败。 */
+    public static final class Commands {
+        public static final String NODE_NAME = "指令节点名只能由小写字母、数字和下划线组成";
+        public static final String PERMISSION = "指令权限等级必须在 0 到 4 之间";
+        public static final String WATCH_BRANCH = "watch 节点由注册点按频道生成，附属只能登记频道";
+        public static final String SUBTREE_REQUIRED = "指令子树、执行入口或观察频道不能为空";
+
+        private Commands() {
+            // 文案只描述登记失败原因，指令执行反馈由各附属自行给出。
+        }
+
+        public static String duplicateNode(String branch, String name) {
+            // 同名三级节点由两个附属各自登记时无法判断归属，报出完整路径便于定位。
+            return "/meridian " + branch + " " + name + " 已由其他附属登记";
+        }
+
+        public static String duplicateBranchCommand(String branch) {
+            // 二级节点自身的执行入口只能有一个归属。
+            return "/meridian " + branch + " 的执行入口已由其他附属登记";
+        }
+
+        public static String duplicateWatchChannel(String channel) {
+            // 观察频道名同时是 watch 下的字面量，重名会让开关落到另一个附属。
+            return "观察频道 " + channel + " 已由其他附属登记";
+        }
+    }
+
     /** 核心明确拒绝寿元支出的原因；不能替代线协议 FailureCode。 */
     public enum LifespanRejectionReason {
         BODY_DEAD,

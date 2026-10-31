@@ -55,6 +55,7 @@ python3 "scripts/wiki.py" check
 | `client/build/libs/kizuna-meridian-mod-framework-client-0.1.0-SNAPSHOT.jar` | 客户端生成消息与协议资源 |
 | `server/build/libs/kizuna-meridian-mod-framework-server-0.1.0-SNAPSHOT.jar` | 服务端身体计算、处理器、生成消息与协议资源 |
 | `build/distributions/kizuna-meridian-mod-framework-0.1.0-SNAPSHOT-proto.zip` | 跨语言契约包 |
+| `fabric/build/libs/kizuna-meridian-mod-framework-fabric-0.1.0-SNAPSHOT.jar` | Fabric 模组 `meridian_framework`（[指令注册点](Commands.md)）；开发运行用 `fabric/build/devlibs/` 下的 `-dev` JAR |
 
 两端 JAR 均包含原路径 `.proto` 和 `META-INF/kizuna_meridian/protocol/meridian-v1.desc`；ZIP 包含 `.proto` 与 `descriptors/meridian-v1.desc`。描述集包含导入与源码信息。根任务 `verifyProtocolArtifacts` 检查三份产物内的协议与当前源码一致，并验证客户端未带入服务端身体实现，随根工程 `check` 执行。
 
@@ -157,7 +158,7 @@ EOF
 
 ## Java 错误与异常定义
 
-运行时代码的错误文案、异常创建和业务拒绝类型统一在 `server/src/main/java/dev/kizuna/meridian/error/MeridianErrors.java`。同一文件内按 `Data`、`Protocol`、`Host` 分组，分别存放数据、协议与宿主诊断；字段名称、触发条件、处理分支及日志输出位置仍留在原来的业务流程中，便于按执行顺序阅读。
+运行时代码的错误文案、异常创建和业务拒绝类型统一在 `server/src/main/java/dev/kizuna/meridian/error/MeridianErrors.java`。同一文件内按 `Data`、`Protocol`、`Host`、`Commands` 分组，分别存放数据、协议、宿主与指令注册点诊断；字段名称、触发条件、处理分支及日志输出位置仍留在原来的业务流程中，便于按执行顺序阅读。
 
 - 无效输入继续使用 `IllegalArgumentException`；宿主或事务状态不一致使用 `IllegalStateException`；显式必填引用为空继续使用 `NullPointerException`。解码异常保留原始原因链。
 - 核心寿元业务拒绝使用 `MeridianErrors.LifespanRejected` 和 `MeridianErrors.LifespanRejectionReason`，由处理器映射为公开失败类别。寿元算子不再内嵌异常定义。

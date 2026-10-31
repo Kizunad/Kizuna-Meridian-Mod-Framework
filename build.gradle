@@ -1,5 +1,6 @@
 plugins {
     id 'base'
+    alias(libs.plugins.fabric.loom) apply false
     alias(libs.plugins.protobuf) apply false
 }
 
@@ -8,7 +9,8 @@ allprojects {
     version = '0.1.0-SNAPSHOT'
 }
 
-subprojects {
+// client、server 是共用协议的纯 Java 两端库；fabric 是 Loom 模组工程，配置在自己的构建脚本里。
+configure([project(':client'), project(':server')]) {
     apply plugin: 'java-library'
     apply plugin: 'com.google.protobuf'
 
@@ -72,8 +74,8 @@ tasks.register('generateProto') {
 
 tasks.register('test') {
     group = 'verification'
-    description = '运行客户端与服务端的整体回归测试。'
-    dependsOn ':client:test', ':server:test'
+    description = '运行客户端、服务端与 Fabric 模块的整体回归测试。'
+    dependsOn ':client:test', ':server:test', ':fabric:test'
 }
 
 tasks.register('protocolZip', Zip) {
@@ -86,11 +88,11 @@ tasks.register('protocolZip', Zip) {
 }
 
 tasks.named('assemble') {
-    dependsOn ':client:assemble', ':server:assemble', tasks.named('protocolZip')
+    dependsOn ':client:assemble', ':server:assemble', ':fabric:assemble', tasks.named('protocolZip')
 }
 
 tasks.named('clean') {
-    dependsOn ':client:clean', ':server:clean'
+    dependsOn ':client:clean', ':server:clean', ':fabric:clean'
 }
 
 tasks.register('verifyProtocolArtifacts') {
@@ -147,5 +149,5 @@ tasks.register('verifyProtocolArtifacts') {
 }
 
 tasks.named('check') {
-    dependsOn ':client:check', ':server:check', tasks.named('verifyProtocolArtifacts')
+    dependsOn ':client:check', ':server:check', ':fabric:check', tasks.named('verifyProtocolArtifacts')
 }

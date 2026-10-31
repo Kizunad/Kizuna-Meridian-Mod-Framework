@@ -28,7 +28,7 @@
 
 `DamageResolution.meridian_injuries` 使用既有健康接口记录渗漏/断裂，不虚构经脉 HP。`DebugQi.SET_INVENTORY` 允许已授权 OP 精确设置内腔或外壁的数量与密度，仍检查体积和在途预约；全身模式的数量为总量，按扣除在途预约后的可用体积分配，不能把库存单独灌到含在途的总容量。总量检查容许 `1e-8` 体积余量，逐条写入时截到该经脉自身可用体积。
 
-状态：已实现 Java 17 不可变数据值与构造校验，源码位于 `server/src/main/java/dev/kizuna/meridian/core/`；对外数据交换采用 [Protobuf v1](Protocol-and-Security.md)，源码在 `shared/src/main/proto/`，生成类与核心值之间由服务端的 `BodyProtobuf` 映射。工程分为 `client`、`server` 两个 Gradle 子项目；`meridian-core` 是服务端数据层的职责名称，没有独立子项目或已发布依赖坐标。
+状态：已实现 Java 17 不可变数据值与构造校验，源码位于 `server/src/main/java/dev/kizuna/meridian/core/`；对外数据交换采用 [Protobuf v1](Protocol-and-Security.md)，源码在 `shared/src/main/proto/`，生成类与核心值之间由服务端的 `BodyProtobuf` 映射。工程分为 `client`、`server` 两个 Java 库子项目和 Fabric 模组子项目 `fabric`；`meridian-core` 是服务端数据层的职责名称，没有独立子项目或已发布依赖坐标。
 
 这一层没有 Minecraft、Fabric、Bong 或具体功法依赖。数据值本身不推进时间、不执行配方、不写存档，也不授权外部调用者覆盖权威身体。Java 模型是参考实现，其他语言按同一 Protobuf 与行为契约接入；纯算子及[变更入口](Protocol-and-Security.md)已支持寿元支出、时间推进、真元运输、器官加工、组织做功及寿尽释放。
 

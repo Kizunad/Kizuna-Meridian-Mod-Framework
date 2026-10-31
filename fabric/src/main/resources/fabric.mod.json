@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "meridian_framework",
+  "version": "${version}",
+  "name": "Kizuna's Meridian Mod Framework",
+  "description": "Meridian 公共 Minecraft 接线：统一 /meridian 指令注册点",
+  "authors": ["Kizunad"],
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["dev.kizuna.meridian.fabric.MeridianFabric"]
+  },
+  "depends": {
+    "java": ">=17",
+    "minecraft": "1.20.1",
+    "fabricloader": ">=0.16.10",
+    "fabric-api": "*"
+  }
+}

@@ -4,7 +4,7 @@
 
 - Meridian 的 Framework、Human、UI、Items、Vanilla-Damage、Vanilla-Healing、Human-UI、Progression 和 Kizuna-Players-Animation 在各自适用端均为整套必装模块；拆仓仅用于代码管理与职责划分。不得添加缺少某个 Addon 时的替代路径、降级、可选依赖判断或对应测试/smoke；缺少必需接线应明确报错。运行时必装不意味着跨越客户端/服务端边界或让底层源码依赖具体人体实现。
 - 沟通、文档和说明性注释使用简体中文，公开标识符使用清晰英文。
-- 项目按 `client/`、`server/` 两个 Gradle 子项目组织，`shared/src/main/proto/` 保存共用协议。`client/` 提供客户端协议，实际身体查看与操作界面归独立 Meridian UI Addon；权威身体计算、请求处理与宿主适配放在 `server/`，客户端不依赖服务端实现。
+- 项目按 `client/`、`server/`、`fabric/` 三个 Gradle 子项目组织，`shared/src/main/proto/` 保存共用协议。`fabric/` 是 Fabric 模组 `meridian_framework`，只放 `/meridian` 指令注册点这类 Minecraft 接线，不放身体计算。`client/` 提供客户端协议，实际身体查看与操作界面归独立 Meridian UI Addon；权威身体计算、请求处理与宿主适配放在 `server/`，客户端不依赖服务端实现。
 - 具体生物的剪影、骨架、肌肉、器官模型和经脉空间位置归生物附属；框架只定义通用 Protobuf 展示契约。UI 附属按资源进行分层、选取、聚焦与信息展示，模型位置不改变权威拓扑和资源账本。
 - 3D 经脉世界拆为独立 Addon 管理。简易操作与 3D 铺带通过同一 Protobuf 契约引导真元，共用核心的通路、成本和执行规则；Addon 只持有展示与编辑数据，不另建身体账本。
 - 可读性优先：代码必须能按业务逻辑顺序从上到下读通，清楚呈现输入校验、计算、状态变更和结果处理。命名直接表达用途，分支与逻辑阶段保持清晰；不要为缩短代码、复用或抽象而拆散连续逻辑、隐藏控制流，迫使读者在多个文件间反复跳转。逻辑无法顺畅读懂时，必须先整理再交付，不能仅以功能正确作为完成标准。

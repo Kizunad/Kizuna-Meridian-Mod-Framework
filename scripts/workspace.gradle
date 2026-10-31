@@ -65,9 +65,15 @@ ext.kizunaWorkspace = workspace
 // settings 中应用时再注册同目录的版本目录 libs，并把工作区查询交给本构建的每个工程脚本。
 if (rootProject instanceof org.gradle.api.initialization.ProjectDescriptor) {
     def settingsObject = settings
-    workspace.includeSource = { String id, Map<String, Object> substitutions ->
+    workspace.includeSource = { String id, Map<String, Object> listedSubstitutions ->
         // 相邻仓库按清单目录组合构建；键为清单模块路径（根工程写空串），值为本仓依赖声明里使用的坐标。
         // 值也可以是坐标列表：第一个是依赖声明与完整装配使用的坐标，其余只登记替换，例如 Loom 按真实坐标重新加入的框架库。
+        // 清单写了 coordinate 的模块（如 Framework fabric）总是一并登记：几乎所有下游按坐标依赖它，
+        // 而同一仓库在嵌套组合里只按最先登记的规则替换，不能要求每个仓库的 settings 都列出它。
+        Map<String, Object> substitutions = new LinkedHashMap<>(listedSubstitutions)
+        repositoryById(id).modules.findAll { it.coordinate && !substitutions.containsKey(it.path) }.each { module ->
+            substitutions.put(module.path, module.coordinate)
+        }
         settingsObject.includeBuild(directoryOf(id)) { includedBuild ->
             includedBuild.dependencySubstitution { DependencySubstitutions rules ->
                 substitutions.each { String modulePath, Object coordinates ->

@@ -1,5 +1,5 @@
 {
-  "description": "Kizuna 工作区统一装配清单：仓库按跨仓构建顺序排列。directory 为相对代码根目录的仓库目录，project 为根工程名（也是产物文件名前缀）；模块 path 为空表示根工程。candidate 是 Windows 候选的装入方式，runtime 是 full-assembly.gradle 的开发运行装入方式，ownProjects 列出同仓内仍按文件装入该模块的子工程。",
+  "description": "Kizuna 工作区统一装配清单：仓库按跨仓构建顺序排列。directory 为相对代码根目录的仓库目录，project 为根工程名（也是产物文件名前缀）；模块 path 为空表示根工程。candidate 是 Windows 候选的装入方式，runtime 是 full-assembly.gradle 的开发运行装入方式，ownProjects 列出同仓内仍按文件装入该模块的子工程，coordinate 是模块以源码组合时的默认替换坐标（includeSource 未列出该模块时自动登记）。",
   "version": "0.1.0-SNAPSHOT",
   "repositories": [
     {
@@ -8,7 +8,8 @@
       "project": "kizuna-meridian-mod-framework",
       "modules": [
         {"path": "server", "candidate": "library"},
-        {"path": "client", "candidate": "library"}
+        {"path": "client", "candidate": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod", "coordinate": "dev.kizuna.meridian:fabric"}
       ]
     },
     {

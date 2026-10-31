@@ -1,0 +1,64 @@
+plugins {
+    id 'fabric-loom'
+}
+
+description = 'Meridian 公共 Minecraft 接线：统一 /meridian 指令注册点。'
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.fabricmc.net/' }
+}
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(libs.versions.java.get()) }
+}
+
+base.archivesName = "${rootProject.name}-${project.name}"
+
+dependencies {
+    minecraft libs.minecraft
+    mappings loom.officialMojangMappings()
+    modImplementation libs.fabric.loader
+    modImplementation libs.fabric.api
+    // 登记错误文案统一在服务端库的 MeridianErrors；服务端库由各附属按装配清单装入，这里不嵌套。
+    implementation project(':server')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = libs.versions.java.get().toInteger()
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Jar).configureEach {
+    from(rootProject.files('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md'))
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') { expand version: project.version }
+}
+
+sourceSets {
+    gametest {
+        compileClasspath += sourceSets.main.compileClasspath + sourceSets.main.output
+        runtimeClasspath += sourceSets.main.runtimeClasspath + sourceSets.main.output
+    }
+}
+
+loom {
+    mods {
+        meridian_framework { sourceSet sourceSets.main }
+        meridian_framework_test { sourceSet sourceSets.gametest }
+    }
+    runs {
+        // 注册点回归只装本模组和两个测试附属，不读完整装配：要验证的正是未登记附属的节点不存在。
+        gametest {
+            server()
+            name 'Meridian Framework GameTest'
+            source sourceSets.gametest
+            runDir 'build/gametest'
+            vmArg '-Dfabric-api.gametest'
+            vmArg '-Dfabric-api.gametest.report-file=build/gametest-results.xml'
+        }
+    }
+}
