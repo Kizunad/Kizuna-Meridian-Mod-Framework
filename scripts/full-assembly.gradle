@@ -10,9 +10,6 @@ repositories { maven { url = 'https://maven.wispforest.io/releases' } }
 
 def workspace = kizunaWorkspace
 Map<String, String> sourceModules = workspace.sourceModules ?: [:]
-// Healing 已通过 composite 构建提供 Damage 的源码输出，避免重复加载。
-def sourceProvidedRepositories = ['kizuna-meridian-vanilla-healing-addon': ['vanilla-damage']]
-def skippedRepositories = sourceProvidedRepositories.getOrDefault(rootProject.name, [])
 def runtimeArtifacts = []
 workspace.manifest.repositories.each { repository ->
     repository.modules.findAll { it.runtime }.each { module ->
@@ -20,9 +17,6 @@ workspace.manifest.repositories.each { repository ->
         boolean sameRepository = repository.project == rootProject.name
         List<String> ownProjects = module.ownProjects ?: []
         if (sameRepository && !ownProjects.contains(project.name)) {
-            return
-        }
-        if (skippedRepositories.contains(repository.id)) {
             return
         }
 
