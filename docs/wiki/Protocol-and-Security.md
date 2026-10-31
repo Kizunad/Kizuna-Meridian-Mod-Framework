@@ -26,6 +26,7 @@
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
 | `HealthMessages` / `HealthProtobuf` / `server.BodyDamageHandler` | protoc 生成健康消息、有界编解码与纯伤害计算装配接口 |
 | `HealthHostMessages` / `HealthHostProtobuf` / `server.BodyHealthHost` | 可信跨附属查询与健康意图交换，复用核心命令与失败码 |
+| `server.EnvironmentHostEntrypoint` | 区域环境与世界时钟的字节入口接口；消息由宿主定义，调用方按接口类型取 entrypoint |
 | `TimeProtobuf` / `server.BodyTimeSource<C>` | 可信时间计划的编解码、结果校验；宿主提供目标、倍率与模式 |
 | `EnvironmentProtobuf` | 环境供给、交换及回执的编解码；版本、区间、逐类额度和合计速率校验 |
 | `IntakeProtobuf` / `core.OrganIntake` / `environment.EnvironmentAbsorption` | 通用器官摄入、环境真实扣账与共享区间预算；可信来源由 `BodyEnvironmentSource` 提供 |

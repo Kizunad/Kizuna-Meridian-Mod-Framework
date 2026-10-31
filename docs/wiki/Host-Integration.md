@@ -55,6 +55,8 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 独立伤害适配可以通过 `BodyHealthHost.exchange(byte[])` 交换 `health_host.proto` 消息，查询实际身份绑定后向同一宿主提交健康命令。`ConfirmBodyDeath` 用于已经发生的外部死亡，保留局部 HP 与伤势。只有明确 `unbound = true` 允许寻找其他宿主；拒绝和重复认领均停止，不换账本。Fabric entrypoint 与原版事件接线属于独立 Addon，核心仍不依赖 Minecraft。详细可信边界见[健康宿主交换](Health-Effects.md#跨附属健康宿主交换)。
 
+区域环境与世界时钟同样走字节入口：宿主在 Fabric entrypoint `meridian_environment_host` 登记 `server.EnvironmentHostEntrypoint` 的实现，其他附属按这个接口类型取出后直接调用 `exchange(byte[])`，不反射查方法。消息格式由宿主定义（Human 的 `environment_host.proto`），Framework 只提供接口。
+
 `BodyTransactionStore.transact(bodyId, work)` 在隔离同一身体所有写入的事务内恰好调用一次 `work`，不能通过自动重跑回调解决冲突。事务提供只读快照、成功回执查找、`environmentSource(sourceId)` 与 `stage(next, receipt)`。环境读取还须隔离其他身体对同一来源的写入；只锁身体不足以防止共享预算透支。stage 是暂存，正常返回后才能把身体、来源库存、预算与回执一起发布。任何提交前故障必须一起回滚；成功返回必须意味着提交完成。权限/会话撤销及环境位置历史由宿主与提交边界协调，数据库类型不进入框架接口。
 
 `InMemoryBodyStore` 是可运行的参考适配，也实现 `BodySnapshotReader`。无环境历史时用快照与回执初始化；已有时间、开脉或健康命令的环境释放时，通过三参数构造器恢复 `QiInventory` 默认释放账户。区域摄入使用四参数构造器，同时传入完整 `List<EnvironmentQiSource>`；有摄入回执却缺少对应来源时拒绝恢复，不重放回执扣账。`environmentSource(id)` 读取已提交来源，`renewEnvironmentWindow` 用预期版本续窗，保留库存。`environmentQi()` 表示时间、开脉和健康命令共用的默认释放账户；摄入区间加工损耗直接回选定区域，不重复进入该账户。它用一个监视器隔离所有身体与来源，拒绝嵌套写事务、跨线程及回调结束后使用事务。它不写磁盘，没有 TTL；正式宿主需实现原子持久化、恢复及实际并发策略。

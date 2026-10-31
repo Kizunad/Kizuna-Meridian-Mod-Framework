@@ -37,6 +37,7 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 - 输入正好是某个字面量时，Brigadier 只走这个字面量。例如 `/meridian body status full` 中的 `full` 不会被当成玩家名。
 - 可选目标后面跟着单词参数（经脉、组织）时，`x <word>` 两条分支都能完整解析。Brigadier 在两条都成功时取先注册的那条，所以 `x <word>` 总是按省略目标解析，`x <target> <word>` 才是指定他人。即使单词位置写的是一个合法 UUID 或在线玩家名，也是如此。
 - 注册点 GameTest 覆盖了这两种写法。
+- 补全的已知限制：目标写成玩家名或 UUID，并且已经打出其后的空格时（如 `/meridian qi get Steve `），Brigadier 不再补全下一个参数；写成选择器（`@s`、`@p` 等）时补全正常。执行不受影响。
 
 全部参数都可 Tab 补全：
 
@@ -90,7 +91,7 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 
 | 指令 | 权限 | 登记附属 | 说明 |
 |---|---|---|---|
-| `/meridian humanoid spawn <species> [<realm>] [<pos>]` | 2 | Threatening | 物种取全部已登记物种（含假人），境界为 `mortal\|wandering_qi\|true_qi`，省略时用物种表的默认档位 |
+| `/meridian humanoid spawn <species> [<realm>] [<pos>]` | 2 | Threatening | 物种写实体 ID，补全列出七种内置生人和全部登记物种（含假人 `meridian_humanoid_dummy:dummy`），原版生物可省略命名空间；境界为 `mortal\|wandering_qi\|true_qi`。省略境界时，登记物种用物种表的默认档位，内置生人按自然出生抽档；省略位置时用命令源位置。登记物种可由所属附属提供放置钩子 |
 | `/meridian humanoid realm <targets> <realm>` | 2 | Dummy | 改换假人境界；目标不是假人时报错 |
 | `/meridian humanoid aggro <A> <B> [mutual\|oneway]` | 2 | Debug | 让 A 与 B 互相（或单向）敌对 |
 | `/meridian humanoid aggro clear [<targets>]` | 2 | Debug | 清除敌对链接 |
