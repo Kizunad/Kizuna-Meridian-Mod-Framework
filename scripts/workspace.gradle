@@ -65,10 +65,11 @@ if (rootProject instanceof org.gradle.api.initialization.ProjectDescriptor) {
     def settingsObject = settings
     workspace.includeSource = { String id, Map<String, Object> listedSubstitutions ->
         // 相邻仓库按清单目录组合构建；键为清单模块路径（根工程写空串），值为本仓依赖声明里使用的坐标。
-        // 值也可以是坐标列表：第一个是依赖声明与完整装配使用的坐标，其余只登记替换，例如 Loom 按真实坐标重新加入的框架库。
+        // 值也可以是坐标列表：第一个是依赖声明与完整装配使用的坐标，其余只登记替换。
         // 清单写了 coordinate 的模块（Framework fabric 与它的 server 库）总是追加登记该真实坐标：几乎所有下游按坐标
-        // 依赖 fabric，Loom 重映射它时又按真实坐标加回 server；同一仓库在嵌套组合里只按最先登记的规则替换，
-        // 不能要求每个仓库的 settings 都列出它们。已列出的坐标保持在前，依赖声明与完整装配不受影响。
+        // 依赖 fabric，同一仓库在嵌套组合里只按最先登记的规则替换，不能要求每个仓库的 settings 都列出它们。
+        // 组合内 fabric 对 server 按工程依赖解析，没有依赖请求 server 的真实坐标时，这条替换规则不起作用。
+        // 已列出的坐标保持在前，依赖声明与完整装配不受影响。
         Map<String, Object> substitutions = new LinkedHashMap<>(listedSubstitutions)
         repositoryById(id).modules.findAll { it.coordinate }.each { module ->
             List<String> coordinates = substitutions.containsKey(module.path)
