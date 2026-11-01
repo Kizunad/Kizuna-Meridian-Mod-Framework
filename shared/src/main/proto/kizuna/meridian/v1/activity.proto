@@ -40,6 +40,7 @@ message ActivityEffort {
   oneof module { string tissue_id = 1; string organ_id = 2; }
   double watts = 3;
   double seconds = 4;
+  bool training = 5; // 可信训练负荷；仅组织定义声明训练参数时允许使用。
 }
 message CompleteMeridian { string meridian_id = 1; double added_volume = 2; }
 message ActivityRecipe { string organ_id = 1; OrganRecipe recipe = 2; }

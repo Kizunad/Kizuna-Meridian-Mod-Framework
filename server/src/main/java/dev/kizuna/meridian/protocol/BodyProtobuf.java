@@ -148,7 +148,7 @@ public final class BodyProtobuf {
 
     private static BodyMessages.TissueDefinition toTissue(Anatomy.TissueDefinition value) {
         // 组织拥有自己的类型、承载参数和端口，不归经脉持有。
-        return BodyMessages.TissueDefinition.newBuilder()
+        var builder = BodyMessages.TissueDefinition.newBuilder()
                 .setId(value.id().value())
                 .setDisplayName(value.displayName())
                 .setKind(value.kind().value())
@@ -158,17 +158,39 @@ public final class BodyProtobuf {
                 .setRecoveryHalfLifeSeconds(value.recoveryHalfLifeSeconds())
                 .setCapacity(CapabilityProtobuf.toCapacity(value.capacity()))
                 .addAllPorts(value.ports().stream().map(BodyProtobuf::toPort).toList())
-                .addAllTags(value.tags().stream().map(DefinitionId::value).toList())
-                .build();
+                .addAllTags(value.tags().stream().map(DefinitionId::value).toList());
+        if (value.training() != null) {
+            builder.setTraining(toTraining(value.training()));
+        }
+        return builder.build();
     }
 
     private static Anatomy.TissueDefinition fromTissue(BodyMessages.TissueDefinition value) {
         // 类型按命名空间恢复，肌肉和第三方组织走相同规则。
+        Anatomy.TissueTraining training = null;
+        if (value.hasTraining()) {
+            training = fromTraining(value.getTraining());
+        }
         return new Anatomy.TissueDefinition(new Anatomy.TissueId(value.getId()), value.getDisplayName(),
                 new DefinitionId(value.getKind()), new Anatomy.PartId(value.getPartId()), value.getMaxHp(),
                 value.getFatigueCapacity(), value.getPortsList().stream().map(BodyProtobuf::fromPort).toList(),
                 CapabilityProtobuf.fromCapacity(value.getCapacity()), value.getRecoveryHalfLifeSeconds(),
-                value.getTagsList().stream().map(DefinitionId::new).toList());
+                value.getTagsList().stream().map(DefinitionId::new).toList(), training);
+    }
+
+    private static BodyMessages.TissueTraining toTraining(Anatomy.TissueTraining value) {
+        // 训练参数只在内容明确声明时编码，旧组织继续使用缺省状态。
+        return BodyMessages.TissueTraining.newBuilder()
+                .setMaximumGrowth(value.maximumGrowth())
+                .setConsolidationHalfLifeSeconds(value.consolidationHalfLifeSeconds())
+                .setWorkJoulesPerGrowth(value.workJoulesPerGrowth())
+                .build();
+    }
+
+    private static Anatomy.TissueTraining fromTraining(BodyMessages.TissueTraining value) {
+        // 参数由核心 record 重新检查正数与有限性，协议映射不复制业务规则。
+        return new Anatomy.TissueTraining(value.getMaximumGrowth(), value.getConsolidationHalfLifeSeconds(),
+                value.getWorkJoulesPerGrowth());
     }
 
     private static BodyMessages.OrganDefinition toOrgan(Anatomy.OrganDefinition value) {
@@ -299,12 +321,15 @@ public final class BodyProtobuf {
                 .setId(value.id().value())
                 .setHp(value.hp())
                 .setFatigue(value.fatigue())
+                .setTrainingGrowth(value.trainingGrowth())
+                .setPendingTrainingLoad(value.pendingTrainingLoad())
                 .build();
     }
 
     private static AnatomyState.Tissue fromTissueState(BodyMessages.TissueState value) {
         // 状态绑定组织实例，不绑定组织类型，避免同种肌肉共享伤势。
-        return new AnatomyState.Tissue(new Anatomy.TissueId(value.getId()), value.getHp(), value.getFatigue());
+        return new AnatomyState.Tissue(new Anatomy.TissueId(value.getId()), value.getHp(), value.getFatigue(),
+                value.getTrainingGrowth(), value.getPendingTrainingLoad());
     }
 
     public static BodyMessages.OrganState toOrganState(AnatomyState.Organ value) {

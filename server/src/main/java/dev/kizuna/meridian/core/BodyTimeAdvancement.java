@@ -135,13 +135,14 @@ public final class BodyTimeAdvancement {
         long elapsedMillis = interval.elapsedMillis();
         boolean died = interval.outcome() == LifeOutcome.DIED;
         // 恢复和年龄共用已经裁到寿尽的区间；没有逐秒循环，也不会把死亡后的时间用于恢复。
-        List<AnatomyState.Tissue> tissues = TissueRecovery.advance(body, plan, elapsedMillis);
+        List<AnatomyState.Tissue> recoveredTissues = TissueRecovery.advance(body, plan, elapsedMillis);
+        List<AnatomyState.Tissue> trainedTissues = TissueTraining.advance(body, plan, elapsedMillis, recoveredTissues);
         double updatedAgeSeconds = ageAfterInterval(vitality, plan, interval);
         IntervalResources resources = advanceResources(body, plan, interval);
 
         requireProgress(body, interval, resources);
 
-        body.tissues = tissues;
+        body.tissues = trainedTissues;
         body.meridians = resources.meridians();
         body.organs = resources.organs();
         body.transits = resources.transits();

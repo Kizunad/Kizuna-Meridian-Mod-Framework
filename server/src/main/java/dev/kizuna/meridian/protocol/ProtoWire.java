@@ -83,6 +83,7 @@ final class ProtoWire {
                     || field.getFullName().equals("kizuna.meridian.v1.BodySnapshot.opening_task")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganDefinition.endurance")
                     || field.getFullName().equals("kizuna.meridian.v1.OrganDefinition.intake")
+                    || field.getFullName().equals("kizuna.meridian.v1.TissueDefinition.training")
                     || field.getFullName().equals("kizuna.meridian.v1.Connection.passive_qi_flow")
                     || field.getFullName().equals("kizuna.meridian.v1.BreathingProfile.body_action")
                     || field.getFullName().equals("kizuna.meridian.v1.OpeningPolicyDecision.next_check_delay_millis")
