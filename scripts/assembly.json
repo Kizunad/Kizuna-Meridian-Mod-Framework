@@ -200,6 +200,17 @@
       ]
     },
     {
+      "id": "peddler-legwork",
+      "directory": "Kizuna-Meridian-Peddler-Legwork-Addon",
+      "project": "kizuna-meridian-peddler-legwork-addon",
+      "modules": [
+        {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
+        {"path": "shared"},
+        {"path": "verification"},
+        {"path": "gametest"}
+      ]
+    },
+    {
       "id": "burden",
       "directory": "Kizuna-Meridian-Burden-Addon",
       "project": "kizuna-meridian-burden-addon",
