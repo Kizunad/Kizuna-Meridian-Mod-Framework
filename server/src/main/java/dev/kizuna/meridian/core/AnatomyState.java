@@ -18,12 +18,20 @@ public final class AnatomyState {
         }
     }
 
-    public record Tissue(Anatomy.TissueId id, double hp, double fatigue) {
+    public record Tissue(Anatomy.TissueId id, double hp, double fatigue,
+                         double trainingGrowth, double pendingTrainingLoad) {
+        public Tissue(Anatomy.TissueId id, double hp, double fatigue) {
+            // 未启用训练的既有组织没有成长或待巩固负荷。
+            this(id, hp, fatigue, 0, 0);
+        }
+
         public Tissue {
-            // HP 与疲劳分别保存，不从其中一个推测另一个。
+            // HP、疲劳和训练进度分别保存，不从其中一个推测另一个。
             MeridianErrors.required(id, Data.TISSUE_ID_REQUIRED);
             DataChecks.nonNegative(hp, "组织 HP");
             DataChecks.nonNegative(fatigue, "组织疲劳");
+            DataChecks.nonNegative(trainingGrowth, "组织耐力成长");
+            DataChecks.nonNegative(pendingTrainingLoad, "待巩固训练负荷");
         }
     }
 

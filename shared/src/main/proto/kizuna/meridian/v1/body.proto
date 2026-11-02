@@ -100,6 +100,13 @@ message TissueDefinition {
   reserved "rest_recovery_per_second";
   double recovery_half_life_seconds = 10; // 未被动作使用时，剩余疲劳减半所需模拟秒；0 禁用自然恢复。
   repeated string tags = 11; // namespace:path；每个定义最多 16 个且不重复，框架不解释语义。
+  TissueTraining training = 12; // 可缺省；声明后才允许可信活动记录训练负荷。
+}
+
+message TissueTraining {
+  double maximum_growth = 1; // 耐力成长上限，0.5 表示基础耐力最多增加一半。
+  double consolidation_half_life_seconds = 2; // 待巩固负荷减半所需模拟秒数。
+  double work_joules_per_growth = 3; // 完整成长 1.0 所需的巩固做功焦耳数。
 }
 
 message TissueCapacity {
@@ -179,6 +186,8 @@ message TissueState {
   string id = 1;
   optional double hp = 2;
   optional double fatigue = 3;
+  double training_growth = 4; // 已巩固的耐力成长比例。
+  double pending_training_load = 5; // 尚未巩固的训练做功，单位为焦耳。
 }
 
 message OrganState {

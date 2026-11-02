@@ -65,13 +65,30 @@ public final class Anatomy {
     /** kind 使用内容标识区分肌肉、皮肤、骨骼等，不封闭第三方组织类型。 */
     public record TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
                                    double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity,
-                                   double recoveryHalfLifeSeconds, List<DefinitionId> tags) {
+                                   double recoveryHalfLifeSeconds, List<DefinitionId> tags,
+                                   TissueTraining training) {
         public TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
                                 double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity,
                                 double recoveryHalfLifeSeconds) {
             // 未使用标签选择的内容仍可声明完整组织能力。
             this(id, displayName, kind, partId, maxHp, fatigueCapacity, ports, capacity,
-                    recoveryHalfLifeSeconds, List.of());
+                    recoveryHalfLifeSeconds, List.of(), null);
+        }
+
+        public TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
+                                double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity,
+                                double recoveryHalfLifeSeconds, TissueTraining training) {
+            // 训练参数不改变既有标签入口，内容可以只声明成长而不提供额外标签。
+            this(id, displayName, kind, partId, maxHp, fatigueCapacity, ports, capacity,
+                    recoveryHalfLifeSeconds, List.of(), training);
+        }
+
+        public TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
+                                double maxHp, double fatigueCapacity, List<Port> ports, TissueCapacity capacity,
+                                double recoveryHalfLifeSeconds, List<DefinitionId> tags) {
+            // 保留带标签的旧构造入口；训练能力由新参数显式声明。
+            this(id, displayName, kind, partId, maxHp, fatigueCapacity, ports, capacity,
+                    recoveryHalfLifeSeconds, tags, null);
         }
 
         public TissueDefinition(TissueId id, String displayName, DefinitionId kind, PartId partId,
@@ -94,6 +111,16 @@ public final class Anatomy {
             ports = List.copyOf(ports);
             tags = List.copyOf(tags);
             DataChecks.validateTags(tags);
+        }
+    }
+
+    public record TissueTraining(double maximumGrowth, double consolidationHalfLifeSeconds,
+                                 double workJoulesPerGrowth) {
+        public TissueTraining {
+            // 成长、巩固半衰期和做功换算都必须是正数，避免配置出永不生效的训练能力。
+            DataChecks.positive(maximumGrowth, "组织耐力成长上限");
+            DataChecks.positive(consolidationHalfLifeSeconds, "组织训练巩固半衰期");
+            DataChecks.positive(workJoulesPerGrowth, "组织训练做功换算");
         }
     }
 

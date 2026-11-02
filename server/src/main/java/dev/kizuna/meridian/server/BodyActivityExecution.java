@@ -369,9 +369,17 @@ public final class BodyActivityExecution {
                 || effort.getWatts() <= 0 || effort.getSeconds() <= 0) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
+        boolean trainingLoad = effort.getTraining();
         if (effort.hasTissueId()) {
-            return TissueCapabilities.exert(body, new TissueCapabilities.Exertion(new Anatomy.TissueId(effort.getTissueId()),
-                    0, effort.getWatts(), effort.getSeconds()));
+            var request = new TissueCapabilities.Exertion(new Anatomy.TissueId(effort.getTissueId()),
+                    0, effort.getWatts(), effort.getSeconds());
+            if (trainingLoad) {
+                return TissueCapabilities.exertTraining(body, request);
+            }
+            return TissueCapabilities.exert(body, request);
+        }
+        if (trainingLoad) {
+            throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
         var id = new Anatomy.OrganId(effort.getOrganId());
         var definition = body.structure().organs().stream().filter(item -> item.id().equals(id)).findFirst().orElseThrow();

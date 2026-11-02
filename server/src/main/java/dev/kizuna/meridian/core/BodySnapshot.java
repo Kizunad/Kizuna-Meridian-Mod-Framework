@@ -112,6 +112,14 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
             Anatomy.TissueDefinition definition = tissues.get(state.id());
             DataChecks.atMost(state.hp(), definition.maxHp(), "组织 HP");
             DataChecks.atMost(state.fatigue(), definition.fatigueCapacity(), "组织疲劳");
+            Anatomy.TissueTraining training = definition.training();
+            if (training == null) {
+                if (state.trainingGrowth() != 0 || state.pendingTrainingLoad() != 0) {
+                    throw MeridianErrors.invalid(Data.TISSUE_TRAINING_STATE);
+                }
+            } else {
+                DataChecks.atMost(state.trainingGrowth(), training.maximumGrowth(), "组织耐力成长");
+            }
         }
         for (var state : organStates) {
             Anatomy.OrganDefinition definition = organs.get(state.id());

@@ -61,6 +61,7 @@ final class TissueRecovery {
             // 极小恢复量被浮点吞掉时拒绝整段，交由宿主合并区间后再结算。
             throw MeridianErrors.rejectTime(TimeRejectionReason.NUMERIC_LIMIT);
         }
-        return new AnatomyState.Tissue(tissue.id(), tissue.hp(), updatedFatigue);
+        return new AnatomyState.Tissue(tissue.id(), tissue.hp(), updatedFatigue,
+                tissue.trainingGrowth(), tissue.pendingTrainingLoad());
     }
 }

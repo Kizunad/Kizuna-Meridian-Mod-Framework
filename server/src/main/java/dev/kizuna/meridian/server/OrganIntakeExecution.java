@@ -61,7 +61,8 @@ final class OrganIntakeExecution {
                     if (combinedFatigue > fatigueLimit) {
                         throw MeridianErrors.rejectIntake(FailureCode.TISSUE_LOAD_EXCEEDED);
                     }
-                    combinedTissues.set(index, new AnatomyState.Tissue(tissueId, settled.hp(), combinedFatigue));
+                    combinedTissues.set(index, new AnatomyState.Tissue(tissueId, settled.hp(), combinedFatigue,
+                            settled.trainingGrowth(), settled.pendingTrainingLoad()));
                 }
             }
             updatedBody = new BodySnapshot(updatedBody.schemaVersion(), updatedBody.id(), updatedBody.template(),

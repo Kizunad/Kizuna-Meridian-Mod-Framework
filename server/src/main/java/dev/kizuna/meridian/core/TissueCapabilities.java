@@ -14,6 +14,8 @@ import static dev.kizuna.meridian.core.CapabilityCurves.Multipliers;
 
 /** 组织自身的能力与做功规则；不决定具体武器伤害、移速或世界动作。 */
 public final class TissueCapabilities {
+    private enum LoadKind { NORMAL, TRAINING }
+
     private TissueCapabilities() {
         // 查询派生能力不写账；做功必须走权威命令与事务。
     }
@@ -106,7 +108,12 @@ public final class TissueCapabilities {
         double availableStrengthNewtons = scaledCapacity(baseCapacity.strengthNewtons(), capacityMultiplier,
                 modifiers.strength());
         double availableBurstWatts = scaledCapacity(baseCapacity.burstWatts(), capacityMultiplier, modifiers.burst());
-        double availableEnduranceJoules = scaledCapacity(baseCapacity.enduranceJoules(), capacityMultiplier,
+        double trainingMultiplier = 1;
+        if (tissueDefinition.training() != null) {
+            trainingMultiplier += tissueState.trainingGrowth();
+        }
+        double trainedEnduranceJoules = baseCapacity.enduranceJoules() * trainingMultiplier;
+        double availableEnduranceJoules = scaledCapacity(trainedEnduranceJoules, capacityMultiplier,
                 modifiers.endurance());
 
         return new Anatomy.TissueCapacity(
@@ -146,6 +153,16 @@ public final class TissueCapabilities {
     }
 
     public static BodySnapshot exert(BodySnapshot body, Exertion request) {
+        // 普通做功只增加疲劳，不产生训练负荷。
+        return exert(body, request, LoadKind.NORMAL);
+    }
+
+    public static BodySnapshot exertTraining(BodySnapshot body, Exertion request) {
+        // 训练做功同时增加疲劳和待巩固负荷，入口只供可信活动执行器调用。
+        return exert(body, request, LoadKind.TRAINING);
+    }
+
+    private static BodySnapshot exert(BodySnapshot body, Exertion request, LoadKind kind) {
         // 1. 检查身体能否接受新动作；做功只记一次疲劳，不推进时钟或执行世界动作。
         if (body.vitality().dead() || body.vitality().remainingSeconds() == 0) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.BODY_DEAD);
@@ -157,12 +174,15 @@ public final class TissueCapabilities {
         // 2. 做功量 = 功率 × 时间，单位为焦耳；无法表示的工作量不能作为免费动作接受。
         Anatomy.TissueId tissueId = request.tissueId();
         Anatomy.TissueDefinition tissueDefinition = requireTissueDefinition(body, tissueId);
+        if (kind == LoadKind.TRAINING && tissueDefinition.training() == null) {
+            throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
+        }
         Anatomy.TissueCapacity availableCapacity = availableDuring(body, request);
         double requestedWorkJoules = validateLoad(request, availableCapacity);
 
-        // 4. 只增加目标组织的疲劳，完整候选仍由宿主事务原子提交。
+        // 4. 按可信入口决定是否记录训练负荷，完整候选仍由宿主事务原子提交。
         List<AnatomyState.Tissue> updatedTissues = exertedTissues(body, tissueDefinition, availableCapacity,
-                requestedWorkJoules);
+                requestedWorkJoules, kind);
         return new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
                 body.partStates(), updatedTissues, body.organStates(), body.meridianStates(), body.transits(),
                 body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
@@ -191,7 +211,8 @@ public final class TissueCapabilities {
     }
 
     private static List<AnatomyState.Tissue> exertedTissues(BodySnapshot body, Anatomy.TissueDefinition definition,
-                                                           Anatomy.TissueCapacity available, double workJoules) {
+                                                            Anatomy.TissueCapacity available, double workJoules,
+                                                            LoadKind kind) {
         // 用掉有效耐力的几成就消耗剩余疲劳容量的几成，修正不会扩大疲劳账户上限。
         var updatedTissues = new ArrayList<AnatomyState.Tissue>();
         Anatomy.TissueId tissueId = definition.id();
@@ -201,7 +222,7 @@ public final class TissueCapabilities {
                 continue;
             }
 
-            updatedTissues.add(exertedTissue(tissueState, definition, available, workJoules));
+            updatedTissues.add(exertedTissue(tissueState, definition, available, workJoules, kind));
         }
 
         return updatedTissues;
@@ -213,11 +234,12 @@ public final class TissueCapabilities {
         double workJoules = validateLoad(request, available);
         Anatomy.TissueDefinition definition = body.tissueDefinitions().get(request.tissueId());
         AnatomyState.Tissue state = body.tissues.get(body.tissuePosition(request.tissueId()));
-        return exertedTissue(state, definition, available, workJoules);
+        return exertedTissue(state, definition, available, workJoules, LoadKind.NORMAL);
     }
 
     private static AnatomyState.Tissue exertedTissue(AnatomyState.Tissue state, Anatomy.TissueDefinition definition,
-                                                    Anatomy.TissueCapacity available, double workJoules) {
+                                                     Anatomy.TissueCapacity available, double workJoules,
+                                                     LoadKind kind) {
         // 用掉有效耐力的比例转换为剩余疲劳容量的比例，临时倍率不扩大疲劳账户。
         double fatigueCapacity = definition.fatigueCapacity();
         double consumedEnduranceRatio = workJoules / available.enduranceJoules();
@@ -228,7 +250,26 @@ public final class TissueCapabilities {
         if (!Double.isFinite(updatedFatigue) || updatedFatigue <= state.fatigue()) {
             throw MeridianErrors.rejectTransport(TransportRejectionReason.NUMERIC_LIMIT);
         }
-        return new AnatomyState.Tissue(state.id(), state.hp(), updatedFatigue);
+        double pendingTrainingLoad = trainingLoad(kind, state, workJoules);
+        return new AnatomyState.Tissue(state.id(), state.hp(), updatedFatigue,
+                state.trainingGrowth(), pendingTrainingLoad);
+    }
+
+    private static double trainingLoad(LoadKind kind, AnatomyState.Tissue state, double workJoules) {
+        // 普通做功保留原账，训练做功只在可信入口追加实际焦耳数。
+        if (kind == LoadKind.TRAINING) {
+            return addTrainingLoad(state, workJoules);
+        }
+        return state.pendingTrainingLoad();
+    }
+
+    private static double addTrainingLoad(AnatomyState.Tissue state, double workJoules) {
+        // 待巩固账记录实际做功，成长减速在巩固时按当前剩余上限计算。
+        double pendingTrainingLoad = state.pendingTrainingLoad() + workJoules;
+        if (!Double.isFinite(pendingTrainingLoad)) {
+            throw MeridianErrors.rejectTransport(TransportRejectionReason.NUMERIC_LIMIT);
+        }
+        return pendingTrainingLoad;
     }
 
     public static BodySnapshot exertAll(BodySnapshot body, List<Exertion> loads) {

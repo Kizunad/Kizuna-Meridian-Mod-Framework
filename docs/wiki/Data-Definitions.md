@@ -59,7 +59,8 @@
 | 定义与状态 | 基础字段 |
 |---|---|
 | `Anatomy.PartDefinition` / `AnatomyState.Part` | 部位名称、最大 HP / 当前 HP |
-| `Anatomy.TissueDefinition` / `AnatomyState.Tissue` | 类型、归属部位、最大 HP、疲劳容量、端口、基础力量 N/爆发功率 W/耐力 J、疲劳恢复半衰期 / 当前 HP 与疲劳 |
+| `Anatomy.TissueDefinition` / `AnatomyState.Tissue` | 类型、归属部位、最大 HP、疲劳容量、端口、基础力量 N/爆发功率 W/耐力 J、疲劳恢复半衰期、可选训练参数 / 当前 HP、疲劳、耐力成长与待巩固负荷 |
+| `Anatomy.TissueTraining` | 最大成长、待巩固负荷半衰期和完整成长所需做功；只由组织定义声明 |
 | `Anatomy.OrganDefinition` / `AnatomyState.Organ` | 类型、归属部位、最大 HP、端口、液态参照体积容量、共享吞吐、可选摄入/耐力能力 / 当前 HP、缓存、可选加工任务、疲劳 J |
 | `Anatomy.OrganEndurance` | 基础耐力 J、最大功率 W、恢复半衰期秒；器官独立预算，不复用组织疲劳 |
 | `Anatomy.OrganIntakeCapability` | 正数 `maxQiPerSecond`，元/模拟秒；独立于端口吞吐，保存在实际构型中 |
@@ -181,4 +182,4 @@ Java 参考查询处理器已通过宿主注入的读取策略和快照来源提
 
 `InMemoryBodyStore` 已提供区域外部入账 `creditEnvironmentSource`、无区域释放进入默认账户的 `creditReleasedQi` 与默认释放账户原子归位 `transferReleasedToSource`：保留属性和相态，增加来源版本，不改供给窗口和已用预算。宿主负责释放来源、位置归属、去重与续窗调度，详见[宿主接入](Host-Integration.md)。
 
-尚未实现：框架自身的磁盘/网络与实体死亡宿主适配、组织真元缓存与增益、通用主动多段线路调度、环境退化、长期训练/相变升境、知识/控制任务、成长来源审计及区域入账之外的其他世界资源事务。独立 Human 的 Fabric 接线不改变框架的宿主无关边界。
+尚未实现：框架自身的磁盘/网络与实体死亡宿主适配、组织真元缓存与增益、通用主动多段线路调度、环境退化、相变升境、知识/控制任务、成长来源审计及区域入账之外的其他世界资源事务。独立 Human 的 Fabric 接线不改变框架的宿主无关边界。
