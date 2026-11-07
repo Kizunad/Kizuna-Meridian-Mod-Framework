@@ -23,6 +23,7 @@ message MeridianOperationView {
   bool enabled = 9;
   string hint = 10; // 不满足条件时的调整方向。
   bool active = 11;
+  string primary_meter_id = 12; // 主图展示的进度 ID；非空时必须引用本卡片中的 meter。
 }
 message MeridianOperationMeter {
   string id = 1;

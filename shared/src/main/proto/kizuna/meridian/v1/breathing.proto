@@ -17,9 +17,10 @@ message BreathingProfile {
   AutomaticBreathing automatic = 9; // 生物内容声明的自动规则；客户端不能提交费用、效率或停止线。
 }
 message AutomaticBreathing {
-  double minimum_stamina_ratio = 1;
+  double minimum_stamina_ratio = 1; // 首次启动门槛及自动暂停线。
   double capture_efficiency = 2; // 相同真实接触的采样体积系数，必须严格小于手动的1。
   BreathingActionReference body_action = 3; // 仅占用呼吸器官和呼吸组织，不占用注意组织。
+  double resume_stamina_ratio = 4; // 暂停后的恢复线，必须大于暂停线且不超过 1。
 }
 message BreathingActionReference {
   string id = 1;
@@ -68,6 +69,7 @@ message BreathingView {
   bool automatic = 16;
   double automatic_minimum_stamina_ratio = 17; // 自动停止线，来自可信生物内容。
   double automatic_capture_efficiency = 18; // 自动真实接触的采样效率，来自可信生物内容。
+  double automatic_resume_stamina_ratio = 19; // 自动等待结束的恢复线，来自可信生物内容。
 }
 // 真实三维局部坐标 [0,1]，入口为 (0.5,0.4,0.5)。旋转相机不改变粒子位置。
 // 这些粒子是摄入机会，不是环境账本中的可复制资源。

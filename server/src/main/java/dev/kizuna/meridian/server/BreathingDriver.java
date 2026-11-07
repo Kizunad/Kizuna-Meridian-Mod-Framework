@@ -103,8 +103,7 @@ final class BreathingDriver<C> {
             var automaticProfile = profile.getAutomatic();
             var reference = automaticProfile.getBodyAction();
             var definition = actions.find(reference.getId(), reference.getVersion()).orElse(null);
-            valid &= positive(automaticProfile.getMinimumStaminaRatio()) && automaticProfile.getMinimumStaminaRatio() <= 1
-                    && positive(automaticProfile.getCaptureEfficiency()) && automaticProfile.getCaptureEfficiency() < 1;
+            valid &= validAutomaticThresholds(automaticProfile);
             valid &= definition != null;
             if (definition != null) {
                 valid &= definition.getTissueIdsList().equals(List.of(profile.getRespiratoryTissueId()))
@@ -132,6 +131,16 @@ final class BreathingDriver<C> {
         return Double.isFinite(value) && value > 0;
     }
 
+    private static boolean validAutomaticThresholds(AutomaticBreathing automatic) {
+        // 恢复线必须高于暂停线，避免自然恢复一小步后立即再次暂停。
+        double minimumStamina = automatic.getMinimumStaminaRatio();
+        double resumeStamina = automatic.getResumeStaminaRatio();
+        double efficiency = automatic.getCaptureEfficiency();
+        return positive(minimumStamina)
+                && positive(resumeStamina) && resumeStamina > minimumStamina && resumeStamina <= 1
+                && positive(efficiency) && efficiency < 1;
+    }
+
     void control(BreathControl requested) {
         // 同序号重放不能重新开始或反复消费；迟到控制也不能覆盖新输入。
         if (requested.getSequence() <= control.getSequence()) {
@@ -154,7 +163,7 @@ final class BreathingDriver<C> {
             if (!profile.hasAutomatic()) {
                 throw MeridianErrors.rejectGathering(INTAKE_UNSUPPORTED);
             }
-            if (view(session.read()).getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
+            if (view(session.read()).getStaminaRatio() < automaticStartStaminaRatio()) {
                 throw MeridianErrors.rejectGathering(MODULE_UNAVAILABLE);
             }
         }
@@ -194,7 +203,7 @@ final class BreathingDriver<C> {
                     && view(session.read()).getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
                 throw MeridianErrors.rejectGathering(MODULE_UNAVAILABLE);
             }
-            updateBodyAction(false);
+            releaseBodyAction();
             automatic = requested.getAutomatic();
             automaticWaiting = false;
             automaticAction = airLiters >= view(session.read()).getCapacityLiters() ? EXHALE : INHALE;
@@ -203,7 +212,11 @@ final class BreathingDriver<C> {
         BreathingView current = view(session.read());
         boolean usesBody = active && (automatic || (requested.getAction() == INHALE && airLiters < current.getCapacityLiters())
                 || (requested.getAction() == EXHALE && airLiters > 0));
-        updateBodyAction(usesBody);
+        if (usesBody) {
+            occupyBodyAction();
+        } else {
+            releaseBodyAction();
+        }
         // 只有占用提交成功才接受新气流输入，失败后继续沿用旧控制状态。
         control = requested;
         leaseMillis = now + INPUT_LEASE_MILLIS;
@@ -233,6 +246,14 @@ final class BreathingDriver<C> {
             status = "吐纳已中止";
             return true;
         }
+    }
+
+    private double automaticStartStaminaRatio() {
+        // 等待中的重复开始仍遵守恢复线；首次开始沿用内容声明的最低耐力。
+        if (automaticWaiting) {
+            return profile.getAutomatic().getResumeStaminaRatio();
+        }
+        return profile.getAutomatic().getMinimumStaminaRatio();
     }
 
     private void step(long now) {
@@ -270,7 +291,7 @@ final class BreathingDriver<C> {
         boolean exhaling = action == EXHALE && airLiters > 0;
         if (!inhaling && !exhaling) {
             // 停气与肺容量边界只停止人体做功；环境里的游离灵气和残余气流仍会移动。
-            updateBodyAction(false);
+            releaseBodyAction();
             session.settleManual();
             moveParticles(seconds, HOLD, before.getAirflowLitersPerSecond());
             if (action == INHALE) {
@@ -311,7 +332,13 @@ final class BreathingDriver<C> {
         double airChange = before.getAirflowLitersPerSecond() * seconds;
         airLiters = Math.max(0, Math.min(before.getCapacityLiters(), airLiters + (inhaling ? airChange : -airChange)));
         // 满吸或排空后解除占用，后续暂停时间可以恢复，不把整个打开窗口过程当成做功。
-        updateBodyAction(automatic || (inhaling ? airLiters < before.getCapacityLiters() : airLiters > 0));
+        boolean keepsBreathing = automatic || inhaling && airLiters < before.getCapacityLiters()
+                || exhaling && airLiters > 0;
+        if (keepsBreathing) {
+            occupyBodyAction();
+        } else {
+            releaseBodyAction();
+        }
         status = inhaling ? "吸气 · 引导空间气流汇入口鼻" : "呼气 · 引导空间气流向外扩散";
         BreathingView after = view(session.read());
         if (automatic && after.getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
@@ -330,7 +357,7 @@ final class BreathingDriver<C> {
 
     private void waitForAutomaticStamina(long now) {
         // 先释放膈肌占用，让框架自然恢复；自动意图保留并安排下一次阈值检查。
-        updateBodyAction(false);
+        releaseBodyAction();
         active = false;
         automatic = true;
         automaticWaiting = true;
@@ -350,17 +377,21 @@ final class BreathingDriver<C> {
             status = "呼吸器官无法工作";
             return;
         }
-        if (current.getStaminaRatio() < profile.getAutomatic().getMinimumStaminaRatio()) {
+        if (current.getStaminaRatio() < profile.getAutomatic().getResumeStaminaRatio()) {
             updatedMillis = now;
             boundaryMillis = now + STEP_MILLIS;
             return;
         }
 
-        // 达到原启动线后从当前空气量选择方向，并在新边界开始做功。
+        // 达到独立恢复线后重新占用动作，并在新边界开始做功。
         automaticWaiting = false;
         active = true;
-        automaticAction = airLiters >= current.getCapacityLiters() ? EXHALE : INHALE;
-        updateBodyAction(true);
+        if (airLiters >= current.getCapacityLiters()) {
+            automaticAction = EXHALE;
+        } else if (airLiters <= 0) {
+            automaticAction = INHALE;
+        }
+        occupyBodyAction();
         updatedMillis = now;
         boundaryMillis = now + STEP_MILLIS;
         status = "自动吐纳已恢复";
@@ -588,18 +619,32 @@ final class BreathingDriver<C> {
             capacity += entry.getAirCapacityLiters() * health;
             airflow += entry.getAirflowLitersPerSecond() * health;
         }
-        return BreathingView.newBuilder().setAvailable(true).setActive(active)
-                .setAction(automatic && active ? automaticAction : control.getAction()).setAutomatic(automatic)
-                .setAirLiters(Math.min(airLiters, capacity)).setCapacityLiters(capacity).setAirflowLitersPerSecond(airflow)
+        BreathAction action = control.getAction();
+        if (automatic && active) {
+            action = automaticAction;
+        }
+        return BreathingView.newBuilder()
+                .setAvailable(true)
+                .setActive(active)
+                .setAction(action)
+                .setAutomatic(automatic)
+                .setAirLiters(Math.min(airLiters, capacity))
+                .setCapacityLiters(capacity)
+                .setAirflowLitersPerSecond(airflow)
                 .setStaminaRatio(ratio(body, profile.getRespiratoryTissueId()))
                 .setAttentionRatio(ratio(body, profile.getAttentionTissueId()))
                 // 自动参数来自可信内容声明，客户端只显示并不能提交覆盖值。
                 .setAutomaticMinimumStaminaRatio(profile.getAutomatic().getMinimumStaminaRatio())
+                .setAutomaticResumeStaminaRatio(profile.getAutomatic().getResumeStaminaRatio())
                 .setAutomaticCaptureEfficiency(profile.getAutomatic().getCaptureEfficiency())
                 .addAllOrganIds(profile.getOrgansList().stream().map(BreathingOrgan::getOrganId).toList())
-                .addAllParticles(particles).setSequence(control.getSequence()).setStatus(status).setAbsorbedQi(absorbedQi)
+                .addAllParticles(particles)
+                .setSequence(control.getSequence())
+                .setStatus(status)
+                .setAbsorbedQi(absorbedQi)
                 .setStoredQi(storedQi)
-                .setFailure(failure).build();
+                .setFailure(failure)
+                .build();
     }
 
     private static double ratio(BodySnapshot body, String id) {
@@ -615,7 +660,7 @@ final class BreathingDriver<C> {
 
     void stop() {
         // 先结束占用再停调度；提交失败保留重试机会，不能遗留没有唤醒的活动实例。
-        updateBodyAction(false);
+        releaseBodyAction();
         active = false;
         automatic = false;
         automaticWaiting = false;
@@ -625,22 +670,34 @@ final class BreathingDriver<C> {
         status = "吐纳已结束";
     }
 
-    private void updateBodyAction(boolean used) {
-        // 动作引用在装配时验证；配置后只在状态切换提交一次启停。
-        if (!profile.hasBodyAction() || (used && bodyActionInstance != null) || (!used && bodyActionInstance == null)) {
+    private void releaseBodyAction() {
+        // 只解除本会话占用；已经停止时保持幂等，不能影响其他动作。
+        if (bodyActionInstance == null) {
             return;
         }
-        if (!used) {
-            // 中止只解除本会话实例，允许其他动作先改变身体版本。
-            session.stopManualAction(bodyActionInstance);
-            bodyActionInstance = null;
+        session.stopManualAction(bodyActionInstance);
+        bodyActionInstance = null;
+    }
+
+    private void occupyBodyAction() {
+        // 在实际做功前占用对应组织，自动模式只绑定独立的呼吸动作。
+        if (!profile.hasBodyAction() || bodyActionInstance != null) {
             return;
         }
         session.settleManual();
         String instanceId = UUID.randomUUID().toString();
-        var reference = automatic ? profile.getAutomatic().getBodyAction() : profile.getBodyAction();
-        session.execute(BodyCommand.newBuilder().setStartAction(StartAction.newBuilder().setInstanceId(instanceId)
-                .setActionId(reference.getId()).setActionVersion(reference.getVersion())));
+        BreathingActionReference reference;
+        if (automatic) {
+            reference = profile.getAutomatic().getBodyAction();
+        } else {
+            reference = profile.getBodyAction();
+        }
+        var action = StartAction.newBuilder()
+                .setInstanceId(instanceId)
+                .setActionId(reference.getId())
+                .setActionVersion(reference.getVersion())
+                .build();
+        session.execute(BodyCommand.newBuilder().setStartAction(action));
         bodyActionInstance = instanceId;
     }
 }

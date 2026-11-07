@@ -78,6 +78,8 @@ Java 执行器实现 `OpeningPolicyDecision evaluate(OpeningPolicyRequest reques
 
 `BodyViewUpdate.opening = 4` 提供可信规则选项，存在即替换、空表撤销、省略保留。`BodyViewUpdate.operations = 5` 可携带与身体同 revision 的 `MeridianOperationUpdate`。**开脉条件和进度卡由对应内容附属生成**，UI 只校验、绘制和发送意图；`enabled` 不代替服务端授权。模型、颜色、窗口和光迹归 UI 及生物展示资源。
 
+`MeridianOperationView.primary_meter_id = 12` 可声明主图展示的进度；非空时必须引用本卡片中的 meter。其余 meter 作为准备条件展示，具体图像、光环和布局由客户端负责。字段不改变启动校验、计时或资源结算。
+
 `AddonBundle.opening_rules = 7` 登记规则，`ContentDefinitionKind.MERIDIAN_OPENING_RULE = 4` 支持精确引用。注册校验命名空间、修订及动作精确依赖；不解释附属 Any。内容若依赖特定生物构型，作者须显式声明依赖。
 
 宿主能力 `meridian:opening_definitions_v1` 只承诺登记定义；`meridian:opening_runtime_v1` 承诺通用执行；器官独立耐力另要求 `meridian:organ_endurance_v1`。执行仍需与 `policy_id` 对应的可信策略。目录缺规则时新启动返回 `OPENING_RULE_NOT_FOUND`；已有任务可在原策略仍可用时继续，原策略缺失则安全暂停。

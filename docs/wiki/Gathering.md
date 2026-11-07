@@ -14,13 +14,13 @@
 
 ## 自动吐纳契约
 
-可信 `BreathingProfile.automatic` 提供停止耐力比例、接触采样效率和独立动作引用；框架不内置生物 ID。效率必须大于0且小于1，停止比例在 `(0,1]`；自动动作必须占用所声明的呼吸组织与全部呼吸器官，不能占用注意组织。缺少已声明动作属于配置错误。
+可信 `BreathingProfile.automatic` 提供暂停耐力比例、恢复耐力比例、接触采样效率和独立动作引用；框架不内置生物 ID。效率必须大于0且小于1，暂停比例必须大于0，`resume_stamina_ratio` 必须严格大于暂停比例且不超过1；缺失或非法恢复线拒绝装配。自动动作必须占用所声明的呼吸组织与全部呼吸器官，不能占用注意组织。
 
-`BreathControl.automatic` 只在 `BEGIN_BREATHING` 和 `SET_AUTOMATIC_BREATHING` 读取；返回 `BreathingView.automatic` 为权威模式。自动在实际空气边界切换吸呼，持续支付呼吸组织做功，不支付注意组织费用。低于配置停止线时，在本次费用提交后暂停做功并解除占用；自动意图保留，等待身体自然恢复到同一启动线后续跑。模式切换先结清旧区间再更换动作；不会免费补回预算。
+`BreathControl.automatic` 只在 `BEGIN_BREATHING` 和 `SET_AUTOMATIC_BREATHING` 读取；返回 `BreathingView.automatic` 为权威模式。自动在实际空气边界切换吸呼，持续支付呼吸组织做功，不支付注意组织费用。低于配置暂停线时，在本次费用提交后暂停做功并解除占用；自动意图保留，等待身体自然恢复到独立恢复线后续跑。首次启动仍使用原最低耐力门槛。模式切换先结清旧区间再更换动作；不会免费补回预算。
 
-自动模式低于停止线后进入恢复等待：`BreathingView.active=false`、`automatic=true`，`status` 说明恢复后会继续，且 `nextBoundaryMillis()` 仍提供服务端恢复检查边界。等待期间解除呼吸动作占用，只结算身体自然恢复，不模拟吸呼、粒子接触或摄入；达到同一配置启动线后重新占用动作并从当前空气量继续。服务端不能追补等待区间的做功或摄入。
+自动模式低于暂停线后进入恢复等待：`BreathingView.active=false`、`automatic=true`，`status` 说明恢复后会继续，且 `nextBoundaryMillis()` 仍提供服务端恢复检查边界。等待期间解除呼吸动作占用，只结算身体自然恢复，不模拟吸呼、粒子接触或摄入；达到配置恢复线后重新占用动作，保留暂停前吸呼方向，只有满肺或空肺时改变方向。服务端不能追补等待区间的做功或摄入。
 
-`BreathingView.automatic_minimum_stamina_ratio` 与 `automatic_capture_efficiency` 是服务器从 `BreathingProfile.automatic` 投影的只读参数。客户端可用它们显示停止线和效率说明，但不能通过 `BreathControl` 覆盖；自动仍必须沿真实粒子接触、环境扣账、炼化和运输链结算。
+`BreathingView.automatic_minimum_stamina_ratio`、`automatic_resume_stamina_ratio` 与 `automatic_capture_efficiency` 是服务器从 `BreathingProfile.automatic` 投影的只读参数。客户端可用它们显示暂停线、恢复线和效率说明，但不能通过 `BreathControl` 覆盖；自动仍必须沿真实粒子接触、环境扣账、炼化和运输链结算。
 
 自动沿同一气流、口鼻碰撞、真实环境原料扣账、炼化及运输链路；接触采样体积乘可信效率系数，客户端不能提交粒子命中或摄入证据。自动由服务器边界持续推进，低耐力等待时也会安排恢复检查；明确结束、取消自动选择、关窗或断线会撤销等待。手动仍使用750ms输入租约；自动不会因为不再按鼠标而失效。具体残卷授权和80%等人体数值归内容与宿主。
 
