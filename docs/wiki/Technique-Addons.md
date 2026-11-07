@@ -63,6 +63,11 @@
 
 `get_tissue_capability` 使用当前总倍率。`exert_tissue`、多组织做功、可信 `BodyActivity.efforts` 和连续开脉负载逐项取 `[t, t + 时长]` 内最低总倍率，检查端点、全部拐点与阶跃两侧；因此峰值瞬间不能预支之后的高能力，刚好到期的终点也参与检查。同笔活动的增删修正在做功前生效。自然疲劳恢复使用第四项 `recovery_peak` 的总倍率积分，见[恢复规则](Tissue-Recovery.md)。
 
+这里的 `t` 是提交时身体已经结算到的当前时刻；`ActivityEffort` 和 `TissueCapabilities.Exertion`
+没有未来起始偏移。分段动作由功法宿主在各段开始事件提交当前段，费用与已付进度通过同一笔
+`BodyActivity` 原子保存。提前排队或能力预检不扣费，提交成功才允许执行该段对应的世界效果。
+Framework 不负责未来队列，也不会为迟到事件倒退身体时钟。
+
 Java 参考实现使用 JVM 启动属性，在 `CapabilityModifier` 初始化时读取并固定，候选计算和回执复算保持一致。现有 TOML 仅管理环境灵气，这些身体规则不混入该配置，也不另建配置协议：
 
 | JVM 属性 | 默认值 | 约束与理由 |

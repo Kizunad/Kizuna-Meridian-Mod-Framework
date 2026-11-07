@@ -211,6 +211,17 @@
       ]
     },
     {
+      "id": "wayfarer-archery",
+      "directory": "Kizuna-Meridian-Wayfarer-Archery-Addon",
+      "project": "kizuna-meridian-wayfarer-archery-addon",
+      "modules": [
+        {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
+        {"path": "shared"},
+        {"path": "verification"},
+        {"path": "gametest"}
+      ]
+    },
+    {
       "id": "burden",
       "directory": "Kizuna-Meridian-Burden-Addon",
       "project": "kizuna-meridian-burden-addon",
