@@ -124,6 +124,12 @@ final class BodyAdvancement implements BodyView {
         return remainingModifiers(original, time, vitality);
     }
 
+    @Override
+    public List<CapabilityModifier> modifiers() {
+        // 区间内部保留原曲线，求值按当前游标处理到期，输出时统一移除。
+        return original.modifiers();
+    }
+
     static List<CapabilityModifier> remainingModifiers(BodySnapshot original, TimeCursor time,
                                                        VitalityState vitality) {
         // 到期删除与死亡清空只在输出边界应用，内部曲线评估仍按同一时刻自动失效。

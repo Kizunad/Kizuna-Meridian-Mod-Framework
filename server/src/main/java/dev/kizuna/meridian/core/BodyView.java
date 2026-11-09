@@ -15,4 +15,5 @@ interface BodyView {
     long revision();
     List<BodyAction.Active> actions();
     OpeningTask openingTask();
+    List<CapabilityModifier> modifiers();
 }

@@ -6,8 +6,8 @@ import dev.kizuna.meridian.error.MeridianErrors.Data;
 import java.util.List;
 import java.util.Optional;
 
-/** 身体保存的临时组织能力曲线；常值曲线与变值曲线共用相同规则。 */
-public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.TissueId tissueId,
+/** 身体保存的临时能力曲线；组织与器官共用身份、数量和起止规则。 */
+public record CapabilityModifier(DefinitionId id, DefinitionId source, Target target,
                                  Curve curve, Peaks peaks) {
     public static final int MAX_PER_BODY = 32;
     public static final int MIN_CURVE_POINTS = 2;
@@ -30,9 +30,13 @@ public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.T
         // 身份和曲线先独立校验，各线性段的最低倍率只需在端点检查。
         MeridianErrors.required(id, Data.INVALID_CAPABILITY_MODIFIER);
         MeridianErrors.required(source, Data.INVALID_CAPABILITY_MODIFIER);
-        MeridianErrors.required(tissueId, Data.INVALID_CAPABILITY_MODIFIER);
+        MeridianErrors.required(target, Data.INVALID_CAPABILITY_MODIFIER);
         MeridianErrors.required(curve, Data.INVALID_CAPABILITY_MODIFIER);
         MeridianErrors.required(peaks, Data.INVALID_CAPABILITY_MODIFIER);
+        if (target.organId() == null && !peaks.organ().equals(OrganPeaks.IDENTITY)
+                || target.tissueId() == null && !peaks.tissue().equals(TissuePeaks.IDENTITY)) {
+            throw MeridianErrors.invalid(Data.INVALID_CAPABILITY_MODIFIER);
+        }
         for (CurvePoint point : curve.points()) {
             for (Attribute attribute : Attribute.values()) {
                 if (multiplier(peaks.get(attribute), point.value()) < MIN_MULTIPLIER) {
@@ -42,7 +46,27 @@ public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.T
         }
     }
 
-    public enum Attribute { STRENGTH, BURST, ENDURANCE, RECOVERY, TEMPO }
+    public CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.TissueId tissueId,
+                              Curve curve, Peaks peaks) {
+        // 保持组织附属的构造入口，器官使用显式目标。
+        this(id, source, new Target(tissueId, null), curve, peaks);
+    }
+
+    public Anatomy.TissueId tissueId() {
+        // 组织能力计算先筛选目标类型；器官修正没有组织身份。
+        return target.tissueId();
+    }
+
+    public record Target(Anatomy.TissueId tissueId, Anatomy.OrganId organId) {
+        public Target {
+            // 一个修正只作用于一个真实模块，禁止空目标和双目标。
+            if ((tissueId == null) == (organId == null)) {
+                throw MeridianErrors.invalid(Data.INVALID_CAPABILITY_MODIFIER);
+            }
+        }
+    }
+
+    public enum Attribute { STRENGTH, BURST, ENDURANCE, RECOVERY, TEMPO, INTAKE, THROUGHPUT }
 
     enum Side { LEFT, RIGHT }
 
@@ -82,8 +106,10 @@ public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.T
         }
     }
 
-    public record Peaks(double strength, double burst, double endurance, double recovery, double tempo) {
-        public Peaks {
+    public record TissuePeaks(double strength, double burst, double endurance, double recovery, double tempo) {
+        public static final TissuePeaks IDENTITY = new TissuePeaks(1, 1, 1, 1, 1);
+
+        public TissuePeaks {
             // 五项共享同一峰值边界，缺省零也不能隐式解释成不变。
             for (double peak : new double[] {strength, burst, endurance, recovery, tempo}) {
                 if (!Double.isFinite(peak) || peak <= 0 || peak > MAX_PEAK) {
@@ -91,15 +117,68 @@ public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.T
                 }
             }
         }
+    }
+
+    public record OrganPeaks(double intake, double throughput) {
+        public static final OrganPeaks IDENTITY = new OrganPeaks(1, 1);
+
+        public OrganPeaks {
+            // 器官倍率沿用组织倍率边界，不能通过扩展目标绕过数值上限。
+            for (double peak : new double[] {intake, throughput}) {
+                if (!Double.isFinite(peak) || peak <= 0 || peak > MAX_PEAK) {
+                    throw MeridianErrors.invalid(Data.INVALID_CAPABILITY_MODIFIER);
+                }
+            }
+        }
+    }
+
+    public record Peaks(TissuePeaks tissue, OrganPeaks organ) {
+        public Peaks {
+            // 两类维度独立命名，非目标维度必须保持单位倍率。
+            MeridianErrors.required(tissue, Data.INVALID_CAPABILITY_MODIFIER);
+            MeridianErrors.required(organ, Data.INVALID_CAPABILITY_MODIFIER);
+        }
+
+        public Peaks(double strength, double burst, double endurance, double recovery, double tempo) {
+            // 原有组织调用显式补齐无器官修正的维度。
+            this(new TissuePeaks(strength, burst, endurance, recovery, tempo), OrganPeaks.IDENTITY);
+        }
+
+        public double strength() {
+            // 组织快照保留既有访问契约。
+            return tissue.strength();
+        }
+
+        public double burst() {
+            // 做功计算读取组织功率峰值。
+            return tissue.burst();
+        }
+
+        public double endurance() {
+            // 耐力预算读取组织峰值。
+            return tissue.endurance();
+        }
+
+        public double recovery() {
+            // 疲劳积分读取组织恢复峰值。
+            return tissue.recovery();
+        }
+
+        public double tempo() {
+            // 动作调度读取组织速度峰值。
+            return tissue.tempo();
+        }
 
         double get(Attribute attribute) {
             // 同一评估器按维度取峰值，恢复与做功不另建曲线规则。
             return switch (attribute) {
-                case STRENGTH -> strength;
-                case BURST -> burst;
-                case ENDURANCE -> endurance;
-                case RECOVERY -> recovery;
-                case TEMPO -> tempo;
+                case STRENGTH -> tissue.strength();
+                case BURST -> tissue.burst();
+                case ENDURANCE -> tissue.endurance();
+                case RECOVERY -> tissue.recovery();
+                case TEMPO -> tissue.tempo();
+                case INTAKE -> organ.intake();
+                case THROUGHPUT -> organ.throughput();
             };
         }
     }

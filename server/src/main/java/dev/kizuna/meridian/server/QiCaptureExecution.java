@@ -10,20 +10,46 @@ import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.*;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.*;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /** 接触摄入按实时浓度和已登记配方比例计算，环境与器官结果由同一事务发布。 */
 final class QiCaptureExecution {
+    private static final double CAPACITY_TOLERANCE = 1e-9;
+    private static final double FREE_QI_DENSITY = 0.01;
     private QiCaptureExecution() {
         // 不保存余额或捕获次数，重试由既有命令回执去重。
     }
 
     record Result(BodySnapshot body, EnvironmentQiSource source, QiCaptureResult fact) { }
 
+    private record Context(BodySnapshot body, Anatomy.OrganDefinition organ, AnatomyState.Organ state,
+                           OrganRecipe recipe, EnvironmentQiSource source) { }
+
+    private record Amounts(QiInventory absorbed, QiInventory output, QiInventory released) { }
+
     static Result calculate(BodySnapshot body, CaptureQi request, BodyMessages.OrganRecipe definition,
                             EnvironmentQiSource source) {
-        // 先读取实际器官与可信配方；瞬时转换仍遵守身体状态、内容类型和境界。
+        // 候选身体、环境交换与回执一同交给事务发布，任何一步失败都不修改原账本。
+        Context context = context(body, request, definition, source);
+        Amounts amounts = amounts(context, request.getSampleVolumeBlocks());
+        BodySnapshot updated = updateBody(context, amounts);
+        EnvironmentQiExchange exchange = exchange(body, source, amounts);
+        EnvironmentQiSource updatedSource = EnvironmentAbsorption.apply(source, exchange);
+        EnvironmentQiReceipt receipt = EnvironmentQiReceipt.newBuilder()
+                .setExchange(exchange)
+                .setBodyRevision(updated.revision())
+                .setSourceRevision(updatedSource.getRevision())
+                .build();
+        QiCaptureResult fact = QiCaptureResult.newBuilder()
+                .setRecipe(definition)
+                .setEnvironment(receipt)
+                .build();
+        return new Result(updated, updatedSource, fact);
+    }
+
+    private static Context context(BodySnapshot body, CaptureQi request, BodyMessages.OrganRecipe definition,
+                                    EnvironmentQiSource source) {
+        // 实际器官与可信配方必须匹配；瞬时转换仍遵守身体状态和境界。
         CaptureProtobuf.validateRequest(request);
         OrganRecipe recipe = CapabilityProtobuf.fromRecipe(definition);
         if (!recipe.id().value().equals(request.getRecipeId()) || recipe.version() != request.getRecipeVersion()
@@ -49,13 +75,17 @@ final class QiCaptureExecution {
         if (organ.intake() == null) {
             throw MeridianErrors.rejectIntake(FailureCode.INTAKE_UNSUPPORTED);
         }
-        if (!organ.kind().equals(recipe.organKind()) || body.realm().capacityRatio() < recipe.minimumRealm().capacityRatio()) {
+        if (!organ.kind().equals(recipe.organKind())
+                || body.realm().capacityRatio() < recipe.minimumRealm().capacityRatio()) {
             throw MeridianErrors.rejectIntake(FailureCode.RECIPE_INCOMPATIBLE);
         }
+        return new Context(body, organ, state, recipe, source);
+    }
 
+    private static Amounts amounts(Context context, double sampleVolume) {
         // 每颗粒子代表固定体积；属性由粒子选择，总剂量随当前环境浓度变化。
-        BodyMessages.TimeCursor now = BodyProtobuf.toTime(body.settledAt());
-        EnvironmentQiOffer offer = EnvironmentAbsorption.offer(source, body.id().value(), now, now);
+        EnvironmentQiSource source = context.source();
+        OrganRecipe recipe = context.recipe();
         QiInventory environment = BodyProtobuf.fromInventory(source.getInventory());
         Qi inputKind = recipe.input().entries().get(0);
         Qi sourceQi = environment.entries().stream()
@@ -63,56 +93,86 @@ final class QiCaptureExecution {
                 .findFirst().orElseThrow(() -> MeridianErrors.rejectIntake(FailureCode.INSUFFICIENT_QI));
         double availableRaw = sourceQi.amount();
         double concentration = environment.totalQi() / source.getSpace().getVolumeBlocks();
-        double desiredRaw = concentration * request.getSampleVolumeBlocks();
+        double sampleMultiplier = OrganCapabilities.intakeMultiplier(context.body(), context.organ().id());
+        double desiredRaw = concentration * sampleVolume * sampleMultiplier;
         if (!Double.isFinite(desiredRaw)) {
             throw MeridianErrors.rejectIntake(FailureCode.NUMERIC_LIMIT);
         }
 
-        // 器官缓存仍是实际账户；预留在途和加工原料占容，空间不足时只收能保存的部分。
+        double room = room(context);
+        double outputVolumePerInputQi = recipe.output().volume() / recipe.input().totalQi();
+        double budget = QiCaptureBudget.available(context.body(), context.organ().id());
+        if (budget <= 0) {
+            throw MeridianErrors.rejectIntake(FailureCode.CAPACITY_EXCEEDED);
+        }
+        double offered = Math.min(Math.min(desiredRaw, availableRaw), room / outputVolumePerInputQi);
+        double rawAmount = Math.min(offered, budget);
+        if (rawAmount <= 0) {
+            throw MeridianErrors.rejectIntake(FailureCode.INSUFFICIENT_QI);
+        }
+        return refine(recipe, sourceQi.withAmount(rawAmount));
+    }
+
+    private static double room(Context context) {
+        // 在途和加工原料预占真实容量，空间不足时只收能保存的部分。
+        Anatomy.OrganDefinition organ = context.organ();
+        BodySnapshot body = context.body();
         List<Anatomy.PortId> ports = organ.ports().stream().map(Anatomy.Port::id).toList();
         List<Anatomy.ConnectionId> incoming = body.structure().connections().stream()
                 .filter(route -> ports.contains(route.to())).map(Anatomy.Connection::id).toList();
         double reserved = body.transits().stream().filter(transit -> incoming.contains(transit.connectionId()))
                 .mapToDouble(transit -> transit.cargo().volume()).sum();
-        double room = Math.max(0, organ.volumeCapacity() - state.occupiedVolume() - reserved);
-        if (room <= 1e-9) {
+        double room = Math.max(0, organ.volumeCapacity() - context.state().occupiedVolume() - reserved);
+        if (room <= CAPACITY_TOLERANCE) {
             throw MeridianErrors.rejectIntake(FailureCode.CAPACITY_EXCEEDED);
         }
-        double outputVolumePerInputQi = recipe.output().volume() / recipe.input().totalQi();
-        double rawAmount = Math.min(Math.min(desiredRaw, availableRaw), room / outputVolumePerInputQi);
-        if (rawAmount <= 0) {
-            throw MeridianErrors.rejectIntake(room <= 0 ? FailureCode.CAPACITY_EXCEEDED : FailureCode.INSUFFICIENT_QI);
-        }
-        QiInventory absorbed = new QiInventory(List.of(sourceQi.withAmount(rawAmount)));
+        return room;
+    }
+
+    private static Amounts refine(OrganRecipe recipe, Qi incoming) {
+        // 按配方比例转换，损耗返回原环境，输入、产物和释放三者守恒。
+        double rawAmount = incoming.amount();
+        QiInventory absorbed = new QiInventory(List.of(incoming));
         double scale = rawAmount / recipe.input().totalQi();
         QiInventory output = new QiInventory(recipe.output().entries().stream()
                 .map(item -> new Qi(item.attribute(), item.amount() * scale, item.density())).toList());
         double loss = Math.max(0, rawAmount - output.totalQi());
         QiInventory released = QiInventory.empty();
         if (loss > 0) {
-            released = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, loss, .01)));
+            released = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, loss, FREE_QI_DENSITY)));
         }
+        return new Amounts(absorbed, output, released);
+    }
 
+    private static BodySnapshot updateBody(Context context, Amounts amounts) {
         // 生成身体候选与开脉的新摄入证据，已有加工和疲劳不被本次接触覆盖。
-        var organs = new ArrayList<>(body.organStates());
-        int index = organs.indexOf(state);
-        organs.set(index, new AnatomyState.Organ(state.id(), state.hp(), QiAccounting.credit(state.buffer(), output),
-                state.process(), state.fatigueJoules()));
-        BodySnapshot updated = new BodySnapshot(body.schemaVersion(), body.id(), body.template(), body.structure(), body.realm(),
-                body.partStates(), body.tissueStates(), organs, body.meridianStates(), body.transits(), body.vitality(),
-                body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
-                body.addonProgress(), body.modifiers());
-        updated = OpeningRuntime.recordIntake(updated, organ.id(), rawAmount);
+        BodySnapshot body = context.body();
+        AnatomyState.Organ state = context.state();
+        double rawAmount = amounts.absorbed().totalQi();
+        QiInventory buffer = QiAccounting.credit(state.buffer(), amounts.output());
+        var organ = BodyProtobuf.toOrganState(state).toBuilder().setBuffer(BodyProtobuf.toInventory(buffer)).build();
+        var message = BodyProtobuf.toMessage(body).toBuilder()
+                .setOrganStates(body.organStates().indexOf(state), organ)
+                .putAllAddonProgress(QiCaptureBudget.consume(body, state.id(), rawAmount))
+                .setRevision(body.revision() + 1)
+                .build();
+        BodySnapshot updated = BodyProtobuf.fromMessage(message);
+        return OpeningRuntime.recordIntake(updated, state.id(), rawAmount);
+    }
 
+    private static EnvironmentQiExchange exchange(BodySnapshot body, EnvironmentQiSource source, Amounts amounts) {
         // 原始量先扣环境，损耗回同一来源；两个版本和回执一起提交，不重复进入默认释放账。
-        EnvironmentQiExchange exchange = EnvironmentQiExchange.newBuilder().setExchangeId("capture-" + updated.revision())
-                .setOffer(offer).setExpectedBodyRevision(body.revision()).setStartedAt(now).setEndedAt(now)
-                .setContactCapture(true).setAbsorbedQi(BodyProtobuf.toInventory(absorbed))
-                .setReleasedQi(BodyProtobuf.toInventory(released)).build();
-        EnvironmentQiSource updatedSource = EnvironmentAbsorption.apply(source, exchange);
-        EnvironmentQiReceipt receipt = EnvironmentQiReceipt.newBuilder().setExchange(exchange)
-                .setBodyRevision(updated.revision()).setSourceRevision(updatedSource.getRevision()).build();
-        QiCaptureResult fact = QiCaptureResult.newBuilder().setRecipe(definition).setEnvironment(receipt).build();
-        return new Result(updated, updatedSource, fact);
+        BodyMessages.TimeCursor now = BodyProtobuf.toTime(body.settledAt());
+        EnvironmentQiOffer offer = EnvironmentAbsorption.offer(source, body.id().value(), now, now);
+        return EnvironmentQiExchange.newBuilder()
+                .setExchangeId("capture-" + (body.revision() + 1))
+                .setOffer(offer)
+                .setExpectedBodyRevision(body.revision())
+                .setStartedAt(now)
+                .setEndedAt(now)
+                .setContactCapture(true /* contactCapture */)
+                .setAbsorbedQi(BodyProtobuf.toInventory(amounts.absorbed()))
+                .setReleasedQi(BodyProtobuf.toInventory(amounts.released()))
+                .build();
     }
 }

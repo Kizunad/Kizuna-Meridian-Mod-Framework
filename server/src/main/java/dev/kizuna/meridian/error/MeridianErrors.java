@@ -47,6 +47,7 @@ public final class MeridianErrors {
         public static final String STAGE = "健康变更与原身体、固定处理结果或释放明细不一致";
         public static final String HANDLER = "伤害处理接口不能为空";
         public static final String HOST_EXCHANGE = "健康宿主交换的版本、请求身份或操作无效";
+        public static final String ACTIVITY_HOST_EXCHANGE = "身体活动宿主交换的版本、请求身份或操作无效";
 
         private Health() {
             // 伤害策略归附属，框架只集中定义协议与提交约束的诊断。

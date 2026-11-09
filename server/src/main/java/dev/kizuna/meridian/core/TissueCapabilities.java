@@ -39,8 +39,19 @@ public final class TissueCapabilities {
 
     public static double tempoMultiplier(BodySnapshot body, Anatomy.TissueId tissueId) {
         // 动作速度只读取当前曲线倍率；起手时序由 Technique Framework 使用该快照冻结。
+        return tempoMultiplierAt(body, tissueId, body.settledAt().elapsedMillis());
+    }
+
+    public static double enduranceMultiplier(BodySnapshot body, Anatomy.TissueId tissueId) {
+        // 需要分别解释 HP 与疲劳的内容规则可只读取耐力曲线倍率，避免重复乘伤势。
         CapabilityCurves.Context curves = CapabilityCurves.context(body.modifiers());
-        return curves.current(tissueId, body.settledAt().elapsedMillis()).tempo();
+        return curves.current(tissueId, body.settledAt().elapsedMillis()).endurance();
+    }
+
+    public static double tempoMultiplierAt(BodySnapshot body, Anatomy.TissueId tissueId, long elapsedMillis) {
+        // 原版属性可按当前宿主时钟投影曲线；查询不推进身体或预支资源。
+        CapabilityCurves.Context curves = CapabilityCurves.context(body.modifiers());
+        return curves.current(tissueId, elapsedMillis).tempo();
     }
 
     static Anatomy.TissueCapacity availableDuring(BodySnapshot body, Exertion request) {

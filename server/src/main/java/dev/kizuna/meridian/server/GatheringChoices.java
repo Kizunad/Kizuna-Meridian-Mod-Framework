@@ -7,6 +7,8 @@ import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.MeridianProtocol;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
+import dev.kizuna.meridian.core.Anatomy;
+import dev.kizuna.meridian.core.OrganCapabilities;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,6 +42,7 @@ final class GatheringChoices {
             if (!organ.hasIntake()) {
                 continue;
             }
+            double intakePerSecond = OrganCapabilities.intakePerSecond(actual, new Anatomy.OrganId(organ.getId()));
             List<String> outputPorts = organ.getPortsList().stream().map(Port::getId).toList();
             for (Connection connection : body.getStructure().getConnectionsList()) {
                 if (!outputPorts.contains(connection.getFrom())) {
@@ -69,7 +72,7 @@ final class GatheringChoices {
                         choices.add(GatheringChoice.newBuilder().setOrganId(organ.getId()).setRecipe(recipe)
                                 .setConnectionId(connection.getId()).setTargetMeridianId(meridian.getId())
                                 .setTargetRemainingVolume(Math.max(0, freeCapacity))
-                                .setIntakePerSecond(Math.min(supplyPerSecond, organ.getIntake().getMaxQiPerSecond()))
+                                .setIntakePerSecond(Math.min(supplyPerSecond, intakePerSecond))
                                 .build());
                     }
                 }

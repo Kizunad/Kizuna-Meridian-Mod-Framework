@@ -20,6 +20,7 @@ import static org.junit.Assert.*;
 
 /** 公共协议与非人体编排回归；人体具体数值由 Human 附属自己的整体测试覆盖。 */
 public class GatheringSessionTest {
+    private static final double LARGE_INTAKE_LIMIT = 1_000;
     @Test
     public void protocolRejectsMissingRevisionUnknownFieldsAndClientTime() {
         // 固定字节来自独立字段布局，锁定查询字段号而不只验证自身往返。
@@ -107,11 +108,12 @@ public class GatheringSessionTest {
 
     @Test
     public void contactsShareOneTimestampUseLiveConcentrationAndPersistAtomically() {
-        // 非人体过滤器在零经过时间接收多颗，验证剂量不再绑定 250 ms 或器官每秒上限。
+        // 非人体过滤器在足够大的当秒限额内接收多颗，验证采样始终读取实时环境浓度。
         var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));
         TimeCursor now = original.getSettledAt().toBuilder().setElapsedMillis(0).build();
-        var structure = original.getStructure().toBuilder().setOrgans(0, original.getStructure().getOrgans(0).toBuilder()
-                .setIntake(OrganIntakeCapability.newBuilder().setMaxQiPerSecond(.001)));
+        var intake = OrganIntakeCapability.newBuilder().setMaxQiPerSecond(LARGE_INTAKE_LIMIT).build();
+        var organ = original.getStructure().getOrgans(0).toBuilder().setIntake(intake).build();
+        var structure = original.getStructure().toBuilder().setOrgans(0, organ);
         var initial = BodyProtobuf.fromMessage(original.toBuilder().setStructure(structure)
                 .setSettledAt(now).setRevision(0).clearTransits().build());
         var source = EnvironmentAbsorption.initialize(EnvironmentSpace.newBuilder().setProtocolVersion(1)

@@ -45,6 +45,14 @@ Protobuf 只定义数据交换，不自动提供服务器、网络连接或身�
 
 ## 已实现的变更与事务入口
 
+可信附属通过 `BodyActivityHost.exchange(String callerId, byte[] payload)` 提交 `activity_host.proto`
+的 `ActivityHostRequest`；Fabric 宿主登记 `meridian_activity_host`。这是进程内可信接线，不是玩家网络入口。
+请求包含目标实体身份和完整 `RequestEnvelope`，仅允许 `execute_activity`；内外 request ID 必须一致。
+`callerId` 由调用接线传递，供核心校验修正来源，不能接受客户端自报身份。
+宿主须验证实体与身体绑定、主线程、预期 revision，并复用 `BodyCommandHandler.handleActivity`。
+响应复用 `HealthHostResponse`，保留 unbound、failure 和成功后的完整身体；拒绝不得换宿主或刷新 revision 重试。
+Human 实现玩家一侧，其他生物宿主按同一协议实现。能力字段见[临时能力修正](Organ-Modifiers.md)。
+
 `BodyCommandHandler<C>.handle(trustedContext, payload)` 接收完整 Protobuf 请求，执行寿元支出、时间结算、运输、器官加工启动、组织做功或环境摄入。前五个构造参数为 `BodyCommandAccess<C>`、`BodySecurityPolicy<C>`、`BodyTimeSource<C>`、`BodyTransactionStore` 与 `BodyAuditSink<C>`；第六个参数 `OrganRecipeCatalog` 省略则为空目录。摄入另需第七个参数 `BodyEnvironmentSource<C>`，未提供来源时返回 `ENVIRONMENT_UNAVAILABLE`，表示该宿主没有配置环境摄入能力。具体语义见[协议与安全](Protocol-and-Security.md)、[配方接入](Technique-Addons.md)和[环境摄入](Environment-Qi.md)。查询与变更分别路由；送错入口会在宿主回调前拒绝。
 
 `BodyCommandAccess.authorize` 既决定该操作和剂量是否允许，也返回稳定可信调用者 ID。不能只检查“是否拥有该身体”就把所有未来操作开放给客户端；宿主应仅开放实际需要的命令。认证上下文由宿主生成，客户端不能声明 caller_id。

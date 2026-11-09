@@ -72,8 +72,7 @@ public final class OrganIntake {
         if (!accounts.organAvailable(definition)) {
             throw MeridianErrors.rejectIntake(FailureCode.MODULE_UNAVAILABLE);
         }
-        double durationSeconds = (end.elapsedMillis() - start.elapsedMillis()) / 1000.0;
-        double intakeLimit = definition.intake().maxQiPerSecond() * durationSeconds;
+        double intakeLimit = OrganCapabilities.intakeLimit(body, definition, end.elapsedMillis());
         if (!Double.isFinite(intakeLimit)) {
             throw MeridianErrors.rejectIntake(FailureCode.NUMERIC_LIMIT);
         }

@@ -90,7 +90,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         var tissues = match(structure.tissues(), Anatomy.TissueDefinition::id, tissueStates, AnatomyState.Tissue::id, "组织");
         var organs = match(structure.organs(), Anatomy.OrganDefinition::id, organStates, AnatomyState.Organ::id, "器官");
         var meridians = match(structure.meridians(), Anatomy.MeridianDefinition::id, meridianStates, MeridianState::id, "经脉");
-        validateModifiers(modifiers, tissues.keySet(), settledAt, vitality);
+        validateModifiers(modifiers, tissues.keySet(), organs.keySet(), settledAt, vitality);
         // 多动作允许共用同一组织；同实例只记一次，死体或未来动作不能伪装成当前占用。
         DataChecks.index(actions, BodyAction.Active::instanceId, "动作实例");
         if (actions.size() > BodyActions.MAX_ACTIVE_ACTIONS || (vitality.dead() && !actions.isEmpty())) {
@@ -224,6 +224,7 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
     }
 
     private static void validateModifiers(List<CapabilityModifier> modifiers, Set<Anatomy.TissueId> tissueIds,
+                                          Set<Anatomy.OrganId> organIds,
                                           TimeCursor time, VitalityState vitality) {
         // 修正与实际构型及身体时钟一起校验，解码和运行时构造遵循同一规则。
         if (modifiers.size() > CapabilityModifier.MAX_PER_BODY || (vitality.dead() && !modifiers.isEmpty())) {
@@ -231,7 +232,14 @@ public record BodySnapshot(int schemaVersion, BodyId id, BodyTemplate.Reference 
         }
         DataChecks.index(modifiers, CapabilityModifier::id, "能力修正");
         for (CapabilityModifier modifier : modifiers) {
-            if (!tissueIds.contains(modifier.tissueId()) || modifier.curve().endMillis() <= time.elapsedMillis()) {
+            CapabilityModifier.Target target = modifier.target();
+            boolean validTarget;
+            if (target.organId() != null) {
+                validTarget = organIds.contains(target.organId());
+            } else {
+                validTarget = tissueIds.contains(target.tissueId());
+            }
+            if (!validTarget || modifier.curve().endMillis() <= time.elapsedMillis()) {
                 throw MeridianErrors.invalid(Data.INVALID_MODIFIER_STATE);
             }
         }

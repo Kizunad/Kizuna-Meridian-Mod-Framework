@@ -28,7 +28,8 @@ final class QiAccounts {
             definition.ports().forEach(port -> ports.put(port.id(), endpoint));
         }
         for (var definition : body.structure().organs()) {
-            var endpoint = new Endpoint(definition.id(), definition.volumeCapacity(), definition.throughputPerSecond(), definition.partId());
+            double throughput = OrganCapabilities.throughput(body, definition);
+            var endpoint = new Endpoint(definition.id(), definition.volumeCapacity(), throughput, definition.partId());
             definition.ports().forEach(port -> ports.put(port.id(), endpoint));
         }
     }

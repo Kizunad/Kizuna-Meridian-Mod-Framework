@@ -28,19 +28,34 @@ public final class CapabilityProtobuf {
         if (modifier.hasTempoPeak()) {
             tempoPeak = modifier.getTempoPeak();
         }
-        var peaks = new CapabilityModifier.Peaks(modifier.getStrengthPeak(), modifier.getBurstPeak(),
+        var tissuePeaks = new CapabilityModifier.TissuePeaks(modifier.getStrengthPeak(), modifier.getBurstPeak(),
                 modifier.getEndurancePeak(), modifier.getRecoveryPeak(), tempoPeak);
+        double intakePeak = 1;
+        double throughputPeak = 1;
+        if (modifier.hasIntakePeak()) {
+            intakePeak = modifier.getIntakePeak();
+        }
+        if (modifier.hasThroughputPeak()) {
+            throughputPeak = modifier.getThroughputPeak();
+        }
+        var organPeaks = new CapabilityModifier.OrganPeaks(intakePeak, throughputPeak);
+        var peaks = new CapabilityModifier.Peaks(tissuePeaks, organPeaks);
+        CapabilityModifier.Target target;
+        if (modifier.hasOrganId()) {
+            target = new CapabilityModifier.Target(null, new Anatomy.OrganId(modifier.getOrganId()));
+        } else {
+            target = new CapabilityModifier.Target(new Anatomy.TissueId(modifier.getTissueId()), null);
+        }
         return new CapabilityModifier(new DefinitionId(modifier.getId()), new DefinitionId(modifier.getSource()),
-                new Anatomy.TissueId(modifier.getTissueId()), curve, peaks);
+                target, curve, peaks);
     }
 
     public static BodyMessages.CapabilityModifier toModifier(CapabilityModifier modifier) {
-        // 存档保留来源、曲线和五项峰值，不把派生能力写回基础值。
+        // 存档保留来源、曲线和目标维度，不把派生能力写回基础值。
         var points = modifier.curve().points().stream().map(CapabilityProtobuf::toCurvePoint).toList();
-        return BodyMessages.CapabilityModifier.newBuilder()
+        var result = BodyMessages.CapabilityModifier.newBuilder()
                 .setId(modifier.id().value())
                 .setSource(modifier.source().value())
-                .setTissueId(modifier.tissueId().value())
                 .setStartMillis(modifier.curve().startMillis())
                 .addAllCurve(points)
                 .setStrengthPeak(modifier.peaks().strength())
@@ -48,7 +63,14 @@ public final class CapabilityProtobuf {
                 .setEndurancePeak(modifier.peaks().endurance())
                 .setRecoveryPeak(modifier.peaks().recovery())
                 .setTempoPeak(modifier.peaks().tempo())
-                .build();
+                .setIntakePeak(modifier.peaks().organ().intake())
+                .setThroughputPeak(modifier.peaks().organ().throughput());
+        if (modifier.target().organId() != null) {
+            result.setOrganId(modifier.target().organId().value());
+        } else {
+            result.setTissueId(modifier.tissueId().value());
+        }
+        return result.build();
     }
 
     private static BodyMessages.CurvePoint toCurvePoint(CapabilityModifier.CurvePoint point) {

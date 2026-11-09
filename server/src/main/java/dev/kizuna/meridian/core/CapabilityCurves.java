@@ -48,6 +48,44 @@ final class CapabilityCurves {
         return new Context(modifiers);
     }
 
+    static double current(List<CapabilityModifier> modifiers, Attribute attribute, long millis) {
+        // 器官与组织使用相同乘积、极端数值和总倍率截断规则。
+        return product(modifiers, attribute, new Moment(millis, 0), Side.RIGHT);
+    }
+
+    static double effectiveSeconds(List<CapabilityModifier> modifiers, Attribute attribute,
+                                    long startMillis, long endMillis) {
+        // 先按所有曲线拐点切段，再积分，跨生效与到期的长区间也不丢失摄入预算。
+        long previousMillis = startMillis;
+        double effectiveMillis = 0;
+        for (long boundaryMillis : curveBoundaries(modifiers)) {
+            if (boundaryMillis > previousMillis && boundaryMillis < endMillis) {
+                effectiveMillis += integratedSegment(modifiers, attribute, previousMillis, boundaryMillis);
+                previousMillis = boundaryMillis;
+            }
+        }
+        effectiveMillis += integratedSegment(modifiers, attribute, previousMillis, endMillis);
+        return effectiveMillis / MILLIS_PER_SECOND;
+    }
+
+    private static double integratedSegment(List<CapabilityModifier> modifiers, Attribute attribute,
+                                             long startMillis, long endMillis) {
+        // 单段内各因子线性；复用恢复曲线的截断积分，避免另建近似采样算法。
+        var factors = new ArrayList<Linear>();
+        for (CapabilityModifier modifier : modifiers) {
+            if (modifier.curve().endMillis() > startMillis && modifier.curve().startMillis() < endMillis) {
+                double left = modifier.at(attribute, startMillis, 0, Side.RIGHT);
+                double right = modifier.at(attribute, endMillis, 0, Side.LEFT);
+                factors.add(new Linear(left, right));
+            }
+        }
+        double multiplier = 1;
+        if (!factors.isEmpty()) {
+            multiplier = integral(factors);
+        }
+        return (endMillis - startMillis) * multiplier;
+    }
+
     private record Moment(long millis, double fractionalMillis) { }
 
     record Multipliers(double strength, double burst, double endurance, double tempo) {
@@ -74,7 +112,7 @@ final class CapabilityCurves {
                 boundaries = NO_BOUNDARIES;
                 return;
             }
-            if (modifiers.size() == 1) {
+            if (modifiers.size() == 1 && modifiers.getFirst().tissueId() != null) {
                 CapabilityModifier modifier = modifiers.get(0);
                 var group = new Group(modifiers);
                 groups = Map.of(modifier.tissueId(), group);
@@ -86,7 +124,9 @@ final class CapabilityCurves {
                     .sorted(Comparator.comparing(modifier -> modifier.id().value()))
                     .toList();
             for (CapabilityModifier modifier : ordered) {
-                byTissue.computeIfAbsent(modifier.tissueId(), ignored -> new ArrayList<>()).add(modifier);
+                if (modifier.tissueId() != null) {
+                    byTissue.computeIfAbsent(modifier.tissueId(), ignored -> new ArrayList<>()).add(modifier);
+                }
             }
             var indexed = new HashMap<Anatomy.TissueId, Group>();
             byTissue.forEach((id, items) -> indexed.put(id, new Group(items)));

@@ -198,6 +198,17 @@ message OrganState {
   double fatigue_joules = 5; // 器官独立疲劳，不与控制组织的精力混账。
 }
 
+// 接触摄入的一秒限额保存在身体进度 meridian:capture_budget，跨会话与存档复用。
+message CaptureBudgetState {
+  int32 schema_version = 1;
+  map<string, CaptureBudget> organs = 2;
+}
+
+message CaptureBudget {
+  int64 window_millis = 1;
+  double consumed_qi = 2;
+}
+
 // 可信内容定义；客户端只能提交配方 ID 与版本，不能提交这些参数。
 message OrganRecipe {
   string id = 1;
@@ -285,11 +296,14 @@ message CurvePoint {
   double value = 2; // 有限数，范围 [-1, 1]。
 }
 
-// 可信附属施加的临时组织能力倍率；起止为阶跃，到期和死亡由权威核心清理。
+// 可信附属施加的临时能力倍率；起止为阶跃，到期和死亡由权威核心清理。
 message CapabilityModifier {
   string id = 1; // namespace:path，身体内唯一。
   string source = 2; // 必须匹配授权器返回的 namespace:path 调用身份。
-  string tissue_id = 3; // 实际构型中的局部组织 ID。
+  oneof target {
+    string tissue_id = 3; // 实际构型中的局部组织 ID。
+    string organ_id = 11; // 实际构型中的器官 ID。
+  }
   int64 start_millis = 4; // 身体时钟；添加时不得早于当前结算游标。
   repeated CurvePoint curve = 5; // 2–16 点，末点即到期；生效区间 [start, end)。
   double strength_peak = 6; // 倍率 = 1 + (peak - 1) × 曲线值；1 表示不变。
@@ -297,6 +311,8 @@ message CapabilityModifier {
   double endurance_peak = 8;
   double recovery_peak = 9;
   optional double tempo_peak = 10; // 动作速度倍率；缺省为 1。
+  optional double intake_peak = 12; // 器官环境摄入倍率；缺省为 1。
+  optional double throughput_peak = 13; // 器官端口吞吐倍率；缺省为 1。
 }
 
 message BodySnapshot {

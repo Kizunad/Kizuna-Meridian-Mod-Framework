@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package kizuna.meridian.v1;
+
+import "kizuna/meridian/v1/protocol.proto";
+
+option java_package = "dev.kizuna.meridian.protocol.pb";
+option java_outer_classname = "ActivityHostMessages";
+
+// 可信附属的进程内身体活动入口；调用身份由宿主 API 单独传递，不能注册为客户端通道。
+// 响应复用 HealthHostResponse：未绑定、当前完整身体或明确失败，不产生健康命令回执。
+message ActivityHostRequest {
+  int32 protocol_version = 1;
+  string request_id = 2;
+  string subject_id = 3;
+  RequestEnvelope activity = 4; // 只允许 execute_activity，内外 request_id 一致。
+}
