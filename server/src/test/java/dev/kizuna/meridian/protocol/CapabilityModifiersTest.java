@@ -114,11 +114,34 @@ public class CapabilityModifiersTest {
     }
 
     @Test
+    public void tempoMultiplierUsesTheSameCurveAsOtherTissueCapabilities() {
+        // 动作速度共享能力曲线的起止和乘积规则，但不改变力量、功率或耐力查询。
+        var slowed = modifier("sample:tempo", EXPIRY_MILLIS).toBuilder()
+                .setTempoPeak(HALF)
+                .build();
+        BodySnapshot body = add(body(), List.of(slowed));
+        assertEquals(HALF, TissueCapabilities.tempoMultiplier(body, TISSUE), TOLERANCE);
+        assertEquals(BOOST, TissueCapabilities.available(body, TISSUE).strengthNewtons()
+                / STRENGTH_NEWTONS, TOLERANCE);
+    }
+
+    @Test
+    public void absentTempoPeakPreservesLegacySpeed() {
+        // 旧存档没有动作速度字段，加载和编码往返后仍保持倍率 1。
+        var legacy = modifier("sample:legacy_tempo", EXPIRY_MILLIS);
+        assertFalse(legacy.hasTempoPeak());
+        BodySnapshot body = add(body(), List.of(legacy));
+        BodySnapshot restored = BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(body));
+        assertEquals(1, TissueCapabilities.tempoMultiplier(restored, TISSUE), TOLERANCE);
+    }
+
+    @Test
     public void invalidMultipliersRejectTheWholeActivityInEveryDimension() {
         // 缺省零、非有限数和越界值在每个倍率字段上都不能绕过整笔拒绝。
         var valid = modifier("sample:valid", EXPIRY_MILLIS);
         double aboveMaximum = StrictMath.nextUp(CapabilityModifier.MAX_PEAK);
-        for (String field : List.of("strength_peak", "burst_peak", "endurance_peak", "recovery_peak")) {
+        for (String field : List.of("strength_peak", "burst_peak", "endurance_peak", "recovery_peak",
+                "tempo_peak")) {
             for (double invalid : List.of(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY,
                     Double.NEGATIVE_INFINITY, aboveMaximum)) {
                 var descriptor = valid.getDescriptorForType().findFieldByName(field);
@@ -472,13 +495,15 @@ public class CapabilityModifiersTest {
     }
 
     private static void assertInvalidPointMultipliers(BodyMessages.CapabilityModifier valid) {
-        // 四项分别越过单条最低倍率，其余项保持 1，避免错误被别的维度提前触发。
-        for (String field : List.of("strength_peak", "burst_peak", "endurance_peak", "recovery_peak")) {
+        // 五项分别越过单条最低倍率，其余项保持 1，避免错误被别的维度提前触发。
+        for (String field : List.of("strength_peak", "burst_peak", "endurance_peak", "recovery_peak",
+                "tempo_peak")) {
             var negative = valid.toBuilder().clearCurve()
                     .setStrengthPeak(1)
                     .setBurstPeak(1)
                     .setEndurancePeak(1)
                     .setRecoveryPeak(1)
+                    .setTempoPeak(1)
                     .addCurve(point(0, -1))
                     .addCurve(point(RAMP_MILLIS, 0))
                     .setField(valid.getDescriptorForType().findFieldByName(field), BOOST)

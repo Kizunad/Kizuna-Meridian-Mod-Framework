@@ -94,7 +94,9 @@ final class ProtoWire {
                     || field.getFullName().equals("kizuna.meridian.v1.BodyActivity.released_qi")
                     || field.getFullName().equals("kizuna.meridian.v1.CircuitChange.replacement")
                     || field.getFullName().equals("kizuna.meridian.v1.BreathControl.aim_z")
-                    || field.getFullName().equals("kizuna.meridian.v1.DebugQi.amount")) && !message.hasField(field)) {
+                    || field.getFullName().equals("kizuna.meridian.v1.DebugQi.amount")
+                    || field.getFullName().equals("kizuna.meridian.v1.CapabilityModifier.tempo_peak"))
+                    && !message.hasField(field)) {
                 // 仅跳过契约明确允许省略的字段；吐纳深度由执行方补为入口所在平面。
                 continue;
             }

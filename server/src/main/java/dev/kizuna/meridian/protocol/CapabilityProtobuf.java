@@ -24,14 +24,18 @@ public final class CapabilityProtobuf {
                 .map(point -> new CapabilityModifier.CurvePoint(point.getOffsetMillis(), point.getValue()))
                 .toList();
         var curve = new CapabilityModifier.Curve(modifier.getStartMillis(), points);
+        double tempoPeak = 1;
+        if (modifier.hasTempoPeak()) {
+            tempoPeak = modifier.getTempoPeak();
+        }
         var peaks = new CapabilityModifier.Peaks(modifier.getStrengthPeak(), modifier.getBurstPeak(),
-                modifier.getEndurancePeak(), modifier.getRecoveryPeak());
+                modifier.getEndurancePeak(), modifier.getRecoveryPeak(), tempoPeak);
         return new CapabilityModifier(new DefinitionId(modifier.getId()), new DefinitionId(modifier.getSource()),
                 new Anatomy.TissueId(modifier.getTissueId()), curve, peaks);
     }
 
     public static BodyMessages.CapabilityModifier toModifier(CapabilityModifier modifier) {
-        // 存档保留来源、曲线和四项峰值，不把派生能力写回基础值。
+        // 存档保留来源、曲线和五项峰值，不把派生能力写回基础值。
         var points = modifier.curve().points().stream().map(CapabilityProtobuf::toCurvePoint).toList();
         return BodyMessages.CapabilityModifier.newBuilder()
                 .setId(modifier.id().value())
@@ -43,6 +47,7 @@ public final class CapabilityProtobuf {
                 .setBurstPeak(modifier.peaks().burst())
                 .setEndurancePeak(modifier.peaks().endurance())
                 .setRecoveryPeak(modifier.peaks().recovery())
+                .setTempoPeak(modifier.peaks().tempo())
                 .build();
     }
 

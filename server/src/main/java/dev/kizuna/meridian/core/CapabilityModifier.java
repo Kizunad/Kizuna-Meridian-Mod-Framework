@@ -42,7 +42,7 @@ public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.T
         }
     }
 
-    public enum Attribute { STRENGTH, BURST, ENDURANCE, RECOVERY }
+    public enum Attribute { STRENGTH, BURST, ENDURANCE, RECOVERY, TEMPO }
 
     enum Side { LEFT, RIGHT }
 
@@ -82,10 +82,10 @@ public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.T
         }
     }
 
-    public record Peaks(double strength, double burst, double endurance, double recovery) {
+    public record Peaks(double strength, double burst, double endurance, double recovery, double tempo) {
         public Peaks {
-            // 四项共享同一峰值边界，缺省零也不能隐式解释成不变。
-            for (double peak : new double[] {strength, burst, endurance, recovery}) {
+            // 五项共享同一峰值边界，缺省零也不能隐式解释成不变。
+            for (double peak : new double[] {strength, burst, endurance, recovery, tempo}) {
                 if (!Double.isFinite(peak) || peak <= 0 || peak > MAX_PEAK) {
                     throw MeridianErrors.invalid(Data.INVALID_CAPABILITY_MODIFIER);
                 }
@@ -99,6 +99,7 @@ public record CapabilityModifier(DefinitionId id, DefinitionId source, Anatomy.T
                 case BURST -> burst;
                 case ENDURANCE -> endurance;
                 case RECOVERY -> recovery;
+                case TEMPO -> tempo;
             };
         }
     }

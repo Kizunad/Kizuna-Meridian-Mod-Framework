@@ -39,6 +39,11 @@
 
 ## 已实现的组织能力
 
+`CapabilityModifier.tempo_peak` 是第五项动作速度峰值，与力量、功率、耐力、恢复使用同一条曲线。
+缺省为 1；旧存档不携带该字段时保持原速度。显式峰值和总乘积沿用统一的有限性、正值与截断规则。
+`TissueCapabilities.tempoMultiplier(body, tissueId)` 读取当前时刻的动作速度，不改写基础组织能力。
+功法时序由 Technique 按起手绑定组织的最慢速度缩放；原版实体动作与玩家输入由各实体宿主接入。
+
 `Anatomy.TissueDefinition.capacity` 保存三个独立基础值：`strengthNewtons`（N）、`burstWatts`（W）、`enduranceJoules`（J）。肌肉、皮肤、骨骼仍使用内容类型 ID；被动组织可声明全零。经脉容量和通路状态不改写这些值，改造后的实际构型可以提供不同基础能力。
 
 `get_tissue_capability { body_id, tissue_id }` 返回带身体 revision 的 `TissueCapability.available`，与完整身体查询共用读取权限。当前参考公式为：

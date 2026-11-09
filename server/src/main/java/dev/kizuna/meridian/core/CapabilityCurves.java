@@ -50,13 +50,14 @@ final class CapabilityCurves {
 
     private record Moment(long millis, double fractionalMillis) { }
 
-    record Multipliers(double strength, double burst, double endurance) {
-        static final Multipliers IDENTITY = new Multipliers(1, 1, 1);
+    record Multipliers(double strength, double burst, double endurance, double tempo) {
+        static final Multipliers IDENTITY = new Multipliers(1, 1, 1, 1);
 
         Multipliers minimum(Multipliers other) {
-            // 三项能力同时比较同一边界，避免反复插值同一条曲线。
+            // 四项能力同时比较同一边界，避免反复插值同一条曲线。
             return new Multipliers(StrictMath.min(strength, other.strength),
-                    StrictMath.min(burst, other.burst), StrictMath.min(endurance, other.endurance));
+                    StrictMath.min(burst, other.burst), StrictMath.min(endurance, other.endurance),
+                    StrictMath.min(tempo, other.tempo));
         }
     }
 
@@ -214,10 +215,11 @@ final class CapabilityCurves {
         }
 
         private Endpoint evaluate(Moment moment, Side side) {
-            // 每条曲线只插值一次，同时取得三项做功能力和恢复端点。
+            // 每条曲线只插值一次，同时取得四项做功能力和恢复端点。
             double strength = 1;
             double burst = 1;
             double endurance = 1;
+            double tempo = 1;
             var recovery = new double[modifiers.size()];
             for (int index = 0; index < modifiers.size(); index++) {
                 CapabilityModifier modifier = modifiers.get(index);
@@ -226,12 +228,13 @@ final class CapabilityCurves {
                 strength *= CapabilityModifier.multiplier(peaks.strength(), value);
                 burst *= CapabilityModifier.multiplier(peaks.burst(), value);
                 endurance *= CapabilityModifier.multiplier(peaks.endurance(), value);
+                tempo *= CapabilityModifier.multiplier(peaks.tempo(), value);
                 recovery[index] = CapabilityModifier.multiplier(peaks.recovery(), value);
-                if (!normal(strength) || !normal(burst) || !normal(endurance)) {
+                if (!normal(strength) || !normal(burst) || !normal(endurance) || !normal(tempo)) {
                     return extremeEndpoint(moment, side, recovery);
                 }
             }
-            var multipliers = new Multipliers(clamp(strength), clamp(burst), clamp(endurance));
+            var multipliers = new Multipliers(clamp(strength), clamp(burst), clamp(endurance), clamp(tempo));
             return new Endpoint(moment, side, multipliers, recovery);
         }
 
@@ -243,7 +246,8 @@ final class CapabilityCurves {
             }
             var multipliers = new Multipliers(product(modifiers, Attribute.STRENGTH, moment, side),
                     product(modifiers, Attribute.BURST, moment, side),
-                    product(modifiers, Attribute.ENDURANCE, moment, side));
+                    product(modifiers, Attribute.ENDURANCE, moment, side),
+                    product(modifiers, Attribute.TEMPO, moment, side));
             return new Endpoint(moment, side, multipliers, recovery);
         }
 

@@ -37,6 +37,12 @@ public final class TissueCapabilities {
         return available(body, tissueId, multipliers);
     }
 
+    public static double tempoMultiplier(BodySnapshot body, Anatomy.TissueId tissueId) {
+        // 动作速度只读取当前曲线倍率；起手时序由 Technique Framework 使用该快照冻结。
+        CapabilityCurves.Context curves = CapabilityCurves.context(body.modifiers());
+        return curves.current(tissueId, body.settledAt().elapsedMillis()).tempo();
+    }
+
     static Anatomy.TissueCapacity availableDuring(BodySnapshot body, Exertion request) {
         // 做功预算对整个时段保守取值，不能在峰值瞬间预支之后已衰减的能力。
         CapabilityCurves.Context curves = CapabilityCurves.context(body.modifiers());

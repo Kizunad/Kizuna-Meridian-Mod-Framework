@@ -296,6 +296,7 @@ message CapabilityModifier {
   double burst_peak = 7;
   double endurance_peak = 8;
   double recovery_peak = 9;
+  optional double tempo_peak = 10; // 动作速度倍率；缺省为 1。
 }
 
 message BodySnapshot {
