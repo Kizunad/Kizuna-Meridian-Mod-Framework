@@ -91,6 +91,10 @@ Java 参考实现使用 JVM 启动属性，在 `CapabilityModifier` 初始化时
 
 ## 功法知识与运行进度
 
+统一装配清单包含 `witch-brew`（`Kizuna-Meridian-Witch-Brew-Addon`）：`shared/fabric/verification` 三模块，
+纯数据 Fabric 包依赖炼药，提供行药诀上、中两卷五式。它复用 Technique 的按卷学习、持物规则和施放服务；
+药效、瓶子消费及残药由 Brewing 执行，Framework 不引入具体药种或人体部位分支。
+
 功法库将已学功法、学习来源、熟练度、冷却和当前施放放在 `BodySnapshot.addon_progress` 的版本化 Protobuf `Any` 中，例如 `meridian_technique:state`。Framework 已提供该持久化契约：可信 `SetAddonProgress` 写学习事实，`BodyActivity.progress` 可将施放进度与扣费、做功、动作占用和能力修正一次原子提交。普通客户端不能自报已学会，内容已安装也不等于角色已解锁。
 
 知识与冷却随身体快照保存，死亡保留；临时能力修正由核心单独清空。每项进度上限 64 KiB，每具身体最多 64 项，具体 schema 由功法库定义。无需新增 Framework 专用知识命令或第二份功法账本。

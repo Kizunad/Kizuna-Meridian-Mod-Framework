@@ -240,6 +240,16 @@
       ]
     },
     {
+      "id": "witch-brew",
+      "directory": "Kizuna-Meridian-Witch-Brew-Addon",
+      "project": "kizuna-meridian-witch-brew-addon",
+      "modules": [
+        {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
+        {"path": "shared"},
+        {"path": "verification"}
+      ]
+    },
+    {
       "id": "burden",
       "directory": "Kizuna-Meridian-Burden-Addon",
       "project": "kizuna-meridian-burden-addon",
