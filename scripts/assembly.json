@@ -158,6 +158,24 @@
       ]
     },
     {
+      "id": "brewing",
+      "directory": "Kizuna-Meridian-Brewing-Addon",
+      "project": "kizuna-meridian-brewing-addon",
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "shared", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
+      "id": "pathfinding",
+      "directory": "Kizuna-Pathfinding-Framework",
+      "project": "kizuna-pathfinding-framework",
+      "modules": [
+        {"path": "core", "candidate": "library"}
+      ]
+    },
+    {
       "id": "humanoid-threatening",
       "directory": "Kizuna-Meridian-Vanilla-Humanoid-Threatening",
       "project": "kizuna-meridian-vanilla-humanoid-threatening",
