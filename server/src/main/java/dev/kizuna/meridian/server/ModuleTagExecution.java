@@ -10,6 +10,7 @@ import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FillModuleTags;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.ModuleTagAssignment;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
@@ -17,7 +18,7 @@ import static dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode.INVAL
 import static dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode.MODULE_NOT_FOUND;
 import static dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode.REVISION_EXHAUSTED;
 
-/** 可信构型维护只补空标签；命令执行与事务暂存复算共用同一规则。 */
+/** 可信构型维护只追加缺少的标签；命令执行与事务暂存复算共用同一规则。 */
 public final class ModuleTagExecution {
     private static final int MAX_TAGS = 16;
 
@@ -75,11 +76,12 @@ public final class ModuleTagExecution {
         for (int index = 0; index < structure.getTissuesCount(); index++) {
             var tissue = structure.getTissues(index);
             if (tissue.getId().equals(assignment.getTissueId())) {
-                requireCompatible(tissue.getTagsList(), assignment.getTagsList());
-                if (tissue.getTagsCount() == 0) {
-                    var updated = tissue.toBuilder().addAllTags(assignment.getTagsList()).build();
-                    structure.setTissues(index, updated);
-                }
+                List<String> tags = merged(tissue.getTagsList(), assignment.getTagsList());
+                var updated = tissue.toBuilder()
+                        .clearTags()
+                        .addAllTags(tags)
+                        .build();
+                structure.setTissues(index, updated);
                 return;
             }
         }
@@ -91,11 +93,12 @@ public final class ModuleTagExecution {
         for (int index = 0; index < structure.getOrgansCount(); index++) {
             var organ = structure.getOrgans(index);
             if (organ.getId().equals(assignment.getOrganId())) {
-                requireCompatible(organ.getTagsList(), assignment.getTagsList());
-                if (organ.getTagsCount() == 0) {
-                    var updated = organ.toBuilder().addAllTags(assignment.getTagsList()).build();
-                    structure.setOrgans(index, updated);
-                }
+                List<String> tags = merged(organ.getTagsList(), assignment.getTagsList());
+                var updated = organ.toBuilder()
+                        .clearTags()
+                        .addAllTags(tags)
+                        .build();
+                structure.setOrgans(index, updated);
                 return;
             }
         }
@@ -107,21 +110,25 @@ public final class ModuleTagExecution {
         for (int index = 0; index < structure.getMeridiansCount(); index++) {
             var meridian = structure.getMeridians(index);
             if (meridian.getId().equals(assignment.getMeridianId())) {
-                requireCompatible(meridian.getTagsList(), assignment.getTagsList());
-                if (meridian.getTagsCount() == 0) {
-                    var updated = meridian.toBuilder().addAllTags(assignment.getTagsList()).build();
-                    structure.setMeridians(index, updated);
-                }
+                List<String> tags = merged(meridian.getTagsList(), assignment.getTagsList());
+                var updated = meridian.toBuilder()
+                        .clearTags()
+                        .addAllTags(tags)
+                        .build();
+                structure.setMeridians(index, updated);
                 return;
             }
         }
         throw MeridianErrors.rejectModuleTags(MODULE_NOT_FOUND);
     }
 
-    private static void requireCompatible(List<String> existing, List<String> expected) {
-        // 标签是集合；非空集合只允许相同内容，保持原顺序而不覆盖。
-        if (!existing.isEmpty() && !new HashSet<>(existing).equals(new HashSet<>(expected))) {
+    private static List<String> merged(List<String> existing, List<String> expected) {
+        // 标签是集合；已有标签必须都在请求内，保留原顺序后按请求顺序追加缺少项，不删除也不替换。
+        if (!new HashSet<>(expected).containsAll(existing)) {
             throw MeridianErrors.rejectModuleTags(INVALID_REQUEST);
         }
+        var tags = new ArrayList<>(existing);
+        expected.stream().filter(tag -> !existing.contains(tag)).forEach(tags::add);
+        return tags;
     }
 }

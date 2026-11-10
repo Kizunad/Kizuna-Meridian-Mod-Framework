@@ -73,6 +73,39 @@ public final class FillModuleTagsTest {
         assertEquals(1, store.receipts().size());
     }
 
+    @Test
+    public void supersetAppendsMissingTagsAfterExistingOrder() {
+        // 内容升级只追加新标签；已有标签保持原顺序，缺少已有标签的请求仍视为替换而拒绝。
+        BodySnapshot initial = initial();
+        var store = new InMemoryBodyStore(List.of(initial), List.of(), QiInventory.empty());
+        var handler = handler(store);
+        var first = channelTags(List.of("sample:hand", "sample:layer"));
+        handler.handleModuleTags("owner", request("first", initial, first));
+        var current = store.find(initial.id()).orElseThrow();
+        var upgrade = channelTags(List.of("sample:element", "sample:layer", "sample:hand"));
+        var upgraded = MeridianProtocol.decodeResponse(handler.handleModuleTags("owner",
+                request("upgrade", current, upgrade)));
+        assertTrue(upgraded.hasCommandCommitted());
+        var appended = store.find(initial.id()).orElseThrow();
+        var channel = BodyProtobuf.toMessage(appended).getStructure().getMeridians(0);
+        assertEquals(List.of("sample:hand", "sample:layer", "sample:element"), channel.getTagsList());
+        var dropped = channelTags(List.of("sample:hand", "sample:element"));
+        assertFailure(handler.handleModuleTags("owner", request("drop", appended, dropped)),
+                FailureCode.INVALID_REQUEST);
+        assertEquals(appended, store.find(initial.id()).orElseThrow());
+    }
+
+    private static FillModuleTags channelTags(List<String> tags) {
+        // 只给样例经脉 channel 一项标签请求。
+        var channel = ModuleTagAssignment.newBuilder()
+                .setMeridianId("channel")
+                .addAllTags(tags)
+                .build();
+        return FillModuleTags.newBuilder()
+                .addModules(channel)
+                .build();
+    }
+
     private static void assertOnlyTagsChanged(BodySnapshot initial, BodySnapshot updated) {
         // 三种标签分别核对，其余构型、资源、伤势和时间必须逐字段一致。
         var message = BodyProtobuf.toMessage(updated);

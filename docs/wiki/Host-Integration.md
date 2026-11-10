@@ -100,8 +100,9 @@ Human 实现玩家一侧，其他生物宿主按同一协议实现。能力字�
 
 可信内容宿主通过 `BodyCommandHandler.handleModuleTags` 提交 `BodyCommand.fill_module_tags`（字段 30）。
 `FillModuleTags.modules` 每项用 `tissue_id`、`organ_id`、`meridian_id` 的 oneof 指定种类与实际 ID，
-并提供非空、无重复的合法内容标签。重复目标或未知模块拒绝；已有非空标签按集合比较，
-一致则保留原顺序，不一致返回 `INVALID_REQUEST`，整批不提交。只给空标签补值，成功 revision +1。
+并提供非空、无重复的合法内容标签。重复目标或未知模块拒绝；已有标签必须全部包含在请求集合内，
+保留原顺序后按请求顺序追加缺少的标签；请求缺少任一已有标签返回 `INVALID_REQUEST`，整批不提交。
+命令只追加、不删除或替换标签，成功 revision +1。
 资源、伤势、动作、时间、其他构型参数和历史回执保留。普通 `handle` 拒绝此操作，专用入口仍执行
 身份授权、私有安全策略、`expected_revision`、成功回执重放和事务候选复算；不读取或推进身体时钟。
 宿主负责比对自身模板、在成功后标脏并将快照与回执一起保存。相同请求重放不会再增加版本。
