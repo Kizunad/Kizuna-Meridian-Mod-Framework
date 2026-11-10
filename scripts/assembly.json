@@ -164,7 +164,8 @@
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "shared", "candidate": "library", "runtime": "library"},
-        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"},
+        {"path": "client", "candidate": "mod", "runtime": "mod"}
       ]
     },
     {
