@@ -5,6 +5,7 @@ import dev.kizuna.meridian.protocol.pb.MeridianMessages;
 import org.junit.Test;
 
 import java.util.HexFormat;
+import java.util.List;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -144,5 +145,23 @@ public class MeridianProtocolTest {
         assertThrows(IllegalArgumentException.class, () -> MeridianProtocol.encodeRequest(request));
         byte[] malformed = HexFormat.of().parseHex("08011201ff52080a06626f64792d31");
         assertThrows(IllegalArgumentException.class, () -> MeridianProtocol.decodeRequest(malformed));
+    }
+
+    @Test
+    public void textLimitCountsUtf8BytesAndRejectsEveryLoneSurrogate() {
+        // 文本上限按 UTF-8 字节计：汉字 3 字节、代理对 4 字节；孤立的高位或低位代理项不论在哪都拒绝。
+        var request = ProtocolFixtures.request();
+        String pair = new String(Character.toChars(0x1F600));
+        String high = String.valueOf((char) 0xd800);
+        String low = String.valueOf((char) 0xdc00);
+        for (String accepted : List.of("中".repeat(341), pair.repeat(256), "a" + pair + "b")) {
+            MeridianProtocol.encodeRequest(request.toBuilder().setRequestId(accepted).build());
+        }
+        for (String rejected : List.of("中".repeat(342), pair.repeat(257), "a" + low, high + "a", "a" + high)) {
+            var invalid = request.toBuilder().setRequestId(rejected).build();
+            // 校验失败的实例不会被记住，同一实例再交一次照样拒绝。
+            assertThrows(IllegalArgumentException.class, () -> MeridianProtocol.encodeRequest(invalid));
+            assertThrows(IllegalArgumentException.class, () -> MeridianProtocol.encodeRequest(invalid));
+        }
     }
 }

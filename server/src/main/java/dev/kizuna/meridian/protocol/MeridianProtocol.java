@@ -146,7 +146,8 @@ public final class MeridianProtocol {
         ProtoWire.validate(response);
         ProtoWire.require(response.getProtocolVersion() == VERSION, Protocol.RESPONSE_VERSION);
         switch (response.getResultCase()) {
-            case BODY_SNAPSHOT -> BodyProtobuf.fromMessage(response.getBodySnapshot());
+            // 信封刚整份校验过，身体只需核心构造。
+            case BODY_SNAPSHOT -> BodyProtobuf.fromCheckedMessage(response.getBodySnapshot());
             case COMMAND_COMMITTED -> validateCommitted(response.getCommandCommitted());
             case TISSUE_CAPABILITY -> {
                 // 派生读数仍需合法身份、版本和非负能力值。

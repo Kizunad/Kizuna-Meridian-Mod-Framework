@@ -67,7 +67,8 @@ public final class HealthHostProtobuf {
         if (response.hasUnbound()) {
             require(response.getUnbound());
         } else if (response.hasBody()) {
-            BodyProtobuf.fromMessage(response.getBody());
+            // 外层响应刚整份校验过，身体只需核心构造。
+            BodyProtobuf.fromCheckedMessage(response.getBody());
         }
     }
 

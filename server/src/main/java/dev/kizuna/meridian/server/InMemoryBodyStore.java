@@ -29,6 +29,8 @@ import dev.kizuna.meridian.protocol.pb.BodyMessages.TimeCursor;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.CommandReceipt;
 
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -38,6 +40,11 @@ import java.util.function.Function;
 
 /** 可运行的内存事务参考；不写磁盘，不能替代 Fabric/Bong 持久化适配。 */
 public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapshotReader {
+    /**
+     * 每具身体保留的最近回执条数。回执只为“同一请求重发拿回同一结果”；存储还要求每条命令的预期版本等于当前版本，
+     * 每次提交版本加一，所以被裁掉的旧请求重发时版本必然落后，只会得到版本冲突，不会执行第二次。
+     */
+    public static final int RETAINED_RECEIPTS = 256;
     private final Map<BodyId, StoredBody> bodies = new HashMap<>();
     private final Map<String, EnvironmentQiSource> sources = new HashMap<>();
     private QiInventory environmentQi;
@@ -74,7 +81,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         // 恢复时显式提供身体与成功回执，禁止自动补满或用重复身份覆盖旧身体。
         for (var snapshot : List.copyOf(snapshots)) {
             BodyProtobuf.toMessage(snapshot);
-            if (bodies.putIfAbsent(snapshot.id(), new StoredBody(snapshot, new HashMap<>())) != null) {
+            if (bodies.putIfAbsent(snapshot.id(), new StoredBody(snapshot, new LinkedHashMap<>())) != null) {
                 throw MeridianErrors.invalid(Host.DUPLICATE_BODY);
             }
         }
@@ -99,6 +106,8 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                 throw MeridianErrors.invalid(Host.DUPLICATE_RECEIPT);
             }
         }
+        // 全部回执照旧逐条校验后，每具身体只留最近的一段；旧存档读进来就裁短，下次保存文件随之变小，身体不动。
+        bodies.replaceAll((id, stored) -> new StoredBody(stored.snapshot(), newestReceipts(stored.receipts().values())));
     }
 
     @Override
@@ -132,13 +141,20 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         return bodies.values().stream().flatMap(body -> body.receipts().values().stream()).toList();
     }
 
+    /** 一具身体保留的回执，按提交顺序从旧到新；未登记的身体没有回执。 */
+    public synchronized List<CommandReceipt> receipts(BodyId bodyId) {
+        // 只看这一具身体的索引，不必遍历全体再按身体过滤。
+        var stored = bodies.get(MeridianErrors.required(bodyId, Host.BODY_ID_REQUIRED));
+        return stored == null ? List.of() : List.copyOf(stored.receipts().values());
+    }
+
     public synchronized void registerBody(BodySnapshot initial) {
         // 可信宿主只登记首次出生的身体；既有身份不能借重新登录覆盖资源与回执。
         if (transactionOpen) {
             throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
         }
         BodyProtobuf.toMessage(initial);
-        if (bodies.putIfAbsent(initial.id(), new StoredBody(initial, new HashMap<>())) != null) {
+        if (bodies.putIfAbsent(initial.id(), new StoredBody(initial, new LinkedHashMap<>())) != null) {
             throw MeridianErrors.invalid(Host.DUPLICATE_BODY);
         }
     }
@@ -303,7 +319,9 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
             // 所有可能失败的计算在发布之前完成；同一锁内发布身体、回执和环境余额。
             if (transaction.staged != null) {
                 // 仅在回调成功后追加新回执；暂存阶段不修改索引，失败仍完整回滚。
-                transaction.staged.receipts().put(key(transaction.stagedReceipt), transaction.stagedReceipt);
+                var receipts = transaction.staged.receipts();
+                receipts.put(key(transaction.stagedReceipt), transaction.stagedReceipt);
+                dropOldestReceipts(receipts);
                 bodies.put(bodyId, transaction.staged);
                 environmentQi = transaction.stagedEnvironment;
                 if (transaction.stagedSource != null) {
@@ -318,6 +336,27 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
         }
     }
 
+    private static Map<ReceiptKey, CommandReceipt> newestReceipts(Collection<CommandReceipt> receipts) {
+        // 存档里的顺序不可信；按提交版本排回提交顺序，只留最新的 RETAINED_RECEIPTS 条。
+        List<CommandReceipt> ordered = receipts.stream()
+                .sorted(Comparator.comparingLong(receipt -> receipt.getCommitted().getRevision()))
+                .toList();
+        var kept = new LinkedHashMap<ReceiptKey, CommandReceipt>();
+        for (CommandReceipt receipt : ordered.subList(Math.max(0, ordered.size() - RETAINED_RECEIPTS), ordered.size())) {
+            kept.put(key(receipt), receipt);
+        }
+        return kept;
+    }
+
+    private static void dropOldestReceipts(Map<ReceiptKey, CommandReceipt> receipts) {
+        // 索引按提交顺序插入，最前面的就是最早的；每次提交只多一条，超出时删掉最早的那条即可。
+        var oldest = receipts.keySet().iterator();
+        while (receipts.size() > RETAINED_RECEIPTS) {
+            oldest.next();
+            oldest.remove();
+        }
+    }
+
     private static ReceiptKey key(CommandReceipt receipt) {
         // 身体 ID 由外层索引隔离；调用者从可信认证上下文取得。
         return new ReceiptKey(receipt.getCallerId(), receipt.getRequestId());
@@ -325,7 +364,7 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
 
     private record ReceiptKey(String callerId, String requestId) { }
 
-    // 回执索引只由 Store 持有；构造完成后所有读写都必须在 Store 的监视器内。
+    // 回执索引只由 Store 持有，按提交顺序排列；构造完成后所有读写都必须在 Store 的监视器内。
     private record StoredBody(BodySnapshot snapshot, Map<ReceiptKey, CommandReceipt> receipts) { }
 
     private static final class MemoryTransaction implements Transaction {

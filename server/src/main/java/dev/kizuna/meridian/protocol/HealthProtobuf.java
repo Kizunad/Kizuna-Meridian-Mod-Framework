@@ -133,7 +133,8 @@ public final class HealthProtobuf {
     private static void validateContext(DamageContext context) {
         // 完整快照与伤害输入都须可用，不能把半份身体交给 Addon 决策。
         ProtoWire.validate(context);
-        BodyProtobuf.fromMessage(context.getBody());
+        // 外层上下文刚整份校验过，身体只需核心构造。
+        BodyProtobuf.fromCheckedMessage(context.getBody());
         validateDamage(context.getDamage());
     }
 

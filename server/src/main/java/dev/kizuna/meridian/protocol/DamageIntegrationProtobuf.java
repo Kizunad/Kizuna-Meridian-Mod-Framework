@@ -71,7 +71,8 @@ public final class DamageIntegrationProtobuf {
         ProtoWire.validate(commit);
         validateContext(commit.getContext());
         validatePlan(commit.getPlan());
-        BodyProtobuf.fromMessage(commit.getBody());
+        // 外层提交刚整份校验过，身体只需核心构造。
+        BodyProtobuf.fromCheckedMessage(commit.getBody());
         var context = commit.getContext();
         var plan = commit.getPlan();
         ProtoWire.require(plan.getHandled() && plan.getRemainingDamageHp() <= context.getDamage().getDamageHp()

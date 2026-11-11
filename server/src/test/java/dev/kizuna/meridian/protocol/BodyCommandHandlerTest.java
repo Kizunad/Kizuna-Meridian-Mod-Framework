@@ -427,6 +427,47 @@ public class BodyCommandHandlerTest {
         assertEquals(15, store.find(body().id()).orElseThrow().vitality().spentLifespanSeconds(), 0);
     }
 
+    @Test
+    public void storeKeepsNewestReceiptsAndPrunedRequestsCannotRunTwice() {
+        // 每具身体只留最近一段回执；窗口内重发照旧拿回原结果，被裁掉的旧请求重发只会撞版本冲突，不会再扣一次寿元。
+        var store = store(body());
+        var everyReceipt = new java.util.ArrayList<MeridianMessages.CommandReceipt>();
+        var handler = handler(store, (context, command, current) -> true,
+                (context, receipt, before, after) -> everyReceipt.add(receipt));
+        int retained = InMemoryBodyStore.RETAINED_RECEIPTS;
+        int commits = retained + 10;
+        double spentEach = 0.01;
+        byte[] first = request("spend-0", 0, spentEach);
+        handler.handle("player", first);
+        byte[] last = first;
+        byte[] lastResponse = null;
+        for (int index = 1; index < commits; index++) {
+            last = request("spend-" + index, index, spentEach);
+            lastResponse = handler.handle("player", last);
+        }
+        BodyId id = body().id();
+        var kept = store.receipts(id);
+        assertEquals(retained, kept.size());
+        assertEquals("spend-" + (commits - retained), kept.get(0).getRequestId());
+        assertEquals("spend-" + (commits - 1), kept.get(retained - 1).getRequestId());
+        assertArrayEquals(lastResponse, handler.handle("player", last));
+        assertFailure(handler.handle("player", first), MeridianMessages.FailureCode.REVISION_CONFLICT);
+        BodySnapshot current = store.find(id).orElseThrow();
+        assertEquals(commits, current.revision());
+        double spentBefore = body().vitality().spentLifespanSeconds();
+        assertEquals(spentBefore + commits * spentEach, current.vitality().spentLifespanSeconds(), 1e-9);
+
+        // 旧存档带着全部历史、顺序也打乱：逐条校验后只留最新一段，按提交顺序排好，身体原样。
+        var shuffled = new java.util.ArrayList<>(everyReceipt);
+        java.util.Collections.reverse(shuffled);
+        var restored = new InMemoryBodyStore(List.of(current), shuffled);
+        assertEquals(kept, restored.receipts(id));
+        assertEquals(current, restored.find(id).orElseThrow());
+        assertArrayEquals(lastResponse, handler(restored).handle("player", last));
+        assertFailure(handler(restored).handle("player", first), MeridianMessages.FailureCode.REVISION_CONFLICT);
+        assertTrue(restored.receipts(new BodyId("missing-body")).isEmpty());
+    }
+
     private static BodySnapshot body() {
         // 复用非人混相构型，但使用可递增的初始版本；本轮不推进已有时间或在途货物。
         return BodyProtobuf.fromMessage(BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI))

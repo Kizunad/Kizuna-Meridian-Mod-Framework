@@ -75,6 +75,12 @@ public final class BodyProtobuf {
     public static BodySnapshot fromMessage(BodyMessages.BodySnapshot value) {
         // 先拒绝缺失/未知字段，再让原有核心校验统一验证上限、引用和时序。
         ProtoWire.validate(value);
+        return fromCheckedMessage(value);
+    }
+
+    /** 调用方刚对装着这具身体的整份外层消息做过 {@link ProtoWire#validate}；这里只做核心构造校验。 */
+    static BodySnapshot fromCheckedMessage(BodyMessages.BodySnapshot value) {
+        // 外层校验已递归查过身体的每个字段，规则相同，字段计数和深度还算在外层里，更严；不必再查一遍。
         OpeningTask openingTask = null;
         if (value.hasOpeningTask()) {
             openingTask = OpeningProtobuf.fromTask(value.getOpeningTask());
