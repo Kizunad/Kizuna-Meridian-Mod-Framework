@@ -111,6 +111,9 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 |---|---|---|---|
 | `/meridian progression unlock [<targets>] [inner_vision]` | 2 | Progression | 解锁进度；带 `inner_vision` 时只解锁内视 |
 | `/meridian progression reset [<targets>] [inner_vision]` | 2 | Progression | 重置进度；带 `inner_vision` 时只重置内视 |
+| `/meridian progression recipes [<targets>]` | 0 | Brewing | 列出读过和没读过的药方 |
+| `/meridian progression recipes learn [<targets>] <recipe\|all>` | 2 | Brewing | 学会一种或全部药方，药方名可补全 |
+| `/meridian progression recipes forget [<targets>] <recipe\|all>` | 2 | Brewing | 忘掉一种或全部药方 |
 
 ### watch
 

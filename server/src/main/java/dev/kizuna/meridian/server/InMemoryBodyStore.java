@@ -182,6 +182,34 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
     }
 
     /**
+     * 可信装置在 [from, until) 内从区域取走 drawn，返回已提交来源；取出量进入默认释放账户。
+     * 和身体持续摄入共用窗口、共享速率与真实库存校验；调用方负责取用 ID 去重和之后的归位。
+     */
+    public synchronized EnvironmentQiSource drawEnvironmentSource(String sourceId, long expectedRevision,
+                                                                  TimeCursor from, TimeCursor until,
+                                                                  QiInventory drawn) {
+        // 与身体事务共用监视器：先查来源和版本，取用会改变其他身体看到的库存与速率。
+        if (transactionOpen) {
+            throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
+        }
+        EnvironmentQiSource source = sources.get(sourceId);
+        if (source == null) {
+            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_UNAVAILABLE);
+        }
+        if (source.getRevision() != expectedRevision) {
+            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_REVISION_CONFLICT);
+        }
+        MeridianErrors.required(drawn, MeridianErrors.Environment.INVENTORY_REQUIRED);
+
+        // 区域和默认账户两份候选都算完才发布，任一步失败两边保持原样，总账不变。
+        EnvironmentQiSource updated = EnvironmentAbsorption.draw(source, from, until, drawn);
+        QiInventory released = QiAccounting.credit(environmentQi, drawn);
+        sources.put(sourceId, updated);
+        environmentQi = released;
+        return updated;
+    }
+
+    /**
      * 将可信宿主提供的非空真元明细记入区域，返回已提交来源；不改变供给窗口、速率和已用预算。
      * 调用方负责释放 ID 去重；来源版本递增会使旧 offer 得到 ENVIRONMENT_REVISION_CONFLICT，
      * 宜在结清旧窗口后集中入账，再使用新版本续窗，避免打断进行中的摄入。

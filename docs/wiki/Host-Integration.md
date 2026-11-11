@@ -73,6 +73,7 @@ Human 实现玩家一侧，其他生物宿主按同一协议实现。能力字�
 
 - `creditEnvironmentSource(sourceId, credited)`：将其他宿主已经释放的真元记入指定区域，不改默认释放账户。
 - `creditReleasedQi(credited)`：将没有区域归属的外部释放记入默认释放账户，不改变任何区域库存或版本；同样禁止嵌套于身体事务，拒绝空明细和数值溢出，调用方负责释放 ID 去重与保存。
+- `drawEnvironmentSource(sourceId, expectedRevision, from, until, drawn)`：可信装置在一段正时长的区间内从区域取走指定明细；核对预期版本、供给窗口、共享速率和真实库存，扣库存、登记速率占用、版本加一，取出的真元进入默认释放账户。规则见[装置取用](Environment-Qi.md#装置取用)。
 - `transferReleasedToSource(sourceId, amount)`：从默认释放账户扣除指定明细并记入区域；按 `QiAccounting.debit` 逐属性、逐相态核对余额且要求密度匹配，不能用其他种类抵扣。
 - `transferReleasedToSources(amounts)`：按传入 Map 的迭代顺序处理一批区域归位。每份先用
   `QiAccounting.select` 核对最小可流转量及余额，并采用默认账户实际密度；再以

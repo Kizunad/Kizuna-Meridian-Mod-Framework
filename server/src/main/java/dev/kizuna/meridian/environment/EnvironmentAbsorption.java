@@ -54,13 +54,7 @@ public final class EnvironmentAbsorption {
                                            TimeCursor from, TimeCursor until) {
         // 来源由宿主选择；窗口内速率固定，逐类可用量始终读取当前实际库存。
         EnvironmentProtobuf.validateSource(source);
-        if (!sameClock(source.getValidFrom(), from) || !sameClock(from, until)
-                || from.getElapsedMillis() < source.getValidFrom().getElapsedMillis()
-                || from.getElapsedMillis() >= source.getValidUntil().getElapsedMillis()
-                || until.getElapsedMillis() < from.getElapsedMillis()
-                || until.getElapsedMillis() > source.getValidUntil().getElapsedMillis()) {
-            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_INTERVAL_INVALID);
-        }
+        requireWithinWindow(source, from, until);
         var offered = EnvironmentQiOffer.newBuilder().setProtocolVersion(1).setSourceId(source.getSpace().getSourceId())
                 .setSourceRevision(source.getRevision()).setBodyId(bodyId).setAvailableQi(source.getInventory())
                 .setMaxAbsorptionPerSecond(source.getMaxAbsorptionPerSecond())
@@ -118,6 +112,69 @@ public final class EnvironmentAbsorption {
                 .setInventory(BodyProtobuf.toInventory(updated)).clearUsage().addAllUsage(usage).build();
         EnvironmentProtobuf.validateSource(result);
         return result;
+    }
+
+    public static double spareRate(EnvironmentQiSource source, TimeCursor from, TimeCursor until) {
+        // 宿主先问这段区间还剩多少速率，再决定装置取多少；只读，不预留任何额度。
+        EnvironmentProtobuf.validateSource(source);
+        requirePositiveInterval(source, from, until);
+        long start = from.getElapsedMillis();
+        long end = until.getElapsedMillis();
+
+        // 曲线按时间排序且互不重叠，区间内最高的已用速率决定还能均匀占用多少。
+        double busiestRate = 0;
+        for (EnvironmentQiUsage usage : source.getUsageList()) {
+            boolean overlaps = usage.getStartedMillis() < end && usage.getEndedMillis() > start;
+            if (overlaps) {
+                busiestRate = Math.max(busiestRate, usage.getQiPerSecond());
+            }
+        }
+        return Math.max(0, source.getMaxAbsorptionPerSecond() - busiestRate);
+    }
+
+    public static EnvironmentQiSource draw(EnvironmentQiSource source, TimeCursor from, TimeCursor until,
+                                           QiInventory drawn) {
+        // 装置取用和身体持续摄入同规则：真实库存扣账、按区间占共享速率；取出量由调用者放进默认释放账户。
+        EnvironmentProtobuf.validateSource(source);
+        requirePositiveInterval(source, from, until);
+        if (source.getRevision() == Long.MAX_VALUE) {
+            throw MeridianErrors.rejectIntake(FailureCode.REVISION_EXHAUSTED);
+        }
+        if (drawn.entries().isEmpty()) {
+            throw MeridianErrors.invalid(MeridianErrors.Environment.DRAW_EMPTY);
+        }
+        QiAccounting.validateTransferable(drawn);
+
+        // 先扣真实库存，种类或数量不够整笔拒绝；再按均匀速率检查每个重叠子区间。
+        QiInventory remaining = QiAccounting.debit(BodyProtobuf.fromInventory(source.getInventory()), drawn);
+        long durationMillis = until.getElapsedMillis() - from.getElapsedMillis();
+        double drawnRate = drawn.totalQi() / (durationMillis / 1000.0);
+        List<EnvironmentQiUsage> usage = reserve(source, from.getElapsedMillis(), until.getElapsedMillis(), drawnRate);
+
+        // 库存、用量和版本一起换新；窗口与速率上限保持原样。
+        var result = source.toBuilder().setRevision(source.getRevision() + 1)
+                .setInventory(BodyProtobuf.toInventory(remaining)).clearUsage().addAllUsage(usage).build();
+        EnvironmentProtobuf.validateSource(result);
+        return result;
+    }
+
+    private static void requireWithinWindow(EnvironmentQiSource source, TimeCursor from, TimeCursor until) {
+        // 区间必须与窗口同钟、起点在窗内、终点不越过窗尾；零时长只有纯释放才能用。
+        if (!sameClock(source.getValidFrom(), from) || !sameClock(from, until)
+                || from.getElapsedMillis() < source.getValidFrom().getElapsedMillis()
+                || from.getElapsedMillis() >= source.getValidUntil().getElapsedMillis()
+                || until.getElapsedMillis() < from.getElapsedMillis()
+                || until.getElapsedMillis() > source.getValidUntil().getElapsedMillis()) {
+            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_INTERVAL_INVALID);
+        }
+    }
+
+    private static void requirePositiveInterval(EnvironmentQiSource source, TimeCursor from, TimeCursor until) {
+        // 取用要占速率，零时长会让速率无穷大，和持续摄入一样拒绝。
+        requireWithinWindow(source, from, until);
+        if (until.getElapsedMillis() == from.getElapsedMillis()) {
+            throw MeridianErrors.rejectIntake(FailureCode.ENVIRONMENT_INTERVAL_INVALID);
+        }
     }
 
     private static List<EnvironmentQiUsage> reserve(EnvironmentQiSource source, long start, long end, double rate) {

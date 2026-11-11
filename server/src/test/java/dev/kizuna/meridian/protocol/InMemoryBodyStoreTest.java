@@ -5,6 +5,7 @@ import dev.kizuna.meridian.core.Qi;
 import dev.kizuna.meridian.core.QiAccounting;
 import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.Realm;
+import dev.kizuna.meridian.environment.EnvironmentAbsorption;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.EnvironmentMessages.EnvironmentQiSource;
@@ -225,6 +226,87 @@ public class InMemoryBodyStoreTest {
         }
         // 拒绝嵌套不能遗留 transactionOpen，退出回调后正常入账仍可继续。
         assertEquals(1, store.creditEnvironmentSource("region", amount).getRevision());
+    }
+
+    @Test
+    public void deviceDrawsShareTheRateCurveAndMoveQiIntoTheReleasedAccount() {
+        // 窗口上限 4 元/秒，[0,500) 已被身体占 1 元/秒；装置在 [0,1000) 取 2 元，占 2 元/秒。
+        QiInventory stock = inventory(new Qi(Qi.QiAttribute.WOOD, 6, .01), new Qi(Qi.QiAttribute.FIRE, 2, .01));
+        EnvironmentQiSource initial = source(stock);
+        var store = new InMemoryBodyStore(List.of(), List.of(), QiInventory.empty(), List.of(initial));
+        assertEquals(3, EnvironmentAbsorption.spareRate(initial, time(0), time(1000)), 0);
+        assertEquals(4, EnvironmentAbsorption.spareRate(initial, time(500), time(1000)), 0);
+        QiInventory drawn = inventory(new Qi(Qi.QiAttribute.WOOD, 1.5, .01), new Qi(Qi.QiAttribute.FIRE, .5, .01));
+        double totalBefore = stock.totalQi();
+
+        // 区域少多少，默认释放账户就多多少；曲线按重叠子区间合计，窗口和上限不动。
+        EnvironmentQiSource afterDraw = store.drawEnvironmentSource("region", 0, time(0), time(1000), drawn);
+        assertEquals(1, afterDraw.getRevision());
+        assertEquals(inventory(new Qi(Qi.QiAttribute.WOOD, 4.5, .01), new Qi(Qi.QiAttribute.FIRE, 1.5, .01)),
+                BodyProtobuf.fromInventory(afterDraw.getInventory()));
+        assertEquals(drawn, store.environmentQi());
+        assertEquals(totalBefore, BodyProtobuf.fromInventory(afterDraw.getInventory()).totalQi()
+                + store.environmentQi().totalQi(), 1e-12);
+        assertEquals(List.of(usage(0, 500, 3), usage(500, 1000, 2)), afterDraw.getUsageList());
+        assertEquals(initial.getValidUntil(), afterDraw.getValidUntil());
+        assertEquals(initial.getMaxAbsorptionPerSecond(), afterDraw.getMaxAbsorptionPerSecond(), 0);
+        assertEquals(1, EnvironmentAbsorption.spareRate(afterDraw, time(0), time(1000)), 0);
+
+        // 存档恢复只还原已提交的库存、曲线和默认账户，不重放取用。
+        var restored = new InMemoryBodyStore(List.of(), store.receipts(), store.environmentQi(), store.environmentSources());
+        assertEquals(afterDraw, restored.environmentSource("region").orElseThrow());
+        assertEquals(drawn, restored.environmentQi());
+    }
+
+    @Test
+    public void deviceDrawsRejectOverRateOverdraftStaleRevisionAndBadIntervalsWithoutPartialWrites() {
+        // 每种拒绝都要让区域、曲线和默认账户保持原样，下一次合法取用照常成功。
+        QiInventory stock = inventory(new Qi(Qi.QiAttribute.WOOD, 1, .01));
+        EnvironmentQiSource initial = source(stock);
+        BodyMessages.TimeCursor otherEpoch = time(0).toBuilder().setEpoch("epoch-2").build();
+        var store = new InMemoryBodyStore(List.of(), List.of(), QiInventory.empty(), List.of(initial));
+        QiInventory one = inventory(new Qi(Qi.QiAttribute.WOOD, 1, .01));
+        QiInventory half = inventory(new Qi(Qi.QiAttribute.WOOD, .5, .01));
+
+        assertEquals(FailureCode.ENVIRONMENT_BUDGET_EXCEEDED, assertThrows(MeridianErrors.IntakeRejected.class,
+                () -> store.drawEnvironmentSource("region", 0, time(0), time(250), one)).code());
+        assertEquals(MeridianErrors.TransportRejectionReason.INSUFFICIENT_QI, assertThrows(MeridianErrors.TransportRejected.class,
+                () -> store.drawEnvironmentSource("region", 0, time(0), time(2000),
+                        inventory(new Qi(Qi.QiAttribute.WOOD, 2, .01)))).reason());
+        assertEquals(MeridianErrors.TransportRejectionReason.INSUFFICIENT_QI, assertThrows(MeridianErrors.TransportRejected.class,
+                () -> store.drawEnvironmentSource("region", 0, time(0), time(1000),
+                        inventory(new Qi(Qi.QiAttribute.WATER, .5, .01)))).reason());
+        assertEquals(FailureCode.ENVIRONMENT_REVISION_CONFLICT, assertThrows(MeridianErrors.IntakeRejected.class,
+                () -> store.drawEnvironmentSource("region", 1, time(0), time(1000), half)).code());
+        assertEquals(FailureCode.ENVIRONMENT_UNAVAILABLE, assertThrows(MeridianErrors.IntakeRejected.class,
+                () -> store.drawEnvironmentSource("missing", 0, time(0), time(1000), half)).code());
+        for (var interval : List.of(List.of(time(500), time(500)), List.of(time(1500), time(2500)),
+                List.of(otherEpoch, time(1000)))) {
+            assertEquals(FailureCode.ENVIRONMENT_INTERVAL_INVALID, assertThrows(MeridianErrors.IntakeRejected.class,
+                    () -> store.drawEnvironmentSource("region", 0, interval.get(0), interval.get(1), half)).code());
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> store.drawEnvironmentSource("region", 0, time(0), time(1000), QiInventory.empty()));
+        assertThrows(MeridianErrors.TransportRejected.class, () -> store.drawEnvironmentSource("region", 0, time(0),
+                time(1000), inventory(new Qi(Qi.QiAttribute.WOOD, QiAccounting.MIN_TRANSFER_QI / 2, .01))));
+        assertEquals(initial, store.environmentSource("region").orElseThrow());
+        assertEquals(QiInventory.empty(), store.environmentQi());
+
+        // 身体事务回调里取用会被外层暂存覆盖，必须拒绝。
+        BodySnapshot body = ProtocolFixtures.snapshot(Realm.WANDERING_QI);
+        var withBody = new InMemoryBodyStore(List.of(body), List.of(), QiInventory.empty(), List.of(initial));
+        assertThrows(IllegalStateException.class, () -> withBody.transact(body.id(),
+                transaction -> withBody.drawEnvironmentSource("region", 0, time(0), time(1000), half)));
+        assertEquals(initial, withBody.environmentSource("region").orElseThrow());
+
+        // 失败没有消耗版本：同一预期版本的合法取用成功。
+        assertEquals(1, store.drawEnvironmentSource("region", 0, time(0), time(1000), half).getRevision());
+    }
+
+    private static EnvironmentQiUsage usage(long startedMillis, long endedMillis, double qiPerSecond) {
+        // 曲线分段只比较时间边界和速率，便于直接对照合并结果。
+        return EnvironmentQiUsage.newBuilder().setStartedMillis(startedMillis).setEndedMillis(endedMillis)
+                .setQiPerSecond(qiPerSecond).build();
     }
 
     private static List<BiFunction<String, QiInventory, EnvironmentQiSource>> creditOperations(InMemoryBodyStore store) {

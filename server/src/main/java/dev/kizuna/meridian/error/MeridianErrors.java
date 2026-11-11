@@ -239,6 +239,7 @@ public final class MeridianErrors {
         public static final String INVENTORY_REQUIRED = "环境库存不能为空";
         public static final String RELEASE_TRANSFERS_REQUIRED = "释放归位批次不能为空";
         public static final String CREDIT_EMPTY = "环境入账必须包含正数真元明细";
+        public static final String DRAW_EMPTY = "装置取用必须包含正数真元明细";
         public static final String SPACE_VERSION = "不支持的环境空间或边界缓存协议版本";
         public static final String SPACE_VOLUME = "独立环境空间的体积必须为正有限数";
         public static final String SAME_BOUNDARY_SOURCE = "环境边界必须连接两个不同来源";
