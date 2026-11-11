@@ -25,7 +25,7 @@ final class BreathingDelivery<C> {
 
     private final GatheringSession<C> session;
     private final BreathingProfile profile;
-    private final Map<String, Double> arrivals = new HashMap<>();
+    private final Map<String, dev.kizuna.meridian.core.QiInventory> arrivals = new HashMap<>();
     private long observedRevision = -1;
     private long boundaryMillis;
     private FailureCode failure = FailureCode.FAILURE_CODE_UNSPECIFIED;
@@ -58,9 +58,9 @@ final class BreathingDelivery<C> {
         boolean delivered = false;
         for (String id : List.copyOf(arrivals.keySet())) {
             if (!existing.contains(id)) {
-                double amount = arrivals.remove(id);
+                dev.kizuna.meridian.core.QiInventory cargo = arrivals.remove(id);
                 if (!body.vitality().dead()) {
-                    session.recordBreathingDelivery(amount);
+                    session.recordBreathingDelivery(cargo);
                     delivered = true;
                 }
             }
@@ -161,7 +161,7 @@ final class BreathingDelivery<C> {
             for (var transit : session.read().transits()) {
                 String transitId = transit.id();
                 if (!previousTransitIds.contains(transitId)) {
-                    arrivals.put(transitId, transit.cargo().totalQi());
+                    arrivals.put(transitId, transit.cargo());
                 }
             }
         } catch (MeridianErrors.GatheringRejected rejection) {

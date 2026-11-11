@@ -2,6 +2,7 @@ syntax = "proto3";
 package kizuna.meridian.v1;
 option java_package = "dev.kizuna.meridian.protocol.pb";
 option java_outer_classname = "BreathingMessages";
+import "kizuna/meridian/v1/body.proto";
 import "kizuna/meridian/v1/protocol.proto";
 
 // 可信生物内容。空气与真元是不同资源；空腔大小不能替代真元容量。
@@ -71,6 +72,7 @@ message BreathingView {
   double automatic_capture_efficiency = 18; // 自动真实接触的采样效率，来自可信生物内容。
   double automatic_resume_stamina_ratio = 19; // 自动等待结束的恢复线，来自可信生物内容。
   optional double intake_multiplier = 20; // 吐纳器官当前的摄入倍率，由能力修正合计；缺省为 1。
+  QiInventory stored_by_kind = 21; // stored_qi 按属性与相态分开的明细，同一种类合并为一行；合计等于 stored_qi。
 }
 // 真实三维局部坐标 [0,1]，入口为 (0.5,0.4,0.5)。旋转相机不改变粒子位置。
 // 这些粒子是摄入机会，不是环境账本中的可复制资源。

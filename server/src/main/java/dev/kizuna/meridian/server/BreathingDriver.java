@@ -5,12 +5,15 @@ import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.OrganCapabilities;
 import dev.kizuna.meridian.core.TissueCapabilities;
 import dev.kizuna.meridian.error.MeridianErrors;
+import dev.kizuna.meridian.protocol.BodyProtobuf;
+import dev.kizuna.meridian.protocol.pb.BodyMessages.OrganRecipe;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.Qi;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.QiPhase;
 import dev.kizuna.meridian.protocol.pb.BreathingMessages.*;
 import dev.kizuna.meridian.protocol.pb.GatheringMessages.GatheringChoice;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.*;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
@@ -39,7 +42,7 @@ final class BreathingDriver<C> {
     private long boundaryMillis;
     private double airLiters;
     private double absorbedQi;
-    private double storedQi;
+    private dev.kizuna.meridian.core.QiInventory stored = dev.kizuna.meridian.core.QiInventory.empty();
     private String status = "准备吐纳";
     private FailureCode failure = FAILURE_CODE_UNSPECIFIED;
     private int lastOrgan;
@@ -405,7 +408,10 @@ final class BreathingDriver<C> {
         boolean inhaling = action == INHALE;
         double flowResponse = 1 - Math.exp(-seconds * 2.5);
         suction += ((inhaling ? 1 : 0) - suction) * flowResponse;
-        blowing += ((action == EXHALE ? 1 : 0) - blowing) * flowResponse;
+        // 自动呼气平缓排出，不吹散粒子：同样长的一口呼气会把吸来的粒子全推回场景边缘，
+        // 下一口吸气来不及拉回，自动吐纳第一口之后就再碰不到粒子。手动呼气仍按瞄准方向吹开。
+        boolean blowsParticles = action == EXHALE && !automatic;
+        blowing += ((blowsParticles ? 1 : 0) - blowing) * flowResponse;
         if (action == INHALE || action == EXHALE) {
             // 自动采用固定正前方引导，同样经过气流积分与真实入口碰撞。
             double dx = automatic ? 0 : control.getAimX() - .5;
@@ -507,13 +513,7 @@ final class BreathingDriver<C> {
         for (int offset = 0; offset < profile.getOrgansCount(); offset++) {
             int organIndex = (lastOrgan + offset) % profile.getOrgansCount();
             String organId = profile.getOrgans(organIndex).getOrganId();
-            for (GatheringChoice choice : choices) {
-                if (!choice.getOrganId().equals(organId) || !profile.getRecipeIdsList().contains(choice.getRecipe().getId())
-                        || choice.getRecipe().getInput().getEntriesCount() != 1
-                        || dev.kizuna.meridian.protocol.QiDensity.phase(choice.getRecipe().getInput().getEntries(0).getDensity()) != QiPhase.FREE
-                        || !choice.getRecipe().getInput().getEntries(0).getAttribute().equals(attribute)) {
-                    continue;
-                }
+            for (GatheringChoice choice : captureChoices(profile, choices, organId, attribute)) {
                 try {
                     double samplingVolume = profile.getParticleVolumeBlocks();
                     if (automatic) {
@@ -538,9 +538,32 @@ final class BreathingDriver<C> {
         return false;
     }
 
-    void recordStoredQi(double amount) {
-        // 仅由运输完成边界累计炼化产物；捕获原料或开始加工不等于经脉已经收货。
-        storedQi += amount;
+    static List<GatheringChoice> captureChoices(BreathingProfile profile, List<GatheringChoice> choices,
+                                                String organId, String attribute) {
+        // 这个器官能直接吸这种游离灵气的配方；同一器官同一属性有多条时，先用境界要求最高的一条，
+        // 身体升境后吐纳自动换到高境界配方，被拒（如那条出口已满）再退回低境界配方。
+        return choices.stream()
+                .filter(choice -> choice.getOrganId().equals(organId))
+                .filter(choice -> profile.getRecipeIdsList().contains(choice.getRecipe().getId()))
+                .filter(choice -> capturesFree(choice.getRecipe(), attribute))
+                .sorted(Comparator.comparingInt(
+                        (GatheringChoice choice) -> choice.getRecipe().getMinimumRealmValue()).reversed())
+                .toList();
+    }
+
+    private static boolean capturesFree(OrganRecipe recipe, String attribute) {
+        // 吐纳只直接处理单种游离态输入，粒子属性要和配方输入一致。
+        if (recipe.getInput().getEntriesCount() != 1) {
+            return false;
+        }
+        Qi input = recipe.getInput().getEntries(0);
+        return dev.kizuna.meridian.protocol.QiDensity.phase(input.getDensity()) == QiPhase.FREE
+                && input.getAttribute().equals(attribute);
+    }
+
+    void recordStored(dev.kizuna.meridian.core.QiInventory cargo) {
+        // 仅由运输完成边界累计炼化产物；捕获原料或开始加工不等于经脉已经收货。同一种类合并，窗口能分开显示各相态。
+        stored = dev.kizuna.meridian.core.QiInventory.combine(List.of(stored, cargo));
     }
 
     private List<Qi> refreshParticles() {
@@ -644,7 +667,8 @@ final class BreathingDriver<C> {
                 .setSequence(control.getSequence())
                 .setStatus(status)
                 .setAbsorbedQi(absorbedQi)
-                .setStoredQi(storedQi)
+                .setStoredQi(stored.totalQi())
+                .setStoredByKind(BodyProtobuf.toInventory(stored))
                 .setFailure(failure)
                 .build();
     }

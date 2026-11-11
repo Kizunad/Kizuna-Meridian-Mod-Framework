@@ -452,9 +452,9 @@ public final class GatheringSession<C> implements AutoCloseable {
         return storedOutput / efficiency;
     }
 
-    void recordBreathingDelivery(double amount) {
-        // 入脉统计只来自已完成运输，肺缓存与在途不会提前显示为经脉收货。
-        breathing.recordStoredQi(amount);
+    void recordBreathingDelivery(dev.kizuna.meridian.core.QiInventory cargo) {
+        // 入脉统计只来自已完成运输，肺缓存与在途不会提前显示为经脉收货；保留货物的属性与相态。
+        breathing.recordStored(cargo);
     }
 
     @Override
