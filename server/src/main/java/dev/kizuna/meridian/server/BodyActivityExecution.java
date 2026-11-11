@@ -382,24 +382,15 @@ public final class BodyActivityExecution {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
         var id = new Anatomy.OrganId(effort.getOrganId());
-        var definition = body.structure().organs().stream().filter(item -> item.id().equals(id)).findFirst().orElseThrow();
         var state = body.organStates().stream().filter(item -> item.id().equals(id)).findFirst().orElseThrow();
-        var part = body.structure().parts().stream().filter(item -> item.id().equals(definition.partId())).findFirst().orElseThrow();
-        var partState = body.partStates().stream().filter(item -> item.id().equals(part.id())).findFirst().orElseThrow();
-        double health = Math.min(state.hp() / definition.maxHp(), partState.hp() / part.maxHp());
-        var endurance = definition.endurance();
-        if (endurance == null || health <= 0) {
-            throw MeridianErrors.rejectIntake(MeridianMessages.FailureCode.MODULE_UNAVAILABLE);
-        }
-        double availableWork = (endurance.enduranceJoules() - state.fatigueJoules()) * health;
-        double availablePower = endurance.maximumWatts() * availableWork / endurance.enduranceJoules();
-        if (effort.getWatts() > availablePower || effort.getWatts() * effort.getSeconds() > availableWork) {
+        OrganCapabilities.WorkBudget budget = OrganCapabilities.workBudget(body, id);
+        if (!budget.allows(effort.getWatts(), effort.getSeconds())) {
             throw MeridianErrors.rejectIntake(MeridianMessages.FailureCode.MODULE_UNAVAILABLE);
         }
         var candidate = BodyProtobuf.toMessage(body).toBuilder();
         int index = body.organStates().indexOf(state);
         candidate.setOrganStates(index, candidate.getOrganStates(index).toBuilder()
-                .setFatigueJoules(state.fatigueJoules() + effort.getWatts() * effort.getSeconds() / health));
+                .setFatigueJoules(state.fatigueJoules() + effort.getWatts() * effort.getSeconds() / budget.health()));
         return BodyProtobuf.fromMessage(candidate.build());
     }
 }

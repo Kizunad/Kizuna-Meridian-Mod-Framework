@@ -142,6 +142,27 @@ public final class OrganModifiersTest {
         assertEquals(1, original.modifiers().size());
     }
 
+    @Test
+    public void workBudgetScalesRemainingEnduranceByHealthAndMatchesActivityCheck() {
+        // 器官半血、已疲劳 20 J：可做功 (100 − 20) × 0.5 = 40 J，功率上限 10 × 40 / 100 = 4 W。
+        var original = BodyProtobuf.toMessage(body());
+        var endurance = BodyMessages.OrganEndurance.newBuilder()
+                .setEnduranceJoules(100).setMaximumWatts(10).setRecoveryHalfLifeSeconds(20);
+        var organ = original.getStructure().getOrgans(0).toBuilder().setEndurance(endurance).build();
+        var state = original.getOrganStates(0).toBuilder().setFatigueJoules(20).setHp(organ.getMaxHp() / 2).build();
+        BodySnapshot tired = BodyProtobuf.fromMessage(original.toBuilder()
+                .setStructure(original.getStructure().toBuilder().setOrgans(0, organ))
+                .setOrganStates(0, state).build());
+        OrganCapabilities.WorkBudget budget = OrganCapabilities.workBudget(tired, ORGAN);
+        assertEquals(0.5, budget.health(), TOLERANCE);
+        assertEquals(40, budget.workJoules(), TOLERANCE);
+        assertEquals(4, budget.powerWatts(), TOLERANCE);
+        assertTrue(budget.allows(4, 10));
+        assertFalse(budget.allows(4.1, 1));
+        assertFalse(budget.allows(4, 10.1));
+        assertFalse(OrganCapabilities.workBudget(body(), ORGAN).allows(1, 1));
+    }
+
     private static BodySnapshot body() {
         // 缩短样例时钟并启用摄入，器官参数仍属于非人体内容。
         var original = BodyProtobuf.toMessage(ProtocolFixtures.snapshot(Realm.WANDERING_QI));

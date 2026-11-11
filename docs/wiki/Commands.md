@@ -58,6 +58,7 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 | `/meridian body heal [<targets>] [all\|health\|stamina]` | 2 | Debug | `health` 只补部位血量，不补组织和器官；`stamina` 清除疲劳；`all` 补满部位、组织和器官，清除疲劳，并补满真元 |
 | `/meridian body heal [<targets>] limb <part> [<amount>]` | 2 | Debug | 只治疗一个部位 |
 | `/meridian body revive [<targets>]` | 2 | Debug | 复活已判死的身体 |
+| `/meridian body realm [<targets>] <wandering_qi\|true_qi>` | 2 | Human | 玩家境界调试，境界可补全。游炁升真炁走中焦突破成功时同一次相变，不查八脉、候选和燃料；境界一次只能升一层，已在该境界算成功，往下走拒绝 |
 
 ### qi
 

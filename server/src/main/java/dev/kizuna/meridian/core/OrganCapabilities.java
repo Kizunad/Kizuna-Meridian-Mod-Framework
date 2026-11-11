@@ -26,6 +26,30 @@ public final class OrganCapabilities {
         return strongest;
     }
 
+    /** 器官此刻的做功预算：健康比例、功率上限与可做的总功；没有独立耐力或已失能时全为零。 */
+    public record WorkBudget(double health, double powerWatts, double workJoules) {
+        public boolean allows(double watts, double seconds) {
+            // 活动提交与起手预检共用同一判定，功率和总功任一超出都不能做。
+            return health > 0 && watts <= powerWatts && watts * seconds <= workJoules;
+        }
+    }
+
+    public static WorkBudget workBudget(BodySnapshot body, Anatomy.OrganId organId) {
+        // 健康取器官与所属部位较低者；剩余耐力按健康折算，功率上限随剩余耐力同比下降。
+        Anatomy.OrganDefinition definition = definition(body, organId);
+        var state = body.organStates().stream().filter(item -> item.id().equals(organId)).findFirst().orElseThrow();
+        var part = body.structure().parts().stream()
+                .filter(item -> item.id().equals(definition.partId())).findFirst().orElseThrow();
+        var partState = body.partStates().stream().filter(item -> item.id().equals(part.id())).findFirst().orElseThrow();
+        double health = Math.min(state.hp() / definition.maxHp(), partState.hp() / part.maxHp());
+        var endurance = definition.endurance();
+        if (endurance == null || health <= 0) {
+            return new WorkBudget(0, 0, 0);
+        }
+        double work = (endurance.enduranceJoules() - state.fatigueJoules()) * health;
+        return new WorkBudget(health, endurance.maximumWatts() * work / endurance.enduranceJoules(), work);
+    }
+
     public static double intakePerSecond(BodySnapshot body, Anatomy.OrganId organId) {
         // 没有摄入能力的器官不能因修正获得新能力。
         Anatomy.OrganDefinition definition = definition(body, organId);
