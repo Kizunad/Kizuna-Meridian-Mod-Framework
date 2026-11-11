@@ -55,6 +55,18 @@ public final class OrganModifiersTest {
     }
 
     @Test
+    public void strongestIntakeMultiplierFollowsTheActiveCurve() {
+        // 吐纳窗口显示的倍率随修正生效和到期变化，没有修正时是一。
+        BodySnapshot original = body();
+        assertEquals(1, OrganCapabilities.strongestIntakeMultiplier(original, List.of(ORGAN)), 0);
+        BodySnapshot active = install(original, List.of(modifier("sample:lung")));
+        assertEquals(BOOST, OrganCapabilities.strongestIntakeMultiplier(active, List.of(ORGAN)), TOLERANCE);
+        BodySnapshot expired = BodyTimeAdvancement.apply(active, plan(active, END)).body();
+        assertEquals(1, OrganCapabilities.strongestIntakeMultiplier(expired, List.of(ORGAN)), TOLERANCE);
+        assertEquals(1, OrganCapabilities.strongestIntakeMultiplier(active, List.of()), 0);
+    }
+
+    @Test
     public void intakeIntegratesRisingAndNegativeCurveSegments() {
         // 一秒上升、随后虚脱下降的面积控制实际摄入；超过区间面积整笔拒绝。
         var curve = modifier("sample:ramp").toBuilder()

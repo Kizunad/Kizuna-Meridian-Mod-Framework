@@ -17,6 +17,15 @@ public final class OrganCapabilities {
         return multiplier(body, organId, CapabilityModifier.Attribute.INTAKE);
     }
 
+    /** 一组器官里当前摄入倍率最高的一个，供吐纳窗口显示；组为空时是单位倍率。 */
+    public static double strongestIntakeMultiplier(BodySnapshot body, List<Anatomy.OrganId> organIds) {
+        double strongest = organIds.isEmpty() ? 1 : 0;
+        for (Anatomy.OrganId organId : organIds) {
+            strongest = Math.max(strongest, intakeMultiplier(body, organId));
+        }
+        return strongest;
+    }
+
     public static double intakePerSecond(BodySnapshot body, Anatomy.OrganId organId) {
         // 没有摄入能力的器官不能因修正获得新能力。
         Anatomy.OrganDefinition definition = definition(body, organId);

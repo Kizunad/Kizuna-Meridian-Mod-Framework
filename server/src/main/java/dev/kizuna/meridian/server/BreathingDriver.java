@@ -2,6 +2,7 @@ package dev.kizuna.meridian.server;
 
 import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.BodySnapshot;
+import dev.kizuna.meridian.core.OrganCapabilities;
 import dev.kizuna.meridian.core.TissueCapabilities;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.Qi;
@@ -637,6 +638,7 @@ final class BreathingDriver<C> {
                 .setAutomaticMinimumStaminaRatio(profile.getAutomatic().getMinimumStaminaRatio())
                 .setAutomaticResumeStaminaRatio(profile.getAutomatic().getResumeStaminaRatio())
                 .setAutomaticCaptureEfficiency(profile.getAutomatic().getCaptureEfficiency())
+                .setIntakeMultiplier(intakeMultiplier(body))
                 .addAllOrganIds(profile.getOrgansList().stream().map(BreathingOrgan::getOrganId).toList())
                 .addAllParticles(particles)
                 .setSequence(control.getSequence())
@@ -645,6 +647,14 @@ final class BreathingDriver<C> {
                 .setStoredQi(storedQi)
                 .setFailure(failure)
                 .build();
+    }
+
+    private double intakeMultiplier(BodySnapshot body) {
+        // 只供窗口显示；结算仍按各器官自己的修正曲线。
+        List<Anatomy.OrganId> organs = profile.getOrgansList().stream()
+                .map(entry -> new Anatomy.OrganId(entry.getOrganId()))
+                .toList();
+        return OrganCapabilities.strongestIntakeMultiplier(body, organs);
     }
 
     private static double ratio(BodySnapshot body, String id) {

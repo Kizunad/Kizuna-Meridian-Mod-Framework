@@ -70,6 +70,7 @@ message BreathingView {
   double automatic_minimum_stamina_ratio = 17; // 自动停止线，来自可信生物内容。
   double automatic_capture_efficiency = 18; // 自动真实接触的采样效率，来自可信生物内容。
   double automatic_resume_stamina_ratio = 19; // 自动等待结束的恢复线，来自可信生物内容。
+  optional double intake_multiplier = 20; // 吐纳器官当前的摄入倍率，由能力修正合计；缺省为 1。
 }
 // 真实三维局部坐标 [0,1]，入口为 (0.5,0.4,0.5)。旋转相机不改变粒子位置。
 // 这些粒子是摄入机会，不是环境账本中的可复制资源。
