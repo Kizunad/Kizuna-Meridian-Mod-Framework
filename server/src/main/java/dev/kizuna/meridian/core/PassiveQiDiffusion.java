@@ -79,11 +79,13 @@ public final class PassiveQiDiffusion {
         if (!accounts.available(source) || !accounts.available(target)) {
             return Optional.empty();
         }
+        // 带属性的真元留在本经，只有无属性真元随压差流动；属性真元照样占容，计入压差。
         QiInventory sourceQi = accounts.inventory(source);
+        QiInventory movableQi = sourceQi.ofAttribute(Qi.QiAttribute.NONE);
         Anatomy.PassiveQiFlow flow = connection.passiveQiFlow();
         QiTransport.DispatchCapacity capacity = QiTransport.availableCapacity(accounts, transits, source, target);
         double throughputPerSecond = Math.min(flow.throughputPerSecond(), capacity.throughputPerSecond());
-        if (throughputPerSecond <= 0 || sourceQi.totalQi() < flow.minimumBatchQi()
+        if (throughputPerSecond <= 0 || movableQi.totalQi() < flow.minimumBatchQi()
                 || capacity.targetVolume() <= 0) {
             return Optional.empty();
         }
@@ -98,7 +100,9 @@ public final class PassiveQiDiffusion {
         double smallerCapacity = Math.min(source.capacity(), target.capacity());
         double largerCapacity = Math.max(source.capacity(), target.capacity());
         double equalizingVolume = fractionDifference * smallerCapacity / (1 + smallerCapacity / largerCapacity);
-        QiInventory cargo = sourceQi.take(flow.maximumBatchQi(), Math.min(equalizingVolume, capacity.targetVolume()));
+        // 各相态按源经脉里的比例一起搬，气态不会排在游离态后面等前者搬完。
+        double cargoVolume = Math.min(equalizingVolume, capacity.targetVolume());
+        QiInventory cargo = movableQi.takeProportionally(flow.maximumBatchQi(), cargoVolume);
         if (cargo.totalQi() < flow.minimumBatchQi()) {
             // 有限阈值避免循环图在接近平衡后产生无限小批次；余额完整留在原账户。
             return Optional.empty();

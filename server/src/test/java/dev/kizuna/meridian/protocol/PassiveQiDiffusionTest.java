@@ -16,39 +16,51 @@ import static org.junit.Assert.*;
 
 /** 自然扩散整体回归：公开构型、事件推进、调用权限与唯一资源归属。 */
 public class PassiveQiDiffusionTest {
-    private static final double PRECISION_DENSITY = 0.1;
+    private static final double FREE_DENSITY = 0.01;
+    private static final double GAS_DENSITY = 0.1;
     private static final double PRECISION_SOURCE_VOLUME = 20;
     private static final double PRECISION_TARGET_VOLUME = 3;
-    private static final double PRECISION_FIRE_QI = 0.2608695652173913;
+    private static final double PRECISION_GAS_QI = 1;
+    private static final double PRECISION_FREE_QI = 0.09;
+    private static final double PRECISION_DUST_QI = 2e-12;
     private static final double PRECISION_MINIMUM_BATCH = 0.0001;
     private static final double QI_TOLERANCE = 1e-12;
+    private static final double RATIO_TOLERANCE = 1e-9;
     private static final long PRECISION_END_MILLIS = 2000;
     private static final long PRECISION_STEP_MILLIS = 37;
-    private static final double ARRIVAL_EARTH_QI = 0.001259916539660459;
-    private static final double ARRIVAL_EARTH_DENSITY = 0.011417225561026473;
+    private static final long CYCLE_END_MILLIS = 120_000;
+    private static final double ARRIVAL_GAS_QI = 0.01259916539660459;
+    private static final double ARRIVAL_GAS_DENSITY = 0.11417225561026473;
     private static final double ARRIVAL_DUST_QI = 1.6686408809637269e-19;
     private static final double ARRIVAL_DUST_DENSITY = 0.012023824719557466;
-    private static final double TARGET_EARTH_QI = 0.01278233693638232;
-    private static final double TARGET_EARTH_DENSITY = 0.01125309958988419;
+    private static final double TARGET_GAS_QI = 0.1278233693638232;
+    private static final double TARGET_GAS_DENSITY = 0.1125309958988419;
     private static final double TARGET_NONE_QI = 0.0024323750517362013;
     private static final double TARGET_NONE_DENSITY = 0.016935334172379305;
+    private static final double CYCLE_FREE_QI = 3;
+    private static final double CYCLE_GAS_QI = 0.5;
+    private static final double CYCLE_FIRE_QI = 1;
     private static final long DUST_END_MILLIS = 60100;
 
     @Test
-    public void mixedRoundingCargoCommitsAndArrivesWithoutMovingTheSkippedAttribute() {
-        // 20 与 3 的异构容量使取货产生不可扣除的木属性尾差，真实事务仍须提交正常火属性。
-        BodySnapshot initial = precisionBody(PRECISION_MINIMUM_BATCH);
+    public void mixedPhaseCargoKeepsTheSourceProportionAcrossSaveAndArrival() {
+        // 气态排在游离态前面也不先搬完：一批货里两种相态按源经脉的比例同行，存档后照常到达。
+        BodySnapshot initial = precisionBody(PRECISION_MINIMUM_BATCH, mixedStock());
         BodySnapshot dispatched = advanceThroughStore(initial, 0);
         assertEquals(initial.revision() + 1, dispatched.revision());
         assertEquals(initial.settledAt(), dispatched.settledAt());
         List<QiTransit> transits = dispatched.transits();
         assertEquals(1, transits.size());
-        assertEquals(List.of(new Qi(Qi.QiAttribute.FIRE, PRECISION_FIRE_QI, PRECISION_DENSITY)),
-                transits.get(0).cargo().entries());
-        assertEquals(1, dispatched.meridianStates().get(0).lumenQi().entries().get(1).amount(), 0);
+        List<Qi> cargo = transits.get(0).cargo().entries();
+        assertEquals(2, cargo.size());
+        assertEquals(Qi.QiPhase.GAS, cargo.get(0).phase());
+        assertEquals(Qi.QiPhase.FREE, cargo.get(1).phase());
+        double gasShare = cargo.get(0).amount() / PRECISION_GAS_QI;
+        double freeShare = cargo.get(1).amount() / PRECISION_FREE_QI;
+        assertEquals(gasShare, freeShare, RATIO_TOLERANCE * gasShare);
         assertKindsConserved(initial, dispatched);
 
-        // 存档中的在途继续跨越到达边界；到达前后各属性都只有一份所有权。
+        // 存档中的在途继续跨越到达边界；到达前后各相态都只有一份所有权。
         BodySnapshot restored = BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(dispatched));
         long arrivalMillis = restored.transits().get(0).arrivalMillis();
         BodySnapshot beforeArrival = advance(restored, arrivalMillis - 1, BodyTimeAdvancement.Mode.ACTIVE);
@@ -58,14 +70,14 @@ public class PassiveQiDiffusionTest {
         assertEquals(beforeArrival.revision() + 1, arrived.revision());
         assertEquals(arrivalMillis, arrived.settledAt().elapsedMillis());
         assertTrue(arrived.transits().isEmpty());
-        assertEquals(PRECISION_FIRE_QI, arrived.meridianStates().get(1).lumenQi().totalQi(), 0);
+        assertEquals(transits.get(0).cargo(), arrived.meridianStates().get(1).lumenQi());
         assertKindsConserved(initial, arrived);
     }
 
     @Test
     public void mixedRoundingMatchesContinuousSegmentedAndSavedAdvancement() {
-        // 每段都重新编解码，确保不可扣除货物过滤不会依赖未保存的临时状态。
-        BodySnapshot initial = precisionBody(PRECISION_MINIMUM_BATCH);
+        // 每段都重新编解码，确保按比例取货不会依赖未保存的临时状态。
+        BodySnapshot initial = precisionBody(PRECISION_MINIMUM_BATCH, mixedStock());
         BodySnapshot continuous = advance(initial, PRECISION_END_MILLIS, BodyTimeAdvancement.Mode.ACTIVE);
         BodySnapshot segmented = initial;
         for (long millis = PRECISION_STEP_MILLIS; millis < PRECISION_END_MILLIS; millis += PRECISION_STEP_MILLIS) {
@@ -76,13 +88,24 @@ public class PassiveQiDiffusionTest {
         assertEquals(continuous.meridianStates(), completed.meridianStates());
         assertEquals(continuous.transits(), completed.transits());
         assertTrue(completed.transits().isEmpty());
+        assertEquals(2, completed.meridianStates().get(1).lumenQi().entries().size());
         assertKindsConserved(initial, completed);
     }
 
     @Test
     public void minimumBatchAppliesAfterUndebitableEntriesAreFiltered() {
-        // 未过滤的尾差恰好能跨过门槛，过滤后不足最小批次时应保持静止和完整源余额。
-        BodySnapshot initial = precisionBody(Math.nextUp(PRECISION_FIRE_QI));
+        // 游离态尘埃的份额低于最小单位被滤掉；未过滤时它恰好能把货量推过门槛，过滤后不足门槛就保持静止。
+        QiInventory stock = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, PRECISION_GAS_QI, GAS_DENSITY),
+                new Qi(Qi.QiAttribute.NONE, PRECISION_DUST_QI, FREE_DENSITY)));
+        BodySnapshot probe = advance(precisionBody(PRECISION_MINIMUM_BATCH, stock), 0, BodyTimeAdvancement.Mode.ACTIVE);
+        List<Qi> filtered = probe.transits().get(0).cargo().entries();
+        assertEquals(1, filtered.size());
+        double gasCargo = filtered.get(0).amount();
+        double dustShare = PRECISION_DUST_QI * (gasCargo / PRECISION_GAS_QI);
+        double minimumBatch = Math.nextUp(gasCargo);
+        assertTrue(dustShare < QiAccounting.MIN_TRANSFER_QI && gasCargo + dustShare >= minimumBatch);
+
+        BodySnapshot initial = precisionBody(minimumBatch, stock);
         assertTrue(PassiveQiDiffusion.nextBoundary(initial).isEmpty());
         BodySnapshot advanced = advance(initial, PRECISION_END_MILLIS, BodyTimeAdvancement.Mode.ACTIVE);
         assertEquals(initial.meridianStates(), advanced.meridianStates());
@@ -91,8 +114,48 @@ public class PassiveQiDiffusionTest {
     }
 
     @Test
+    public void attributedQiStaysInItsMeridianWhileAttributeLessQiSpreads() {
+        // 火行排在首项也不发运：属性真元留在本经，同一经脉里的无属性真元照常扩散到其他经脉。
+        QiInventory lumen = new QiInventory(List.of(new Qi(Qi.QiAttribute.FIRE, CYCLE_FIRE_QI, GAS_DENSITY),
+                new Qi(Qi.QiAttribute.NONE, CYCLE_GAS_QI, GAS_DENSITY)));
+        BodySnapshot initial = cycleBody(lumen);
+        BodySnapshot dispatched = advance(initial, 0, BodyTimeAdvancement.Mode.ACTIVE);
+        assertFalse(dispatched.transits().isEmpty());
+        for (QiTransit transit : dispatched.transits()) {
+            assertEquals(QiInventory.empty(), transit.cargo().ofAttribute(Qi.QiAttribute.FIRE));
+        }
+        BodySnapshot settled = advance(initial, CYCLE_END_MILLIS, BodyTimeAdvancement.Mode.ACTIVE);
+        List<MeridianState> states = settled.meridianStates();
+        QiInventory sourceFire = states.get(0).lumenQi().ofAttribute(Qi.QiAttribute.FIRE);
+        assertEquals(List.of(lumen.entries().get(0)), sourceFire.entries());
+        for (MeridianState state : states.subList(1, states.size())) {
+            assertEquals(QiInventory.empty(), state.lumenQi().ofAttribute(Qi.QiAttribute.FIRE));
+            assertTrue(state.lumenQi().ofAttribute(Qi.QiAttribute.NONE).totalQi() > 0);
+        }
+        assertKindsConserved(initial, settled);
+    }
+
+    @Test
+    public void gasSpreadsTogetherWithFreeQiInTheSourceRatio() {
+        // 游离态排在前面、数量远多于气态：混取后每条经脉的气态与游离态之比都和源经脉起初相同。
+        QiInventory lumen = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, CYCLE_FREE_QI, FREE_DENSITY),
+                new Qi(Qi.QiAttribute.NONE, CYCLE_GAS_QI, GAS_DENSITY)));
+        BodySnapshot initial = cycleBody(lumen);
+        BodySnapshot settled = advance(initial, CYCLE_END_MILLIS, BodyTimeAdvancement.Mode.ACTIVE);
+        assertTrue(settled.transits().isEmpty());
+        double sourceRatio = CYCLE_GAS_QI / CYCLE_FREE_QI;
+        for (MeridianState state : settled.meridianStates()) {
+            List<Qi> entries = state.lumenQi().entries();
+            assertEquals(2, entries.size());
+            double ratio = entries.get(1).amount() / entries.get(0).amount();
+            assertEquals(state.id().value(), sourceRatio, ratio, RATIO_TOLERANCE);
+        }
+        assertKindsConserved(initial, settled);
+    }
+
+    @Test
     public void legacyDustSurvivesSavedAdvancementWithoutBlockingNormalArrivals() {
-        // 到货复现的余额和密度保持原值；旧尘埃排在首项，确保正常货物仍能跨越真实到货边界。
+        // 尘埃与目标游离态取自到货复现的实际余额；旧尘埃排在首项，确保正常货物仍能跨越真实到货边界。
         BodySnapshot initial = arrivalDustBody();
         BodySnapshot restored = BodyProtobuf.decodeSnapshot(BodyProtobuf.encodeSnapshot(initial));
         assertEquals(initial, restored);
@@ -109,7 +172,7 @@ public class PassiveQiDiffusionTest {
                 .allMatch(entry -> entry.amount() >= QiAccounting.MIN_TRANSFER_QI));
         long arrivalMillis = transit.arrivalMillis();
         BodySnapshot arrived = advanceThroughStore(dispatched, arrivalMillis);
-        assertTrue(arrived.meridianStates().get(1).lumenQi().entries().get(0).amount() > TARGET_EARTH_QI);
+        assertTrue(arrived.meridianStates().get(1).lumenQi().entries().get(0).amount() > TARGET_GAS_QI);
         assertDustRetained(initial, arrived);
 
         BodySnapshot continuous = advance(initial, DUST_END_MILLIS, BodyTimeAdvancement.Mode.ACTIVE);
@@ -251,13 +314,13 @@ public class PassiveQiDiffusionTest {
     }
 
     private static BodySnapshot arrivalDustBody() {
-        // 两端使用到货复现的实际明细，满源和部分占用目标之间保留有效压差。
-        var original = BodyProtobuf.toMessage(precisionBody(PRECISION_MINIMUM_BATCH));
+        // 尘埃与目标游离态用到货复现的实际明细；正常货物是气态，属性真元不再扩散。满源和部分占用目标之间保留有效压差。
+        var original = BodyProtobuf.toMessage(precisionBody(PRECISION_MINIMUM_BATCH, mixedStock()));
         QiInventory stock = new QiInventory(List.of(
                 new Qi(Qi.QiAttribute.NONE, ARRIVAL_DUST_QI, ARRIVAL_DUST_DENSITY),
-                new Qi(Qi.QiAttribute.EARTH, ARRIVAL_EARTH_QI, ARRIVAL_EARTH_DENSITY)));
+                new Qi(Qi.QiAttribute.NONE, ARRIVAL_GAS_QI, ARRIVAL_GAS_DENSITY)));
         QiInventory targetQi = new QiInventory(List.of(
-                new Qi(Qi.QiAttribute.EARTH, TARGET_EARTH_QI, TARGET_EARTH_DENSITY),
+                new Qi(Qi.QiAttribute.NONE, TARGET_GAS_QI, TARGET_GAS_DENSITY),
                 new Qi(Qi.QiAttribute.NONE, TARGET_NONE_QI, TARGET_NONE_DENSITY)));
         var sourceDefinition = original.getStructure().getMeridians(0).toBuilder()
                 .setLumenVolume(stock.volume())
@@ -284,12 +347,16 @@ public class PassiveQiDiffusionTest {
         return BodyProtobuf.fromMessage(message);
     }
 
-    private static BodySnapshot precisionBody(double minimumBatchQi) {
-        // 只保留一条有向通路和两种正常余额，隔离体积反算产生的微量第二项。
+    private static QiInventory mixedStock() {
+        // 气态在前、游离态在后，两种相态体积相近，按顺序取货时第一批只会有气态。
+        return new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, PRECISION_GAS_QI, GAS_DENSITY),
+                new Qi(Qi.QiAttribute.NONE, PRECISION_FREE_QI, FREE_DENSITY)));
+    }
+
+    private static BodySnapshot precisionBody(double minimumBatchQi, QiInventory stock) {
+        // 只保留一条有向通路，源经脉放给定库存，目标为空。
         var original = BodyProtobuf.toMessage(body());
         var structure = precisionStructure(original.getStructure(), minimumBatchQi);
-        QiInventory stock = new QiInventory(List.of(new Qi(Qi.QiAttribute.FIRE, 1, PRECISION_DENSITY),
-                new Qi(Qi.QiAttribute.WOOD, 1, PRECISION_DENSITY)));
         var source = original.getMeridianStates(0).toBuilder()
                 .setLumenQi(BodyProtobuf.toInventory(stock))
                 .build();
@@ -380,6 +447,13 @@ public class PassiveQiDiffusionTest {
     }
 
     private static BodySnapshot body() {
+        // 默认 A 内腔为无属性游离态和高密度第三方属性的混相库存。
+        var mixed = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, 3, .01),
+                new Qi(Qi.QiAttribute.of("sample:lava"), 3, 10)));
+        return cycleBody(mixed);
+    }
+
+    private static BodySnapshot cycleBody(QiInventory lumen) {
         // 三脉总容量 2000 体积，初值仅在 A；双向通路按当前体积占比扩散。
         var part = new Anatomy.PartId("shell");
         var definitions = List.of(meridian("a", part, 8), meridian("b", part, 4), meridian("c", part, 8));
@@ -389,12 +463,10 @@ public class PassiveQiDiffusionTest {
                 connection("c", "a", flow), connection("a", "c", flow));
         var structure = new BodyStructure(List.of(new Anatomy.PartDefinition(part, "外壳", 100)),
                 List.of(), List.of(), definitions, connections);
-        var mixed = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, 3, .01),
-                new Qi(Qi.QiAttribute.of("sample:lava"), 3, 10)));
         return new BodySnapshot(BodySnapshot.CURRENT_SCHEMA_VERSION, new BodyId("diffusion-body"),
                 new BodyTemplate.Reference(new DefinitionId("sample:diffusion"), 1), structure, Realm.WANDERING_QI,
                 List.of(new AnatomyState.Part(part, 100)), List.of(), List.of(),
-                List.of(state("a", mixed), state("b", QiInventory.empty()), state("c", QiInventory.empty())),
+                List.of(state("a", lumen), state("b", QiInventory.empty()), state("c", QiInventory.empty())),
                 List.of(), new VitalityState(0, 1000, 0, false), plan(0, BodyTimeAdvancement.Mode.ACTIVE, 0).target(), 0);
     }
 

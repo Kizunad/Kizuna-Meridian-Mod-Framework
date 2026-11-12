@@ -77,6 +77,42 @@ public record QiInventory(List<Qi> entries) {
         return new QiInventory(cargo);
     }
 
+    public QiInventory takeProportionally(double maximumQi, double maximumVolume) {
+        // 每条明细取同一比例，一批货里各相态的元数比例与账户相同，不先搬完排在前面的明细。
+        if (entries.isEmpty()) {
+            return EMPTY;
+        }
+        double qiBudget = Math.max(0, maximumQi);
+        double volumeBudget = Math.max(0, maximumVolume);
+        double totalQi = totalQi();
+        double totalVolume = volume();
+        var cargo = new java.util.ArrayList<Qi>();
+        for (Qi entry : entries) {
+            // 元数预算按元数占比分，体积预算按体积占比分；两项都与本条数量成正比，取更紧的一项。
+            double qiPart = entry.amount() / totalQi;
+            double volumePart = entry.volume() / totalVolume;
+            double byQi = qiBudget * qiPart;
+            double byVolume = volumeBudget * volumePart * entry.density();
+            double availableAmount = entry.amount();
+            double amount = Math.min(availableAmount, Math.min(byQi, byVolume));
+            if (amount < QiAccounting.MIN_TRANSFER_QI || availableAmount - amount == availableAmount) {
+                // 尘埃或扣不动的份额留在源账户，不挪给其他明细，其他明细的比例不变。
+                continue;
+            }
+            cargo.add(entry.withAmount(amount));
+        }
+        return new QiInventory(cargo);
+    }
+
+    public QiInventory ofAttribute(Qi.QiAttribute attribute) {
+        // 只留指定属性的明细，顺序与数量不变。
+        MeridianErrors.required(attribute, Data.QI_ATTRIBUTE_REQUIRED);
+        List<Qi> selected = entries.stream()
+                .filter(entry -> entry.attribute().equals(attribute))
+                .toList();
+        return new QiInventory(selected);
+    }
+
     public static QiInventory combine(List<QiInventory> inventories) {
         // 账户转移合并同相态同属性的数量，不在转移时隐式退化或抹掉元素属性。
         var merged = new LinkedHashMap<Kind, Qi>();

@@ -9,7 +9,14 @@ import static org.junit.Assert.*;
 
 /** 取货整体回归：数量、体积和可表示扣款必须同时满足。 */
 public class QiInventoryTest {
+    private static final double FREE_DENSITY = 0.01;
     private static final double GAS_DENSITY = 0.1;
+    private static final double QUANTITY_SHARE = 0.25;
+    private static final double VOLUME_SHARE = 0.4;
+    private static final double SHARE_TOLERANCE = 1e-15;
+    private static final double SINGLE_ENTRY_QI = 3;
+    private static final double SMALL_BATCH_QI = 0.25;
+    private static final double HALF = 0.5;
     private static final double SOLID_DENSITY = 10;
     private static final double VOLUME_LIMIT = 0.7;
     private static final double INVISIBLE_COST = Math.ulp(1.0) * 0.25;
@@ -127,6 +134,85 @@ public class QiInventoryTest {
         List<Qi> credited = QiAccounting.credit(target, cargo).entries();
         assertEquals(TARGET_EARTH_QI + ARRIVAL_EARTH_QI, credited.get(0).amount(), 0);
         assertEquals(target.entries().get(1), credited.get(1));
+    }
+
+    @Test
+    public void proportionalTakeMovesEveryPhaseInTheSameShare() {
+        // 游离态排在前面也不先搬完：元数或体积哪项更紧，各相态都按同一比例取，余额与货物合计守恒。
+        Qi free = new Qi(Qi.QiAttribute.NONE, 1, FREE_DENSITY);
+        Qi gas = new Qi(Qi.QiAttribute.NONE, 1, GAS_DENSITY);
+        Qi solid = new Qi(Qi.QiAttribute.NONE, 1, SOLID_DENSITY);
+        QiInventory stock = new QiInventory(List.of(free, gas, solid));
+        double quantityBudget = stock.totalQi() * QUANTITY_SHARE;
+        double volumeBudget = stock.volume() * VOLUME_SHARE;
+        QiInventory quantityBound = stock.takeProportionally(quantityBudget, Double.POSITIVE_INFINITY);
+        QiInventory volumeBound = stock.takeProportionally(Double.POSITIVE_INFINITY, volumeBudget);
+        assertShare(stock, quantityBound, QUANTITY_SHARE);
+        assertShare(stock, volumeBound, VOLUME_SHARE);
+        QiInventory bothBound = stock.takeProportionally(quantityBudget, volumeBudget);
+        assertShare(stock, bothBound, Math.min(QUANTITY_SHARE, VOLUME_SHARE));
+        QiInventory remainder = QiAccounting.debit(stock, bothBound);
+        assertEquals(stock.totalQi(), remainder.totalQi() + bothBound.totalQi(), Math.ulp(stock.totalQi()));
+
+        QiInventory exhausted = stock.takeProportionally(Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY);
+        assertEquals(stock, exhausted);
+        assertEquals(QiInventory.empty(), stock.takeProportionally(0, stock.volume()));
+        assertEquals(QiInventory.empty(), stock.takeProportionally(stock.totalQi(), 0));
+        assertEquals(QiInventory.empty(), QiInventory.empty().takeProportionally(1, 1));
+    }
+
+    @Test
+    public void proportionalTakeOfASingleEntryEqualsOrderedTake() {
+        // 只有一条明细时两种取货逐位相同，游炁身体只有游离态，扩散结果不因混取改变。
+        for (double density : List.of(FREE_DENSITY, GAS_DENSITY, SOLID_DENSITY)) {
+            QiInventory stock = new QiInventory(List.of(new Qi(Qi.QiAttribute.NONE, SINGLE_ENTRY_QI, density)));
+            for (double quantityBudget : List.of(SMALL_BATCH_QI, SINGLE_ENTRY_QI, Double.POSITIVE_INFINITY)) {
+                for (double volumeBudget : List.of(VOLUME_LIMIT, stock.volume(), Double.POSITIVE_INFINITY)) {
+                    assertEquals(stock.take(quantityBudget, volumeBudget),
+                            stock.takeProportionally(quantityBudget, volumeBudget));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void proportionalTakeLeavesDustAndUndebitableSharesWithoutRescalingOthers() {
+        // 尘埃和扣不动的份额留在源账户；其他明细仍只取自己那一份，不把省下的预算挪过去。
+        Qi dust = new Qi(Qi.QiAttribute.NONE, QiAccounting.MIN_TRANSFER_QI, FREE_DENSITY);
+        Qi gas = new Qi(Qi.QiAttribute.NONE, 1, GAS_DENSITY);
+        QiInventory stock = new QiInventory(List.of(dust, gas));
+        QiInventory cargo = stock.takeProportionally(stock.totalQi() * HALF, Double.POSITIVE_INFINITY);
+        assertEquals(1, cargo.entries().size());
+        assertEquals(gas.amount() * HALF, cargo.entries().get(0).amount(), Math.ulp(gas.amount()));
+        assertEquals(dust, QiAccounting.debit(stock, cargo).entries().get(0));
+
+        Qi large = new Qi(Qi.QiAttribute.NONE, LARGE_BALANCE, SOLID_DENSITY);
+        QiInventory undebitable = new QiInventory(List.of(large));
+        assertEquals(QiInventory.empty(),
+                undebitable.takeProportionally(QiAccounting.MIN_TRANSFER_QI, Double.POSITIVE_INFINITY));
+    }
+
+    @Test
+    public void ofAttributeKeepsOnlyThatAttributeInOrder() {
+        // 按属性筛选不改数量、密度和顺序；没有该属性时得到空账户。
+        Qi fire = new Qi(Qi.QiAttribute.FIRE, 1, GAS_DENSITY);
+        Qi freeNone = new Qi(Qi.QiAttribute.NONE, 1, FREE_DENSITY);
+        Qi gasNone = new Qi(Qi.QiAttribute.NONE, 1, GAS_DENSITY);
+        QiInventory stock = new QiInventory(List.of(freeNone, fire, gasNone));
+        assertEquals(List.of(freeNone, gasNone), stock.ofAttribute(Qi.QiAttribute.NONE).entries());
+        assertEquals(List.of(fire), stock.ofAttribute(Qi.QiAttribute.FIRE).entries());
+        assertEquals(QiInventory.empty(), stock.ofAttribute(Qi.QiAttribute.WATER));
+    }
+
+    private static void assertShare(QiInventory stock, QiInventory cargo, double share) {
+        // 货物逐条是源明细的同一比例，相态和属性不变。
+        assertEquals(stock.entries().size(), cargo.entries().size());
+        for (int index = 0; index < stock.entries().size(); index++) {
+            Qi source = stock.entries().get(index);
+            Qi selected = cargo.entries().get(index);
+            assertEquals(source.withAmount(selected.amount()), selected);
+            assertEquals(source.amount() * share, selected.amount(), SHARE_TOLERANCE);
+        }
     }
 
     @Test
