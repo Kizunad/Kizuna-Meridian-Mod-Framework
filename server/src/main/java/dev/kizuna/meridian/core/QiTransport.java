@@ -9,7 +9,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -172,43 +171,25 @@ public final class QiTransport {
                                               QiAccounts.Endpoint source, QiAccounts.Endpoint target,
                                               Map<Object, Double> reservedThroughput) {
         // 自动引导可让出部分空闲吞吐；预留只限制本次调度，不创建在途或额外资源账户。
-        var usedThroughput = new HashMap<Object, Double>();
-        double reservedTargetVolume = 0;
-        for (var transit : transits) {
-            Anatomy.Connection route = accounts.connection(transit.connectionId());
-            QiAccounts.Endpoint from = accounts.endpoint(route.from());
-            QiAccounts.Endpoint to = accounts.endpoint(route.to());
-            if (to != null && to.id().equals(target.id())) {
-                // 阻塞货物仍预留目标容量；预约仅是由在途派生的额度，不是另一份余额。
-                reservedTargetVolume += transit.cargo().volume();
-            }
-            if (transit.status() == QiTransit.Status.MOVING) {
-                if (transit.circuit() != null) {
-                    // 一个闭环只预约每个模块一次，普通运输与它共享相同吞吐预算。
-                    for (Object module : CircuitTransport.modules(accounts, transit)) {
-                        usedThroughput.merge(module, transit.throughputPerSecond(), Double::sum);
-                    }
-                    continue;
-                }
-                if (from != null) {
-                    usedThroughput.merge(from.id(), transit.throughputPerSecond(), Double::sum);
-                }
-                if (to != null && (from == null || !from.id().equals(to.id()))) {
-                    usedThroughput.merge(to.id(), transit.throughputPerSecond(), Double::sum);
-                }
-            }
-        }
+        return availableCapacity(accounts, TransitLoad.of(accounts, transits), new Route(source, target),
+                reservedThroughput);
+    }
 
+    /** 一次发运的两端。 */
+    record Route(QiAccounts.Endpoint source, QiAccounts.Endpoint target) { }
+
+    static DispatchCapacity availableCapacity(QiAccounts accounts, TransitLoad load, Route route,
+                                              Map<Object, Double> reservedThroughput) {
         // 任意一端的剩余吞吐不足，都不能接受整个批次的流量申请。
-        double sourceUsedRate = usedThroughput.getOrDefault(source.id(), 0.0);
-        double targetUsedRate = usedThroughput.getOrDefault(target.id(), 0.0);
-        double sourceAvailableRate = source.throughputPerSecond() - sourceUsedRate
+        QiAccounts.Endpoint source = route.source();
+        QiAccounts.Endpoint target = route.target();
+        double sourceAvailableRate = source.throughputPerSecond() - load.usedThroughput(source)
                 - reservedThroughput.getOrDefault(source.id(), 0.0);
-        double targetAvailableRate = target.throughputPerSecond() - targetUsedRate
+        double targetAvailableRate = target.throughputPerSecond() - load.usedThroughput(target)
                 - reservedThroughput.getOrDefault(target.id(), 0.0);
         double availableThroughputPerSecond = Math.min(sourceAvailableRate, targetAvailableRate);
         double occupiedTargetVolume = accounts.occupied(target);
-        double availableTargetCapacity = target.capacity() - occupiedTargetVolume - reservedTargetVolume;
+        double availableTargetCapacity = target.capacity() - occupiedTargetVolume - load.reservedVolume(target);
         return new DispatchCapacity(availableThroughputPerSecond, availableTargetCapacity);
     }
 

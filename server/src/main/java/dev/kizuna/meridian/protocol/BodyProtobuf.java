@@ -45,7 +45,27 @@ public final class BodyProtobuf {
         return fromMessage(ProtoWire.read(bytes, BodyMessages.BodyTemplate.parser()));
     }
 
+    /**
+     * 上一次转出的身体和消息。一条命令会把同一份新身体转两遍只为校验，宿主随后取快照还要再转一遍。
+     * 身体快照和协议消息都不可变，同一份快照转出来的消息必然相同，所以只留最近一格，不需要失效条件；
+     * 换了一份快照（哪怕内容相等）就不命中。
+     */
+    private record Encoded(BodySnapshot body, BodyMessages.BodySnapshot message) { }
+
+    private static volatile Encoded lastEncoded;
+
     public static BodyMessages.BodySnapshot toMessage(BodySnapshot value) {
+        // 刚转过的同一份快照直接复用；校验不过的不记，下次照常重新校验并拒绝。
+        Encoded last = lastEncoded;
+        if (last != null && last.body() == value) {
+            return last.message();
+        }
+        BodyMessages.BodySnapshot message = encode(value);
+        lastEncoded = new Encoded(value, message);
+        return message;
+    }
+
+    private static BodyMessages.BodySnapshot encode(BodySnapshot value) {
         // 仅映射唯一明细账本，不序列化可重新派生的真元总量、HP 比例和剩余寿命。
         var builder = BodyMessages.BodySnapshot.newBuilder()
                 .setSchemaVersion(value.schemaVersion())

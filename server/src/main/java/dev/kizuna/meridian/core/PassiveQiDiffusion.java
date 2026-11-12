@@ -6,6 +6,7 @@ import dev.kizuna.meridian.error.MeridianErrors.Data;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /** 可信构型声明的自然扩散；未开经脉参与生理流动，主动调用权限保持独立。 */
@@ -25,8 +26,9 @@ public final class PassiveQiDiffusion {
             return Optional.empty();
         }
         var accounts = new QiAccounts(body);
+        TransitLoad load = TransitLoad.of(accounts, body.transits());
         for (Anatomy.Connection connection : connections) {
-            if (plan(accounts, body.transits(), connection).isPresent()) {
+            if (plan(accounts, load, connection).isPresent()) {
                 return Optional.of(body.settledAt());
             }
         }
@@ -54,16 +56,19 @@ public final class PassiveQiDiffusion {
     static List<QiTransit> dispatchDue(BodyView body, QiAccounts accounts, List<QiTransit> transits,
                                       List<Anatomy.Connection> connections, long atMillis) {
         // 每次新预约马上加入当前候选账本，后续分支只能使用剩余吞吐和目标容量。
+        // 在途占用进来时汇总一次；发运只会在列表末尾追加一批，追加后把这一批补记进汇总。
         List<QiTransit> pendingTransits = transits;
+        TransitLoad load = TransitLoad.of(accounts, pendingTransits);
         boolean dispatched;
         do {
             // 同一事件内用尽可用批次或吞吐，避免宿主分段调用凭空提前启动额外批次。
             dispatched = false;
             for (Anatomy.Connection connection : connections) {
-                Optional<QiTransport.Request> request = plan(accounts, pendingTransits, connection);
+                Optional<QiTransport.Request> request = plan(accounts, load, connection);
                 if (request.isPresent()) {
                     pendingTransits = QiTransport.dispatchPassive(body, accounts, pendingTransits, connection,
                             request.get(), atMillis);
+                    load.add(accounts, pendingTransits.getLast());
                     dispatched = true;
                 }
             }
@@ -71,7 +76,7 @@ public final class PassiveQiDiffusion {
         return pendingTransits;
     }
 
-    private static Optional<QiTransport.Request> plan(QiAccounts accounts, List<QiTransit> transits,
+    private static Optional<QiTransport.Request> plan(QiAccounts accounts, TransitLoad load,
                                                      Anatomy.Connection connection) {
         // 1. 只沿完好的已声明通路扩散；外壁和器官加工原料不进入自然流动账户。
         QiAccounts.Endpoint source = accounts.endpoint(connection.from());
@@ -83,7 +88,8 @@ public final class PassiveQiDiffusion {
         QiInventory sourceQi = accounts.inventory(source);
         QiInventory movableQi = sourceQi.ofAttribute(Qi.QiAttribute.NONE);
         Anatomy.PassiveQiFlow flow = connection.passiveQiFlow();
-        QiTransport.DispatchCapacity capacity = QiTransport.availableCapacity(accounts, transits, source, target);
+        QiTransport.DispatchCapacity capacity = QiTransport.availableCapacity(accounts, load,
+                new QiTransport.Route(source, target), Map.of());
         double throughputPerSecond = Math.min(flow.throughputPerSecond(), capacity.throughputPerSecond());
         if (throughputPerSecond <= 0 || movableQi.totalQi() < flow.minimumBatchQi()
                 || capacity.targetVolume() <= 0) {

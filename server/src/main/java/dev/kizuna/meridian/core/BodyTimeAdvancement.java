@@ -42,10 +42,35 @@ public final class BodyTimeAdvancement {
         return apply(body, plan, Set.of());
     }
 
+    /**
+     * 上一次推进的输入和结果。一条推进时间命令会把同一份推进算两遍：执行时一遍，Store 暂存时为核对再一遍。
+     * 身体快照不可变，推进又是纯函数，「同一份快照 + 相同计划 + 相同区间做功组织」再算必然得到同一个结果，
+     * 所以只留最近一格，不需要失效条件；换了快照、计划或组织集合就不命中。
+     */
+    private record Computed(BodySnapshot body, Plan plan, Set<Anatomy.TissueId> intervalUsedTissues, Result result) {
+        private boolean matches(BodySnapshot nextBody, Plan nextPlan, Set<Anatomy.TissueId> nextUsedTissues) {
+            // 快照按同一个对象比较，计划和组织集合按值比较。
+            return body == nextBody && plan.equals(nextPlan) && intervalUsedTissues.equals(nextUsedTissues);
+        }
+    }
+
+    private static volatile Computed lastComputed;
+
     public static Result apply(BodySnapshot body, Plan plan, Set<Anatomy.TissueId> intervalUsedTissues) {
-        // 信任边界校验一次，内部候选复用曲线和组织索引，整次推进只生成一个快照。
+        // 刚算过的同一份推进直接复用；拒绝的推进不记，下次照常重新校验并拒绝。
         MeridianErrors.required(body, Data.BODY_REQUIRED);
         MeridianErrors.required(plan, Data.TIME_PLAN_REQUIRED);
+        Computed last = lastComputed;
+        if (last != null && last.matches(body, plan, intervalUsedTissues)) {
+            return last.result();
+        }
+        Result result = compute(body, plan, intervalUsedTissues);
+        lastComputed = new Computed(body, plan, Set.copyOf(intervalUsedTissues), result);
+        return result;
+    }
+
+    private static Result compute(BodySnapshot body, Plan plan, Set<Anatomy.TissueId> intervalUsedTissues) {
+        // 信任边界校验一次，内部候选复用曲线和组织索引，整次推进只生成一个快照。
         validateTime(body, plan);
         OpeningTask task = body.openingTask();
         if (plan.mode() == Mode.LIFESPAN_ONLY && (task == null || !task.active())) {

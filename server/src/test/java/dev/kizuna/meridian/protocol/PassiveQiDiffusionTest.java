@@ -41,6 +41,8 @@ public class PassiveQiDiffusionTest {
     private static final double CYCLE_GAS_QI = 0.5;
     private static final double CYCLE_FIRE_QI = 1;
     private static final long DUST_END_MILLIS = 60100;
+    private static final long REUSE_NEAR_MILLIS = 1000;
+    private static final long REUSE_FAR_MILLIS = 2000;
 
     @Test
     public void mixedPhaseCargoKeepsTheSourceProportionAcrossSaveAndArrival() {
@@ -444,6 +446,38 @@ public class PassiveQiDiffusionTest {
         }
         body.transits().forEach(transit -> inventories.add(transit.cargo()));
         return QiInventory.combine(inventories);
+    }
+
+    @Test
+    public void repeatedAdvanceIsReusedOnlyForSameSnapshotAndPlan() {
+        // 同一份快照按同一计划再推进，直接复用上次结果；换了计划或换了快照都必须重新算。
+        BodySnapshot initial = body();
+        var near = plan(REUSE_NEAR_MILLIS, BodyTimeAdvancement.Mode.ACTIVE, 0);
+        var far = plan(REUSE_FAR_MILLIS, BodyTimeAdvancement.Mode.ACTIVE, 0);
+        BodyTimeAdvancement.Result first = BodyTimeAdvancement.apply(initial, near);
+        assertSame(first, BodyTimeAdvancement.apply(initial, near));
+
+        BodyTimeAdvancement.Result later = BodyTimeAdvancement.apply(initial, far);
+        assertEquals(REUSE_FAR_MILLIS, later.body().settledAt().elapsedMillis());
+        assertNotEquals(first.body(), later.body());
+
+        BodyTimeAdvancement.Result next = BodyTimeAdvancement.apply(first.body(), far);
+        assertEquals(first.body().revision() + 1, next.body().revision());
+        assertEquals(first, BodyTimeAdvancement.apply(initial, near));
+    }
+
+    @Test
+    public void protocolMessageIsReusedOnlyForSameSnapshot() {
+        // 同一份快照转协议消息只转一次；推进出来的新快照必须转出自己的消息。
+        BodySnapshot initial = body();
+        BodyMessages.BodySnapshot message = BodyProtobuf.toMessage(initial);
+        assertSame(message, BodyProtobuf.toMessage(initial));
+
+        BodySnapshot advanced = advance(initial, REUSE_NEAR_MILLIS, BodyTimeAdvancement.Mode.ACTIVE);
+        BodyMessages.BodySnapshot advancedMessage = BodyProtobuf.toMessage(advanced);
+        assertEquals(advanced.revision(), advancedMessage.getRevision());
+        assertEquals(advanced, BodyProtobuf.fromMessage(advancedMessage));
+        assertEquals(initial, BodyProtobuf.fromMessage(BodyProtobuf.toMessage(initial)));
     }
 
     private static BodySnapshot body() {
