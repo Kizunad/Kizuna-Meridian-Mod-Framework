@@ -20,6 +20,9 @@ message BodyViewUpdate {
   string request_id = 6;
   RequestFailure failure = 7;
   bool introspection = 8; // 当前连接是否获得内部修炼视图订阅。
+  // true 时 body 不带 structure：构型和此连接上一次收到的构型相同，客户端沿用那份。
+  // 连接上第一份身体、构型有变时宿主照常带上；客户端收到带构型的身体就替换手里那份，断线时清掉。
+  bool structure_omitted = 9;
 }
 
 // 基础检视由宿主推送；内部修炼视图必须另行授权，不能由打开窗口取得权限。

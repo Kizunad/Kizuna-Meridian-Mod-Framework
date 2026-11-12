@@ -41,7 +41,7 @@ message GatheringResponse {
 }
 
 message GatheringView {
-  BodySnapshot body = 1;
+  BodySnapshot body = 1; // 可缺省：宿主另用 BodyViewUpdate 推送身体时不带，客户端沿用那条通道上的最新身体。
   GatheringEnvironment environment = 2;
   repeated GatheringChoice choices = 3;
   GatheringProgress progress = 4;

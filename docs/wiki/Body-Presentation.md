@@ -22,7 +22,9 @@
 
 ## 真实身体的只读推送
 
-`BodyViewUpdate` 包含 `protocol_version = 1`、完整 `BodySnapshot` 和模型的 `presentation_resource`。Fabric 适配约定服务端到客户端通道 `meridian:body_view`，消息为原始 Protobuf 字节，上限 1 MiB。宿主只向已登记接收通道的已认证玩家推送其有权查看的身体；客户端不得通过此消息提交身体修改。
+`BodyViewUpdate` 包含 `protocol_version = 1`、`BodySnapshot` 和模型的 `presentation_resource`。Fabric 适配约定服务端到客户端通道 `meridian:body_view`，消息为原始 Protobuf 字节，上限 1 MiB。宿主只向已登记接收通道的已认证玩家推送其有权查看的身体；客户端不得通过此消息提交身体修改。
+
+构型（`BodySnapshot.structure`，骨骼、组织、器官、经脉和连接的定义）很少变化，却占一份身体的大半。`structure_omitted = 9` 为 true 时，这份身体不带 `structure`，表示和此连接上一次收到的构型相同。宿主在连接上第一份身体、以及构型有变（例如开脉拓宽了内腔）时照常带上；客户端每收到带构型的身体就替换手里那份，不论这份身体是否被采用，断线时清掉。客户端拿到省略构型的身体时把手里那份补回去，之后的校验和显示都按完整快照进行；手里没有构型就按无效消息丢弃。
 
 客户端在原连接仍有效时交付快照，首次按资源标识读取生物模型，后续仅接受同一身体不倒退的 revision。断线清除快照及模型，避免跨世界沿用。具体玩家绑定、Minecraft tick 和人体资源标识归宿主/生物附属，不进入公共框架。
 
