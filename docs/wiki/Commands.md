@@ -65,10 +65,12 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 | 指令 | 权限 | 登记附属 | 说明 |
 |---|---|---|---|
 | `/meridian qi get [<target>] [<meridian>]` | 0 | Human | 不带经脉时显示全身分账，带经脉时显示该脉内腔与稳定容量 |
-| `/meridian qi fill [<targets>] [<meridian> [<amount>]]` | 2 | Debug | 补满或补入指定量的经脉内腔真元；玩家与类人生物都可作目标 |
+| `/meridian qi fill [<targets>] [<meridian> [<amount>]] [<形态与属性>]` | 2 | Debug | 补满或补入指定量的经脉内腔真元；玩家与类人生物都可作目标。省略形态与属性时补无属性游离态 |
 | `/meridian qi diffuse [<targets>] <amount> [<meridian>]` | 2 | Human | 模拟炼化后入脉并扩散；省略经脉时用人体的扩散入口 |
-| `/meridian qi set [<targets>] <amount>` | 2 | Debug | 直接设定真元库存 |
-| `/meridian qi set [<targets>] <amount> <meridian\|all> lumen\|wall <density>` | 2 | Debug | 同上，指定经脉、内腔或外壁以及密度 |
+| `/meridian qi set [<targets>] <amount> [<形态与属性>]` | 2 | Debug | 直接设定全身内腔真元库存 |
+| `/meridian qi set [<targets>] <amount> <meridian\|all> lumen\|wall <density> [attribute …\|mix …]` | 2 | Debug | 同上，指定经脉、内腔或外壁以及密度 |
+| `/meridian qi set [<targets>] <amount> <meridian\|all> lumen\|wall [<形态与属性>]` | 2 | Debug | 同上，密度改由 phase 取相态基准，省略即游离态 |
+| `<形态与属性>` = `[phase <free\|gas\|liquid\|solid\|ordered\|coherent>] [attribute <属性>\|mix <属性=比例,…>]` | — | Debug | fill 与 set 共用的可选尾参，顺序固定、全部可补全。phase 按 `QiDensity.baseline` 取密度；attribute 把本次真元全记为一种属性；mix 按比例分配（逗号或空格分隔，如 `mix metal=0.2,fire=0.3`），余下记无属性，合计超过 1、属性重复或未登记都报错。属性列表来自 Framework 内置六种和已装模组公共内容包（`META-INF/kizuna_meridian/addons/*.pb`）声明的属性符号；内置写短名，附属写全 ID 或唯一的路径名。回显逐条经脉写增减的元数、属性和形态 |
 
 ### opening
 

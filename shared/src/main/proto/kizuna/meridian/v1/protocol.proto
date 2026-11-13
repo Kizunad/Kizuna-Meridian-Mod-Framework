@@ -90,13 +90,19 @@ message SetAddonProgress {
   google.protobuf.Any progress = 2; // 由所属附属校验内容 schema，框架只约束大小和类型标识。
 }
 
-// 仅注入游离态无属性真元，保留既有余额、在途、外壁和开拓状态。
+// 管理员注入或覆盖真元；fill 只补不减，保留既有余额、在途、外壁和开拓状态。
 message DebugQi {
   DebugQiMode mode = 1;
   string meridian_id = 2; // 全身 fill 为空；局部 fill / 扩散必须指定真实经脉。
   optional double amount = 3; // fill 是期望局部总量；diffuse 是新增量，不能超过扣预约后的可用容量。
-  double density = 4; // SET_INVENTORY 专用；普通 fill 和 diffuse 仍产生 0.01。
+  double density = 4; // SET_INVENTORY 必填；fill 为 0 时用游离态 0.01；diffuse 必须为 0，仍产生 0.01。
   bool wall = 5; // SET_INVENTORY 选择外壁，默认内腔。
+  repeated DebugQiShare shares = 6; // fill 与 SET_INVENTORY：各属性占本次真元的比例，余下记无属性；空即全为无属性。
+}
+// 属性只校验 namespace:path 语法，是否已登记由发起调试的宿主检查。
+message DebugQiShare {
+  string attribute = 1; // namespace:path，同一请求内不重复。
+  double fraction = 2; // (0, 1]；一条请求里的比例之和不超过 1。
 }
 enum DebugQiMode {
   DEBUG_QI_UNSPECIFIED = 0;

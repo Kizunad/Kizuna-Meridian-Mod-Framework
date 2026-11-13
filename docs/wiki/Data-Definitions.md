@@ -26,7 +26,7 @@
 
 `activity.proto / BodyActivity` 是可信附属的原子计划：显式账户旧值与替换值、闭环变化、能力修正、做功、器官配方、开脉完成、局部伤势、升境、附属进度。普通网络拒绝，宿主通过 `handleActivity` 提交。框架重验旧值、非负余额、体积、预约、有效功率/能量及 `旧总量 = 新总量 + 环境释放`；Store 复算后一次 revision 提交。不能上传完整身体或改寿命。具体生物的路线、密度曲线和突破门槛属于附属。
 
-`DamageResolution.meridian_injuries` 使用既有健康接口记录渗漏/断裂，不虚构经脉 HP。`DebugQi.SET_INVENTORY` 允许已授权 OP 精确设置内腔或外壁的数量与密度，仍检查体积和在途预约；全身模式的数量为总量，按扣除在途预约后的可用体积分配，不能把库存单独灌到含在途的总容量。总量检查容许 `1e-8` 体积余量，逐条写入时截到该经脉自身可用体积。
+`DamageResolution.meridian_injuries` 使用既有健康接口记录渗漏/断裂，不虚构经脉 HP。`DebugQi.SET_INVENTORY` 允许已授权 OP 精确设置内腔或外壁的数量与密度，仍检查体积和在途预约；全身模式的数量为总量，按扣除在途预约后的可用体积分配，不能把库存单独灌到含在途的总容量。总量检查容许 `1e-8` 体积余量，逐条写入时截到该经脉自身可用体积。带 `shares` 时按比例拆成各属性明细（余下记无属性），每多一份明细，逐条截取的体积再预留 8 ULP。
 
 状态：已实现 Java 25 不可变数据值与构造校验，源码位于 `server/src/main/java/dev/kizuna/meridian/core/`；对外数据交换采用 [Protobuf v1](Protocol-and-Security.md)，源码在 `shared/src/main/proto/`，生成类与核心值之间由服务端的 `BodyProtobuf` 映射。工程分为 `client`、`server` 两个 Java 库子项目和 Fabric 模组子项目 `fabric`；`meridian-core` 是服务端数据层的职责名称，没有独立子项目或已发布依赖坐标。
 
