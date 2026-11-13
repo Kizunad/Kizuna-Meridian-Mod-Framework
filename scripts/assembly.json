@@ -299,6 +299,15 @@
         {"path": "shared", "candidate": "library", "runtime": "library"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"}
       ]
+    },
+    {
+      "id": "golem",
+      "directory": "Kizuna-Meridian-Vanilla-Golem-Threatening",
+      "project": "kizuna-meridian-vanilla-golem-threatening",
+      "modules": [
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"},
+        {"path": "verification"}
+      ]
     }
   ]
 }
