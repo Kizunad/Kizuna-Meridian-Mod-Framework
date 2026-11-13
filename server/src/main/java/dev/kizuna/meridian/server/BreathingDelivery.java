@@ -42,6 +42,13 @@ final class BreathingDelivery<C> {
         if (before.revision() == observedRevision && (boundaryMillis == 0 || session.now() < boundaryMillis)) {
             return false;
         }
+        if (before.vitality().dead()) {
+            // 死体不能推进时间，这里不结算、不派送；死亡时缓存和在途的炁已散回环境，记着的在途不会再到达。
+            arrivals.clear();
+            observedRevision = before.revision();
+            boundaryMillis = 0;
+            return false;
+        }
         failure = FailureCode.FAILURE_CODE_UNSPECIFIED;
         List<String> organs = profile.getOrgansList().stream().map(organ -> organ.getOrganId()).toList();
         boolean hasBuffer = before.organStates().stream()

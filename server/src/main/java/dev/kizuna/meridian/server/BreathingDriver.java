@@ -32,6 +32,8 @@ final class BreathingDriver<C> {
     private final List<BreathParticle> particles = new ArrayList<>();
     private final List<ParticleMotion> motions = new ArrayList<>();
     private final Random random = new Random();
+    /** 吐纳会话标识，随视图发出；宿主换会话时客户端据此不拿旧会话的序号比较。 */
+    private final String sessionId = UUID.randomUUID().toString();
     private BreathControl control = BreathControl.newBuilder().setAction(HOLD).setAimX(.5).setAimY(.4).build();
     private boolean active;
     private boolean automatic;
@@ -665,6 +667,7 @@ final class BreathingDriver<C> {
                 .addAllOrganIds(profile.getOrgansList().stream().map(BreathingOrgan::getOrganId).toList())
                 .addAllParticles(particles)
                 .setSequence(control.getSequence())
+                .setSessionId(sessionId)
                 .setStatus(status)
                 .setAbsorbedQi(absorbedQi)
                 .setStoredQi(stored.totalQi())
