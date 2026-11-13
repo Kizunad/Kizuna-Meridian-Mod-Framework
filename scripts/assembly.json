@@ -280,6 +280,17 @@
       ]
     },
     {
+      "id": "villager-fist",
+      "directory": "Kizuna-Meridian-Villager-Fist-Addon",
+      "project": "kizuna-meridian-villager-fist-addon",
+      "modules": [
+        {"path": "shared"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"},
+        {"path": "verification"},
+        {"path": "gametest"}
+      ]
+    },
+    {
       "id": "humanoid-taunts",
       "directory": "Kizuna-Meridian-Humanoid-Taunts-Addon",
       "project": "kizuna-meridian-humanoid-taunts-addon",
