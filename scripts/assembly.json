@@ -22,6 +22,16 @@
       ]
     },
     {
+      "id": "origin",
+      "directory": "Kizuna-Meridian-Origin-Addon",
+      "project": "kizuna-meridian-origin-addon",
+      "modules": [
+        {"path": "shared", "candidate": "library", "runtime": "library"},
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
       "id": "technique",
       "directory": "Kizuna-Meridian-Technique-Framework",
       "project": "kizuna-meridian-technique-framework",

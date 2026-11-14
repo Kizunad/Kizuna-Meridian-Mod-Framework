@@ -59,6 +59,7 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 | `/meridian body heal [<targets>] limb <part> [<amount>]` | 2 | Debug | 只治疗一个部位 |
 | `/meridian body revive [<targets>]` | 2 | Debug | 复活已判死的身体 |
 | `/meridian body realm [<targets>] <wandering_qi\|true_qi>` | 2 | Human | 玩家境界调试，境界可补全。游炁升真炁走中焦突破成功时同一次相变，不查八脉、候选和燃料；境界一次只能升一层，已在该境界算成功，往下走拒绝 |
+| `/meridian body origin` | 0 | Origin | 没选出身就重新弹选择界面，选过就打开只读的那一张 |
 
 ### qi
 
@@ -134,6 +135,9 @@ MeridianCommands.register(MeridianCommands.Branch.QI, "diffuse", MeridianCommand
 |---|---|---|---|
 | `/meridian debug fatigue set [<targets>] <selection> <ratio>` | 2 | Debug | 设定组织疲劳比例 |
 | `/meridian debug fatigue clear [<targets>] <selection>` | 2 | Debug | 清除组织疲劳；清除全部疲劳用 `body heal <targets> stamina` |
+| `/meridian debug origin show [<targets>]` | 2 | Origin | 看选定的出身和抽到的候选 |
+| `/meridian debug origin set <target> <origin>` | 2 | Origin | 直接定出身，不看候选；出身 ID 可补全。照常发一次性天赋、通知各附属 |
+| `/meridian debug origin offer <target>` | 2 | Origin | 清掉候选和选定，换一轮重新抽、重新弹界面；只为测试，游戏里出身定了不能改 |
 
 ## 不在 /meridian 下的指令
 
