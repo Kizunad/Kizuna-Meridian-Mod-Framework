@@ -1,11 +1,12 @@
 {
-  "description": "Kizuna 工作区统一装配清单：仓库按跨仓构建顺序排列。directory 为相对代码根目录的仓库目录，project 为根工程名（也是产物文件名前缀）；模块 path 为空表示根工程。candidate 是 Windows 候选的装入方式，runtime 是 full-assembly.gradle 的开发运行装入方式，ownProjects 列出同仓内仍按文件装入该模块的子工程，coordinate 是模块自身的真实坐标，以源码组合时 includeSource 总是一并登记替换（已列出的坐标仍排在前面）。",
+  "description": "Kizuna 工作区统一装配清单：仓库按跨仓构建顺序排列。directory 为相对代码根目录的仓库目录，project 为根工程名（也是产物文件名前缀）；模块 path 为空表示根工程。candidate 是 Windows 候选的装入方式，runtime 是 full-assembly.gradle 的开发运行装入方式，ownProjects 列出同仓内仍按文件装入该模块的子工程，coordinate 是模块自身的真实坐标，以源码组合时 includeSource 总是一并登记替换（已列出的坐标仍排在前面）。kz 是给 Kizuna-remote-session/scripts/kz 看的测试约定，Gradle 不读、不影响任何产物：branch 主分支名；test 单测和构建的任务（缺省 test build）；testFixtures 除安装 JAR 外还要放进本机 JAR 仓的测试夹具 JAR 所在模块；gametest 各 GameTest 的任务、运行目录（相对仓目录）和参数；client 各客户端验收的任务、参数、运行目录、world（先跑一次 GameTest 留下世界）和判成败的办法 ok（report 结果文件首行 success=true，log 日志里出现的标志，screenshots 只出截图给人看）。运行目录和参数里的 {name} 由 kz 起名，{eula} 是 kz 备好的 eula.txt。",
   "version": "0.1.0-SNAPSHOT",
   "repositories": [
     {
       "id": "framework",
       "directory": "Kizuna-Meridian-Mod-Framework",
       "project": "kizuna-meridian-mod-framework",
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}]},
       "modules": [
         {"path": "server", "candidate": "library", "coordinate": "dev.kizuna.meridian:server"},
         {"path": "client", "candidate": "library"},
@@ -16,6 +17,7 @@
       "id": "qi-variants",
       "directory": "Kizuna-Meridian-Qi-Variants-Addon",
       "project": "kizuna-meridian-qi-variants-addon",
+      "kz": {"branch": "main"},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "shared", "candidate": "library", "runtime": "library"}
@@ -25,6 +27,7 @@
       "id": "origin",
       "directory": "Kizuna-Meridian-Origin-Addon",
       "project": "kizuna-meridian-origin-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}], "client": {"screen": {"task": ":fabric:runClientTest", "runDirectory": "fabric/build/clienttest", "world": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "shared", "candidate": "library", "runtime": "library"},
         {"path": "server", "candidate": "library", "runtime": "library"},
@@ -35,6 +38,7 @@
       "id": "technique",
       "directory": "Kizuna-Meridian-Technique-Framework",
       "project": "kizuna-meridian-technique-framework",
+      "kz": {"branch": "main", "testFixtures": ["fabric"], "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}], "client": {"scroll": {"task": ":fabric:runClientTest", "arguments": ["-PscrollFullAssembly"], "runDirectory": "fabric/build/clienttest", "world": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}, "leap": {"task": ":fabric:runLeapClientTest", "arguments": ["-PscrollFullAssembly"], "runDirectory": "fabric/build/leapclienttest", "world": true, "ok": {"report": "fabric/build/leap-client-results.txt"}}, "status": {"task": ":fabric:runStatusClientTest", "arguments": ["-PscrollFullAssembly"], "runDirectory": "fabric/build/statusclienttest", "ok": {"report": "fabric/build/status-client-results.txt"}}}},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "shared", "candidate": "library", "runtime": "library"},
@@ -45,6 +49,7 @@
       "id": "inventory-ui",
       "directory": "Kizuna-Inventory-UI-Framework",
       "project": "kizuna-inventory-ui-framework",
+      "kz": {"branch": "main"},
       "modules": [
         {"path": "", "candidate": "mod", "runtime": "mod"},
         {"path": "server", "candidate": "mod", "runtime": "mod"}
@@ -54,6 +59,7 @@
       "id": "bs3d",
       "directory": "backpack-and-storage-3D",
       "project": "backpack-storage-3d",
+      "kz": {"branch": "main", "gametest": [{"task": ":server:runGametest", "runDirectory": "build/gametest/{name}", "arguments": ["-PgametestRun={name}"]}]},
       "modules": [
         {"path": "server", "candidate": "mod", "runtime": "mod"},
         {"path": "client", "candidate": "mod", "runtime": "mod"}
@@ -63,6 +69,7 @@
       "id": "bs3d-vanilla",
       "directory": "bs3d-Vanilla-Addon",
       "project": "bs3d-vanilla-addon",
+      "kz": {"branch": "main"},
       "modules": [
         {"path": "server", "runtime": "mod"},
         {"path": "client", "candidate": "mod", "runtime": "mod"}
@@ -72,6 +79,7 @@
       "id": "bs3d-pocket",
       "directory": "bs3d-Pocket-Addon",
       "project": "bs3d-pocket-addon",
+      "kz": {"branch": "master"},
       "modules": [
         {"path": "server", "runtime": "mod"},
         {"path": "client", "candidate": "mod", "runtime": "mod"}
@@ -81,6 +89,7 @@
       "id": "bs3d-weights",
       "directory": "bs3d-Weights-Addon",
       "project": "bs3d-weights-addon",
+      "kz": {"branch": "main"},
       "modules": [
         {"path": "server", "runtime": "mod"},
         {"path": "client", "candidate": "mod", "runtime": "mod"}
@@ -90,6 +99,7 @@
       "id": "players-animation",
       "directory": "Kizuna-Players-Animation",
       "project": "kizuna-players-animation",
+      "kz": {"branch": "main", "test": ["test", "build", "-x", "checkAnimationGates"], "gametest": [{"task": ":runGametest", "runDirectory": "build/gametest"}], "client": {"animation": {"task": ":runClientTest", "ok": {"report": "build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "", "candidate": "mod", "runtime": "mod"}
       ]
@@ -98,6 +108,7 @@
       "id": "players-animation-mobs",
       "directory": "Kizuna-Players-Animation-Mobs-Addon",
       "project": "kizuna-players-animation-mobs-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":runGametest", "runDirectory": "build/gametest"}], "client": {"animation": {"task": ":runClientTest", "ok": {"report": "build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "", "candidate": "mod", "runtime": "mod"}
       ]
@@ -106,6 +117,7 @@
       "id": "items",
       "directory": "Kizuna-Meridian-Items-Addon",
       "project": "kizuna-meridian-items-addon",
+      "kz": {"branch": "main"},
       "modules": [
         {"path": "", "candidate": "named-library", "runtime": "named-library"}
       ]
@@ -114,6 +126,7 @@
       "id": "progression",
       "directory": "Kizuna-Meridian-Progression-Addon",
       "project": "kizuna-meridian-progression-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}]},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library", "ownProjects": ["client"]},
         {"path": "shared", "candidate": "library", "runtime": "library"},
@@ -125,6 +138,7 @@
       "id": "ui",
       "directory": "Kizuna-Meridian-UI-Addon",
       "project": "kizuna-meridian-ui-addon",
+      "kz": {"branch": "main", "client": {"inner-vision": {"task": ":client:runInnerVisionTest", "runDirectory": "client/build/inner-vision-test", "ok": {"report": "client/build/inner-vision-results.txt"}}, "aura-emblem": {"task": ":client:runAuraEmblemTest", "runDirectory": "client/build/aura-emblem-test", "ok": {"report": "client/build/aura-emblem-results.txt"}}, "combat-slot": {"task": ":client:runCombatSlotTest", "runDirectory": "client/build/combat-slot-test", "ok": {"report": "client/build/combat-slot-results.txt"}}, "stance-settings": {"task": ":client:runStanceSettingsTest", "runDirectory": "client/build/stance-settings-test", "ok": {"report": "client/build/stance-settings-results.txt"}}}},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "client", "candidate": "mod", "runtime": "mod"}
@@ -134,6 +148,7 @@
       "id": "vanilla-damage",
       "directory": "Kizuna-Meridian-Vanilla-Damage-Addon",
       "project": "kizuna-meridian-vanilla-damage-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"}
@@ -143,6 +158,7 @@
       "id": "vanilla-healing",
       "directory": "Kizuna-Meridian-Vanilla-Healing-Addon",
       "project": "kizuna-meridian-vanilla-healing-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}, {"task": ":fabric:runGametestConfigured", "runDirectory": "fabric/build/{name}", "arguments": ["-PconfiguredGametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"}
@@ -152,6 +168,7 @@
       "id": "human",
       "directory": "Kizuna-Meridian-Human-Addon",
       "project": "kizuna-meridian-human-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PhumanGametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "shared", "candidate": "library", "runtime": "library", "ownProjects": ["fabric"]},
@@ -163,6 +180,7 @@
       "id": "human-ui",
       "directory": "Kizuna-Meridian-Human-UI-Addon",
       "project": "kizuna-meridian-human-ui-addon",
+      "kz": {"branch": "main", "client": {"smoke": {"task": ":client:runSmoke", "runDirectory": "client/build/smoke", "ok": {"log": "HUMAN_UI_SMOKE_OK"}}}},
       "modules": [
         {"path": "client", "candidate": "mod", "runtime": "mod"}
       ]
@@ -171,6 +189,7 @@
       "id": "brewing",
       "directory": "Kizuna-Meridian-Brewing-Addon",
       "project": "kizuna-meridian-brewing-addon",
+      "kz": {"branch": "master", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}], "client": {"screens": {"task": ":clienttest:runClientGametest", "arguments": ["-PclienttestRunDir=build/{name}"], "runDirectory": "clienttest/build/{name}", "ok": {"screenshots": "clienttest/build/{name}/screenshots"}}}},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "shared", "candidate": "library", "runtime": "library"},
@@ -182,6 +201,7 @@
       "id": "pathfinding",
       "directory": "Kizuna-Pathfinding-Framework",
       "project": "kizuna-pathfinding-framework",
+      "kz": {"branch": "main", "test": [":core:test", ":core:assemble"]},
       "modules": [
         {"path": "core", "candidate": "library"}
       ]
@@ -190,6 +210,7 @@
       "id": "humanoid-threatening",
       "directory": "Kizuna-Meridian-Vanilla-Humanoid-Threatening",
       "project": "kizuna-meridian-vanilla-humanoid-threatening",
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"}
@@ -199,6 +220,7 @@
       "id": "debug",
       "directory": "Kizuna-Meridian-Debug-Addon",
       "project": "kizuna-meridian-debug-addon",
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}]},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"},
@@ -210,6 +232,7 @@
       "id": "basic-techniques",
       "directory": "Kizuna-Meridian-Basic-Techniques-Addon",
       "project": "kizuna-meridian-basic-techniques-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
         {"path": "shared"},
@@ -221,6 +244,7 @@
       "id": "door-breaker",
       "directory": "Kizuna-Meridian-Door-Breaker-Addon",
       "project": "kizuna-meridian-door-breaker-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/gametest"}]},
       "modules": [
         {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
         {"path": "shared"},
@@ -232,6 +256,7 @@
       "id": "peddler-legwork",
       "directory": "Kizuna-Meridian-Peddler-Legwork-Addon",
       "project": "kizuna-meridian-peddler-legwork-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/gametest"}]},
       "modules": [
         {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
         {"path": "shared"},
@@ -243,6 +268,7 @@
       "id": "wayfarer-archery",
       "directory": "Kizuna-Meridian-Wayfarer-Archery-Addon",
       "project": "kizuna-meridian-wayfarer-archery-addon",
+      "kz": {"branch": "feat/wayfarer", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
         {"path": "shared"},
@@ -254,6 +280,7 @@
       "id": "witch-brew",
       "directory": "Kizuna-Meridian-Witch-Brew-Addon",
       "project": "kizuna-meridian-witch-brew-addon",
+      "kz": {"branch": "master", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
         {"path": "shared"},
@@ -264,6 +291,7 @@
       "id": "evoker-elements",
       "directory": "Kizuna-Meridian-Evoker-Elements-Addon",
       "project": "kizuna-meridian-evoker-elements-addon",
+      "kz": {"branch": "master", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}], "client": {"screens": {"task": ":clienttest:runClientGametest", "arguments": ["-PclienttestRunDir=build/{name}"], "runDirectory": "clienttest/build/{name}", "ok": {"screenshots": "clienttest/build/{name}/screenshots"}}}},
       "modules": [
         {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
         {"path": "shared"},
@@ -275,6 +303,7 @@
       "id": "burden",
       "directory": "Kizuna-Meridian-Burden-Addon",
       "project": "kizuna-meridian-burden-addon",
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest/{name}", "arguments": ["-PburdenTestRun={name}", "-PburdenTestEula={eula}"]}]},
       "modules": [
         {"path": "fabric", "candidate": "mod", "runtime": "mod"}
       ]
@@ -283,6 +312,7 @@
       "id": "humanoid-dummy",
       "directory": "Kizuna-Meridian-Humanoid-Dummy-Addon",
       "project": "kizuna-meridian-humanoid-dummy-addon",
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}], "client": {"hud": {"task": ":fabric:runClientTest", "runDirectory": "fabric/build/clienttest", "world": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "shared", "candidate": "library", "runtime": "library"},
         {"path": "server", "candidate": "library", "runtime": "library"},
@@ -293,6 +323,7 @@
       "id": "villager-fist",
       "directory": "Kizuna-Meridian-Villager-Fist-Addon",
       "project": "kizuna-meridian-villager-fist-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}]},
       "modules": [
         {"path": "shared"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"},
@@ -304,6 +335,7 @@
       "id": "humanoid-taunts",
       "directory": "Kizuna-Meridian-Humanoid-Taunts-Addon",
       "project": "kizuna-meridian-humanoid-taunts-addon",
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}], "client": {"bubble": {"task": ":fabric:runClientTest", "runDirectory": "fabric/build/clienttest", "world": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "shared"},
         {"path": "server", "candidate": "library", "runtime": "library"},
@@ -315,6 +347,7 @@
       "directory": "Kizuna-Meridian-Combat-UI-Addon",
       "project": "kizuna-meridian-combat-ui-addon",
       "version": "0.1.1-SNAPSHOT",
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}], "client": {"hud": {"task": ":fabric:runClientTest", "arguments": ["-PcombatFullAssembly"], "runDirectory": "fabric/build/clienttest", "world": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "core", "candidate": "library", "runtime": "library"},
         {"path": "shared", "candidate": "library", "runtime": "library"},
@@ -325,6 +358,7 @@
       "id": "golem",
       "directory": "Kizuna-Meridian-Vanilla-Golem-Threatening",
       "project": "kizuna-meridian-vanilla-golem-threatening",
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}], "client": {"screens": {"task": ":fabric:runClientGametest", "arguments": [], "runDirectory": "fabric/build/clienttest", "ok": {"screenshots": "fabric/build/clienttest/screenshots"}}}},
       "modules": [
         {"path": "fabric", "candidate": "mod", "runtime": "mod"},
         {"path": "verification"}
