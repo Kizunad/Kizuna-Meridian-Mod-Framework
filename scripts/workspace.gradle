@@ -50,6 +50,21 @@ if (!compositeRegistry.has('kizunaSourceModules')) {
 Map<String, String> compositeSourceModules = compositeRegistry.get('kizunaSourceModules')
 // 嵌套构建只看自己的登记，否则其完整装配会按坐标反向依赖组合它的下游仓库。
 boolean outermostBuild = gradle.parent == null
+
+// 产物隔离（-Pkizuna.isolate=true，默认关）：被组合进来的仓，各工程的 build 目录改到
+// 「最外层构建根目录/build/_included/<根工程名>/<工程路径>」，谁发起构建产物就写在谁那里。
+// 两个构建同时组合同一个上游时各写各的，不会互相重打 JAR。最外层构建自己的 build 目录不变。
+// Gradle 的上次执行记录仍在被组合仓自己的 .gradle 里、按任务路径记账，各最外层构建共用。输入带绝对路径的任务
+// （Loom 的 jar、Human 的 exportHumanBundle）在换了一个最外层构建以后会重跑一次，产物内容不变。
+// 所以同一批被组合仓不要一会儿隔离、一会儿不隔离地编：不隔离的那次会因此把仓目录里的 JAR 原样重打一遍。
+boolean isolated = providers.gradleProperty('kizuna.isolate').map { String value -> value.toBoolean() }.getOrElse(false)
+if (outermostBuild) {
+    compositeRegistry.set('kizunaOutermostRoot', rootDir)
+}
+if (isolated && !compositeRegistry.has('kizunaOutermostRoot')) {
+    throw new GradleException('产物隔离要求最外层构建的 settings 先应用 workspace.gradle')
+}
+File outermostRoot = isolated ? compositeRegistry.get('kizunaOutermostRoot') : null
 def workspace = [
         manifest     : manifest,
         codeDirectory: codeDirectory,
@@ -108,5 +123,9 @@ if (rootProject instanceof org.gradle.api.initialization.ProjectDescriptor) {
     gradle.beforeProject { project ->
         // 工程脚本与 settings 共用同一份解析结果，下游不再自行拼相邻仓库路径。
         project.ext.kizunaWorkspace = workspace
+        if (isolated && !outermostBuild) {
+            String relative = project.path == ':' ? '' : project.path.substring(1).replace(':', '/')
+            project.layout.buildDirectory.set(new File(outermostRoot, "build/_included/${project.rootProject.name}/${relative}"))
+        }
     }
 }
