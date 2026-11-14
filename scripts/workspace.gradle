@@ -25,14 +25,29 @@ def directoryOf = { String id ->
             .getOrElse(new File(codeDirectory, repository.directory))
 }
 
+// JAR 仓（-Pkizuna.store=<键表文件>；没给键表时照旧读各仓主目录的 build/libs）：按文件读的兄弟仓 JAR 改从按内容寻址的本地仓读，
+// 路径是「仓根目录/<清单 id>/<内容键>/<产物名>」，文件写进去以后不再改。键表由 kz 算好写成 JSON：
+// {"root": "<仓根目录>", "keys": {"<清单 id>": "<内容键>"}}。本构建自己这个仓的产物仍读自己的 build/libs。
+def jarStore = providers.gradleProperty('kizuna.store')
+        .map { String value -> new JsonSlurper().parse(new File(value), 'UTF-8') }
+        .getOrNull()
+
 def artifactOf = { String id, String modulePath, boolean development ->
     // 产物名为「根工程名[-模块]-版本」，模组和纯 Java 库都在 build/libs。26.2 不重映射，开发运行与安装用同一个 JAR，
     // 第三个参数（是否取开发 JAR）已不影响结果，保留只为各仓迁移前的调用不报错。
     def repository = repositoryById(id)
     String version = repository.version ?: manifest.version
     String basename = modulePath ? "${repository.project}-${modulePath}" : repository.project
+    String fileName = "${basename}-${version}.jar"
+    if (jarStore != null && repository.project != rootProject.name) {
+        String key = jarStore.keys.get(id)
+        if (key == null) {
+            throw new GradleException("JAR 仓键表里没有仓库：${id}")
+        }
+        return new File(new File(jarStore.root as String), "${id}/${key}/${fileName}")
+    }
     File moduleDirectory = modulePath ? new File(directoryOf(id), modulePath) : directoryOf(id)
-    return new File(moduleDirectory, "build/libs/${basename}-${version}.jar")
+    return new File(moduleDirectory, "build/libs/${fileName}")
 }
 
 // 以源码组合进来的清单模块（「仓库 id:模块路径」→ 替换坐标），只有 settings 中 includeSource 会登记。
@@ -51,7 +66,7 @@ Map<String, String> compositeSourceModules = compositeRegistry.get('kizunaSource
 // 嵌套构建只看自己的登记，否则其完整装配会按坐标反向依赖组合它的下游仓库。
 boolean outermostBuild = gradle.parent == null
 
-// 产物隔离（-Pkizuna.isolate=true，默认关）：被组合进来的仓，各工程的 build 目录改到
+// 产物隔离（-Pkizuna.isolate=true 开，默认关；kz 总是带着它）：被组合进来的仓，各工程的 build 目录改到
 // 「最外层构建根目录/build/_included/<根工程名>/<工程路径>」，谁发起构建产物就写在谁那里。
 // 两个构建同时组合同一个上游时各写各的，不会互相重打 JAR。最外层构建自己的 build 目录不变。
 // Gradle 的上次执行记录仍在被组合仓自己的 .gradle 里、按任务路径记账，各最外层构建共用。输入带绝对路径的任务

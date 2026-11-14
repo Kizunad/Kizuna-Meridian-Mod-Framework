@@ -113,7 +113,7 @@ tasks.withType(JavaExec).configureEach {
         // 文件依赖缺失不会被 Gradle 自动拒绝，开发运行前必须检查整套安装产物。
         runtimeArtifacts.each { File artifact ->
             if (!artifact.isFile()) {
-                throw new GradleException("缺少完整装配产物，请先构建对应仓库：${artifact}")
+                throw new GradleException("缺少完整装配产物，请先构建对应仓库（JAR 仓模式下先跑 kz ensure）：${artifact}")
             }
         }
         // 26.2 不重映射，安装 JAR 里 include 的纯 Java 库原样嵌套。Loader 会解出嵌套的那份，与类路径上的同一库并存且优先用它；
