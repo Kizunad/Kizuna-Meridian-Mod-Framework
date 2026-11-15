@@ -69,7 +69,17 @@ message BodyCommand {
     BodyActivity execute_activity = 29; // 仅可信活动入口，整体守恒、容量及负载校验。
     FillModuleTags fill_module_tags = 30; // 仅可信构型维护入口，追加缺少的标签，不删除或替换已有标签。
     ReviveBody revive_body = 31; // 仅可信健康入口；死体复活与寿元支出原子提交。
+    RaiseTrainingGrowth raise_training_growth = 32; // 仅可信训练入口；把组织已巩固的训练成长抬到给定值，只升不降。
   }
+}
+
+message RaiseTrainingGrowth {
+  repeated TissueGrowth tissues = 1; // 组织实际 ID 唯一，1 到 MAX_LIST_ENTRIES 项，整批成功或拒绝。
+}
+
+message TissueGrowth {
+  string tissue_id = 1;
+  double growth = 2; // 目标成长比例：非负，不超过该组织训练定义的 maximum_growth；不高于现值的那一项保持现值。
 }
 
 message FillModuleTags {

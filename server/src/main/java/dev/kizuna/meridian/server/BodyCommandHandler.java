@@ -57,7 +57,7 @@ public final class BodyCommandHandler<C> {
     private final java.util.function.Predicate<C> debugAccess;
     private final BodyDamageHandler damageHandler;
 
-    private enum Entry { NORMAL, CAPTURE, HEALTH, PROGRESS, ACTIVITY, MODULE_TAGS }
+    private enum Entry { NORMAL, CAPTURE, HEALTH, PROGRESS, ACTIVITY, MODULE_TAGS, TRAINING }
 
     public BodyCommandHandler(BodyCommandAccess<C> access, BodySecurityPolicy<C> security,
                               BodyTimeSource<C> timeSource, BodyTransactionStore store, BodyAuditSink<C> audit) {
@@ -159,6 +159,11 @@ public final class BodyCommandHandler<C> {
         return handle(trustedContext, payload, Entry.MODULE_TAGS);
     }
 
+    public byte[] handleTrainingGrowth(C trustedContext, byte[] payload) {
+        // 可信宿主确认「这个身体此前练过」的事实后抬高训练成长；身份、私有策略和回执仍走普通命令事务。
+        return handle(trustedContext, payload, Entry.TRAINING);
+    }
+
     private byte[] handle(C trustedContext, byte[] payload, Entry entry) {
         // 解析失败不进入业务异常分支，避免从不可信字节伪造关联 ID 或调用宿主。
         var request = MeridianProtocol.decodeRequest(payload);
@@ -215,6 +220,7 @@ public final class BodyCommandHandler<C> {
             case SET_ADDON_PROGRESS -> Entry.PROGRESS;
             case EXECUTE_ACTIVITY -> Entry.ACTIVITY;
             case FILL_MODULE_TAGS -> Entry.MODULE_TAGS;
+            case RAISE_TRAINING_GROWTH -> Entry.TRAINING;
             default -> Entry.NORMAL;
         };
     }
@@ -296,6 +302,7 @@ public final class BodyCommandHandler<C> {
                     yield result.body();
                 }
                 case FILL_MODULE_TAGS -> ModuleTagExecution.apply(body, command.getFillModuleTags());
+                case RAISE_TRAINING_GROWTH -> TrainingGrowthExecution.apply(body, command.getRaiseTrainingGrowth());
                 case EXECUTE_ACTIVITY -> BodyActivityExecution.apply(body, command.getExecuteActivity(), caller);
                 case SET_ADDON_PROGRESS -> dev.kizuna.meridian.core.AddonProgress.replace(body,
                         command.getSetAddonProgress().getId(), command.getSetAddonProgress().getProgress());
@@ -415,6 +422,9 @@ public final class BodyCommandHandler<C> {
                 }
                 case OPERATION_NOT_SET -> throw MeridianErrors.invalid(Protocol.MISSING_COMMAND);
             };
+        } catch (MeridianErrors.TrainingGrowthRejected rejected) {
+            // 组织缺失、没有训练定义或越过上限时整批拒绝，原身体与回执保持原样。
+            return Execution.conflict(rejected.code());
         } catch (MeridianErrors.ModuleTagsRejected rejected) {
             // 模块缺失或标签不一致时整批拒绝，原构型与回执保持原样。
             return Execution.conflict(rejected.code());

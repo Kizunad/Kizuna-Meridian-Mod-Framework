@@ -168,6 +168,8 @@ public final class MeridianProtocol {
         switch (command.getOperationCase()) {
             case FILL_MODULE_TAGS ->
                     dev.kizuna.meridian.server.ModuleTagExecution.validate(command.getFillModuleTags());
+            case RAISE_TRAINING_GROWTH -> dev.kizuna.meridian.server.TrainingGrowthExecution.validate(
+                    command.getRaiseTrainingGrowth());
             case EXECUTE_ACTIVITY -> dev.kizuna.meridian.server.BodyActivityExecution.validate(command.getExecuteActivity());
             case SPEND_LIFESPAN -> ProtoWire.require(command.getSpendLifespan().getSeconds() > 0,
                     Protocol.LIFESPAN_POSITIVE);

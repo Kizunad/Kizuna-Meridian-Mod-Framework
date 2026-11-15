@@ -432,6 +432,14 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
                     throw MeridianErrors.inconsistent(MeridianErrors.MODULE_TAGS_STAGE);
                 }
             }
+            if (receipt.getCommand().hasRaiseTrainingGrowth()) {
+                // 用同一规则复算，防止借抬高训练成长修改资源、伤势或构型。
+                var expected = TrainingGrowthExecution.apply(original.snapshot(),
+                        receipt.getCommand().getRaiseTrainingGrowth());
+                if (!next.equals(expected)) {
+                    throw MeridianErrors.inconsistent(MeridianErrors.TRAINING_GROWTH_STAGE);
+                }
+            }
             if (receipt.getCommand().hasExecuteActivity()) {
                 // 按固定计划重新计算，身体、进度和排放只允许一起发布。
                 var plan = receipt.getCommand().getExecuteActivity();

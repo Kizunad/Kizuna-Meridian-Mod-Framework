@@ -12,6 +12,8 @@ public final class MeridianErrors {
     public static final String ADDON_PROGRESS_STAGE = "附属进度事务改变了进度以外的身体事实";
     public static final String INVALID_MODULE_TAGS = "模块标签补齐需要唯一实际模块、非空合法标签及一致的已有标签";
     public static final String MODULE_TAGS_STAGE = "标签补齐事务改变了标签与版本以外的身体事实";
+    public static final String INVALID_TRAINING_GROWTH = "训练成长需要唯一的实际组织、组织声明了训练定义、目标非负且不超过成长上限";
+    public static final String TRAINING_GROWTH_STAGE = "训练成长事务改变了训练成长与版本以外的身体事实";
     public static final String INVALID_QI_CAPTURE = "接触摄入需要有效器官、单种输入配方和正数采样体积";
     public static final String QI_CAPTURE_FACT = "接触摄入回执与环境、身体或配方不一致";
     public static final String INVALID_DEBUG_QI = "真元调试模式、目标或剂量无效";
@@ -20,6 +22,26 @@ public final class MeridianErrors {
     public static final String INVALID_GATHERING = "聚气请求或宿主配置无效";
     public static final String INVALID_TISSUE_LOADS = "组织负载必须包含 1 至 32 个不同组织";
     public static final String INVALID_BREATHING = "吐纳配置必须引用有效器官、组织与配方，参数须有限且为正";
+
+    public static TrainingGrowthRejected rejectTrainingGrowth(FailureCode code) {
+        // 训练成长失败使用协议类别，不把组织诊断文本作为线协议。
+        return new TrainingGrowthRejected(code);
+    }
+
+    public static final class TrainingGrowthRejected extends RuntimeException {
+        private final FailureCode code;
+
+        private TrainingGrowthRejected(FailureCode code) {
+            // 区分未知组织、越过上限及版本耗尽，供命令处理器整笔拒绝。
+            super(required(code, INVALID_TRAINING_GROWTH).name());
+            this.code = code;
+        }
+
+        public FailureCode code() {
+            // 业务调用方读取固定错误码，避免解析异常文本。
+            return code;
+        }
+    }
 
     public static ModuleTagsRejected rejectModuleTags(FailureCode code) {
         // 标签维护失败使用协议类别，不把构型诊断文本作为线协议。
