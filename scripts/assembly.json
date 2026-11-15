@@ -363,6 +363,15 @@
         {"path": "fabric", "candidate": "mod", "runtime": "mod"},
         {"path": "verification"}
       ]
+    },
+    {
+      "id": "agent",
+      "directory": "Kizuna-Agent",
+      "project": "kizuna-agent",
+      "kz": {"branch": "main", "gametest": [{"task": ":runGametest", "runDirectory": "build/gametest"}], "client": {"agent": {"task": ":runClientGametest", "arguments": [], "runDirectory": "build/clienttest", "ok": {"report": "build/clienttest-results.txt"}}}},
+      "modules": [
+        {"path": "", "candidate": "mod"}
+      ]
     }
   ]
 }
