@@ -1,5 +1,5 @@
 {
-  "description": "Kizuna 工作区统一装配清单：仓库按跨仓构建顺序排列。directory 为相对代码根目录的仓库目录，project 为根工程名（也是产物文件名前缀）；模块 path 为空表示根工程。candidate 是 Windows 候选的装入方式，runtime 是 full-assembly.gradle 的开发运行装入方式，ownProjects 列出同仓内仍按文件装入该模块的子工程，coordinate 是模块自身的真实坐标，以源码组合时 includeSource 总是一并登记替换（已列出的坐标仍排在前面）。kz 是给 Kizuna-remote-session/scripts/kz 看的测试约定，Gradle 不读、不影响任何产物：branch 主分支名；test 单测和构建的任务（缺省 test build）；testFixtures 除安装 JAR 外还要放进本机 JAR 仓的测试夹具 JAR 所在模块；gametest 各 GameTest 的任务、运行目录（相对仓目录）和参数；client 各客户端验收的任务、参数、运行目录、world（先跑一次 GameTest 留下世界）和判成败的办法 ok（report 结果文件首行 success=true，log 日志里出现的标志，screenshots 只出截图给人看）。运行目录和参数里的 {name} 由 kz 起名，{eula} 是 kz 备好的 eula.txt。",
+  "description": "Kizuna 工作区统一装配清单：仓库按跨仓构建顺序排列。directory 为相对代码根目录的仓库目录，project 为根工程名（也是产物文件名前缀）；模块 path 为空表示根工程。candidate 是 Windows 候选的装入方式，runtime 是 full-assembly.gradle 的开发运行装入方式，ownProjects 列出同仓内仍按文件装入该模块的子工程，coordinate 是模块自身的真实坐标，以源码组合时 includeSource 总是一并登记替换（已列出的坐标仍排在前面）。kz 是给 Kizuna-remote-session/scripts/kz 看的测试约定，Gradle 不读、不影响任何产物：branch 主分支名；test 单测和构建的任务（缺省 test build）；testFixtures 除安装 JAR 外还要放进本机 JAR 仓的测试夹具 JAR 所在模块；gametest 各 GameTest 的任务、运行目录（相对仓目录）和参数；client 各客户端验收的任务、参数、运行目录、world（先跑一次 GameTest 留下世界）、originSelection（这一项要进世界时弹选出身界面；不写就由 kz 在运行目录的配置里关掉，免得挡住别的验收）和判成败的办法 ok（report 结果文件首行 success=true，log 日志里出现的标志，screenshots 只出截图给人看）。运行目录和参数里的 {name} 由 kz 起名，{eula} 是 kz 备好的 eula.txt。",
   "version": "0.1.0-SNAPSHOT",
   "repositories": [
     {
@@ -27,7 +27,7 @@
       "id": "origin",
       "directory": "Kizuna-Meridian-Origin-Addon",
       "project": "kizuna-meridian-origin-addon",
-      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}], "client": {"screen": {"task": ":fabric:runClientTest", "runDirectory": "fabric/build/clienttest", "world": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}], "client": {"screen": {"task": ":fabric:runClientTest", "runDirectory": "fabric/build/clienttest", "world": true, "originSelection": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "shared", "candidate": "library", "runtime": "library"},
         {"path": "server", "candidate": "library", "runtime": "library"},
@@ -335,7 +335,7 @@
       "id": "humanoid-taunts",
       "directory": "Kizuna-Meridian-Humanoid-Taunts-Addon",
       "project": "kizuna-meridian-humanoid-taunts-addon",
-      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}], "client": {"bubble": {"task": ":fabric:runClientTest", "runDirectory": "fabric/build/clienttest", "world": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
+      "kz": {"branch": "master", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest"}], "client": {"bubble": {"task": ":fabric:runClientTest", "runDirectory": "fabric/build/clienttest", "world": true, "originSelection": true, "ok": {"report": "fabric/build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "shared"},
         {"path": "server", "candidate": "library", "runtime": "library"},
