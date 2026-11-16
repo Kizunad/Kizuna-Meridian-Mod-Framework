@@ -158,7 +158,7 @@
       "id": "vanilla-healing",
       "directory": "Kizuna-Meridian-Vanilla-Healing-Addon",
       "project": "kizuna-meridian-vanilla-healing-addon",
-      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}, {"task": ":fabric:runGametestConfigured", "runDirectory": "fabric/build/{name}", "arguments": ["-PconfiguredGametestRunDir=build/{name}"]}]},
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}, {"task": ":fabric:runGametestConfigured", "runDirectory": "fabric/build/{name}", "arguments": ["-PconfiguredGametestRunDir=build/{name}"]}], "client": {"leg": {"task": ":clienttest:runClientGametest", "arguments": ["-PclienttestRunDir=build/{name}", "-PclienttestClip=leg"], "runDirectory": "clienttest/build/{name}", "ok": {"screenshots": "clienttest/build/{name}/screenshots"}}, "hand": {"task": ":clienttest:runClientGametest", "arguments": ["-PclienttestRunDir=build/{name}", "-PclienttestClip=hand"], "runDirectory": "clienttest/build/{name}", "ok": {"screenshots": "clienttest/build/{name}/screenshots"}}, "vital": {"task": ":clienttest:runClientGametest", "arguments": ["-PclienttestRunDir=build/{name}", "-PclienttestClip=vital"], "runDirectory": "clienttest/build/{name}", "ok": {"screenshots": "clienttest/build/{name}/screenshots"}}}},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"}
