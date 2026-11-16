@@ -29,6 +29,13 @@ message DamageBody {
   string damage_type = 4; // namespace:path，描述具体伤害，如 minecraft:fall。
   DamageKind kind = 5; // 必须为已知非零分类；默认处理器对各分类采用相同扣血规则。
   DeathProtection death_protection = 6; // 可缺省；可信宿主确认的单次保命，不复活已死身体。
+  // 可缺省，[0, 1]：这一下透进去的份额，交给伤害策略决定器官层分多少；框架只校验范围、原样带进伤害上下文。
+  optional double organ_share = 7;
+  // 随这一下一起加上的能力修正（如麻），和扣血在同一笔事务、同一个快照版本里；任何一条不合法整笔拒绝。
+  // - source 必须等于本命令的 source_id；start_millis 留 0，由框架写成这笔事务的身体时钟。
+  // - 身体里已有同 ID、同来源的修正就换成新的（再挨一下是续期，不叠乘）；同 ID 但来源不同则拒绝。
+  // - 这一下致死时不留修正。
+  repeated CapabilityModifier add_modifiers = 8;
 }
 
 // 只有本次伤害被策略判为致死时，才在同一事务中将这些账户恢复至指定下限。

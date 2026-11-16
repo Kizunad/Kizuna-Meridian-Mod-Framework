@@ -3,11 +3,14 @@ package dev.kizuna.meridian.server;
 import dev.kizuna.meridian.core.BodyDeath;
 import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.BodyTimeAdvancement;
+import dev.kizuna.meridian.core.CapabilityModifier;
+import dev.kizuna.meridian.core.DefinitionId;
 import dev.kizuna.meridian.core.OpeningRuntime;
 import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.VitalityState;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.BodyProtobuf;
+import dev.kizuna.meridian.protocol.CapabilityProtobuf;
 import dev.kizuna.meridian.protocol.HealthProtobuf;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.HealthTarget;
@@ -20,6 +23,8 @@ import dev.kizuna.meridian.protocol.pb.HealthMessages.*;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.BodyCommand;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 /** 只执行已确定的局部变化；伤害算法与死亡判断由策略的 DamageResolution 提供。 */
@@ -69,6 +74,7 @@ final class BodyHealthExecution {
                     candidate.setMeridianStates(candidate.getMeridianStatesList().indexOf(state),
                             state.toBuilder().setCondition(injury.getCondition()));
                 }
+                attachModifiers(body, candidate, command.getDamageBody());
                 died = resolution.getLethal();
                 if (command.getDamageBody().hasDeathProtection()) {
                     // 即使没有致死也校验完整保命方案，不能把非法账户藏在未执行的分支。
@@ -138,6 +144,33 @@ final class BodyHealthExecution {
             fact.setDamageResolution(resolution);
         }
         return new Result(updated, fact.build());
+    }
+
+    private static void attachModifiers(BodySnapshot before, BodyMessages.BodySnapshot.Builder candidate,
+                                        DamageBody damage) {
+        // 随伤害附带的能力修正和扣血同一笔提交：开始时刻写成这笔事务的身体时钟；同来源同 ID 的旧修正换成新的，
+        // 同 ID 但别的来源的不许顶掉。组织引用、条数上限由随后的完整快照构造检查，不合法就整笔不提交。
+        if (damage.getAddModifiersCount() == 0) {
+            return;
+        }
+        var source = new DefinitionId(damage.getSourceId());
+        long now = before.settledAt().elapsedMillis();
+        var incoming = new HashSet<DefinitionId>();
+        var stamped = new ArrayList<BodyMessages.CapabilityModifier>();
+        for (BodyMessages.CapabilityModifier addition : damage.getAddModifiersList()) {
+            var started = addition.toBuilder().setStartMillis(now).build();
+            incoming.add(CapabilityProtobuf.fromModifier(started).id());
+            stamped.add(started);
+        }
+        var kept = new ArrayList<BodyMessages.CapabilityModifier>();
+        for (CapabilityModifier existing : before.modifiers()) {
+            if (!incoming.contains(existing.id())) {
+                kept.add(CapabilityProtobuf.toModifier(existing));
+            } else if (!existing.source().equals(source)) {
+                throw MeridianErrors.rejectHealth(FailureCode.ACCESS_DENIED);
+            }
+        }
+        candidate.clearModifiers().addAllModifiers(kept).addAllModifiers(stamped);
     }
 
     private static void restoreMinimumHp(BodyMessages.BodySnapshot.Builder body, Healing floor) {

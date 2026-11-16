@@ -3,6 +3,8 @@ package dev.kizuna.meridian.protocol;
 import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.DefinitionId;
 import dev.kizuna.meridian.error.MeridianErrors;
+import dev.kizuna.meridian.core.CapabilityModifier;
+import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.HealthTarget;
 import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageBody;
 import dev.kizuna.meridian.protocol.pb.HealthMessages.DamageContext;
@@ -103,6 +105,23 @@ public final class HealthProtobuf {
         require(positive(request.getDamageHp()));
         if (request.hasDeathProtection()) {
             validateProtection(request.getDeathProtection());
+        }
+        if (request.hasOrganShare()) {
+            double share = request.getOrganShare();
+            require(Double.isFinite(share) && share >= 0 && share <= 1);
+        }
+        validateAttachments(request);
+    }
+
+    private static void validateAttachments(DamageBody request) {
+        // 随伤害附带的修正：条数有界、ID 不重复、来源就是这笔伤害、开始时刻留给框架写；组织存在性到执行时对着身体查。
+        require(request.getAddModifiersCount() <= CapabilityModifier.MAX_PER_BODY);
+        var ids = new HashSet<String>();
+        for (BodyMessages.CapabilityModifier modifier : request.getAddModifiersList()) {
+            new DefinitionId(modifier.getId());
+            require(ids.add(modifier.getId()));
+            require(modifier.getSource().equals(request.getSourceId()));
+            require(modifier.getStartMillis() == 0);
         }
     }
 

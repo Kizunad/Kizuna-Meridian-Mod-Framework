@@ -29,6 +29,7 @@ final class ProtoWire {
             "kizuna.meridian.v1.DamageResolution.spillover",
             "kizuna.meridian.v1.DamageBody.hit",
             "kizuna.meridian.v1.DamageBody.death_protection",
+            "kizuna.meridian.v1.DamageBody.organ_share",
             "kizuna.meridian.v1.HealthHostResponse.health",
             "kizuna.meridian.v1.DamageIntegrationPlan.death_protection",
             "kizuna.meridian.v1.BodySnapshot.opening_task",
