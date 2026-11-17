@@ -39,8 +39,9 @@ public final class BodyActivityExecution {
         if (plan.hasDamage() && plan.getDamage().getLethal()) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
-        // 释放明细仅在此校验，数值或重复条目非法时抛 IllegalArgumentException。
+        // 释放明细、外来真元明细仅在此校验，数值或重复条目非法时抛 IllegalArgumentException。
         BodyProtobuf.fromInventory(plan.getReleasedQi());
+        BodyProtobuf.fromInventory(plan.getIngestedQi());
     }
 
     public static BodySnapshot apply(BodySnapshot body, BodyActivity plan, String callerId) {
@@ -88,9 +89,11 @@ public final class BodyActivityExecution {
             replaceCircuit(body, candidate, change);
         }
         BodySnapshot updated = BodyProtobuf.fromMessage(candidate.build());
+        // 守恒：原有的加上外来的（服下的丹药之类），等于现在身上的加上交还环境的。
         double released = BodyProtobuf.fromInventory(plan.getReleasedQi()).totalQi();
+        double ingested = BodyProtobuf.fromInventory(plan.getIngestedQi()).totalQi();
         double previousTotalQi = body.totalQi();
-        double balanceError = previousTotalQi - updated.totalQi() - released;
+        double balanceError = previousTotalQi + ingested - updated.totalQi() - released;
         if (Math.abs(balanceError) > BALANCE_TOLERANCE * Math.max(1, previousTotalQi)) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }

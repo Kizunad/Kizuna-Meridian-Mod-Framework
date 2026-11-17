@@ -44,6 +44,7 @@ final class ProtoWire {
             "kizuna.meridian.v1.BodyActivity.realm",
             "kizuna.meridian.v1.BodyActivity.damage",
             "kizuna.meridian.v1.BodyActivity.released_qi",
+            "kizuna.meridian.v1.BodyActivity.ingested_qi",
             "kizuna.meridian.v1.CircuitChange.replacement",
             "kizuna.meridian.v1.BreathControl.aim_z",
             "kizuna.meridian.v1.DebugQi.amount",

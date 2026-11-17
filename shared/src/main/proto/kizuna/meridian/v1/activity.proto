@@ -22,6 +22,9 @@ message BodyActivity {
   DamageResolution damage = 12;
   repeated CapabilityModifier add_modifiers = 13;
   repeated string remove_modifiers = 14; // 按唯一 ID 撤销，不存在则整笔拒绝。
+  // 可缺省。外来真元：这次活动里从身体外面进来的真元（服下的丹药之类），不来自环境账户。
+  // 账户变更里多出来的总量必须正好等于它；容量、预约照旧校验，装不下整笔拒绝。
+  QiInventory ingested_qi = 15;
 }
 message QiAccountChange {
   oneof account {
