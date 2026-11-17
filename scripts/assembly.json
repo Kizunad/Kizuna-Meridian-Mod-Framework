@@ -99,7 +99,7 @@
       "id": "players-animation",
       "directory": "Kizuna-Players-Animation",
       "project": "kizuna-players-animation",
-      "kz": {"branch": "main", "test": ["test", "build", "-x", "checkAnimationGates"], "gametest": [{"task": ":runGametest", "runDirectory": "build/gametest"}], "client": {"animation": {"task": ":runClientTest", "ok": {"report": "build/clienttest-results.txt"}}}},
+      "kz": {"branch": "main", "test": ["test", "build", "-x", "checkAnimationGates"], "gametest": [{"task": ":runGametest", "runDirectory": "build/gametest"}], "client": {"animation": {"task": ":runClientTest", "runDirectory": "build/{name}", "arguments": ["-PclienttestRunDir=build/{name}"], "world": true, "ok": {"report": "build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "", "candidate": "mod", "runtime": "mod"}
       ]
@@ -108,7 +108,7 @@
       "id": "players-animation-mobs",
       "directory": "Kizuna-Players-Animation-Mobs-Addon",
       "project": "kizuna-players-animation-mobs-addon",
-      "kz": {"branch": "main", "gametest": [{"task": ":runGametest", "runDirectory": "build/gametest"}], "client": {"animation": {"task": ":runClientTest", "ok": {"report": "build/clienttest-results.txt"}}}},
+      "kz": {"branch": "main", "gametest": [{"task": ":runGametest", "runDirectory": "build/gametest"}], "client": {"animation": {"task": ":runClientTest", "runDirectory": "build/{name}", "arguments": ["-PclienttestRunDir=build/{name}"], "world": true, "ok": {"report": "build/clienttest-results.txt"}}}},
       "modules": [
         {"path": "", "candidate": "mod", "runtime": "mod"}
       ]
