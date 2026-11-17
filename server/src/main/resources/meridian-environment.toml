@@ -118,6 +118,8 @@ default_block_transmission = 0.10
 [generation]
 rules_version = 1
 dimension_id = "minecraft:overworld"
+# 另外还接受哪些维度。群系 ID 各维度不重名，所有维度共用下面这张地形表；没列出的维度（如末地）不生成灵气。
+extra_dimension_ids = ["minecraft:the_nether"]
 # 未分类地形先抽两个端点组成专属区间，再按区域身份在该区间内取值。
 unclassified_min = 0.20
 unclassified_max = 1.60
@@ -203,3 +205,34 @@ biomes = ["minecraft:mushroom_fields"]
 concentration_min = 1.40
 concentration_max = 2.20
 weights = [5, 60, 20, 5, 10]
+
+# 下界：火重。五行权重都得大于零，没有的那一行写 1（约占百分之一）。
+[generation.profiles."meridian:nether_wastes"]
+biomes = ["minecraft:nether_wastes"]
+concentration_min = 0.40
+concentration_max = 0.80
+weights = [10, 1, 1, 65, 25]
+
+[generation.profiles."meridian:basalt_deltas"]
+biomes = ["minecraft:basalt_deltas"]
+concentration_min = 0.30
+concentration_max = 0.60
+weights = [25, 1, 1, 55, 20]
+
+[generation.profiles."meridian:soul_sand_valley"]
+biomes = ["minecraft:soul_sand_valley"]
+concentration_min = 0.30
+concentration_max = 0.70
+weights = [5, 1, 1, 45, 50]
+
+[generation.profiles."meridian:crimson_forest"]
+biomes = ["minecraft:crimson_forest"]
+concentration_min = 0.60
+concentration_max = 1.00
+weights = [5, 30, 1, 55, 10]
+
+[generation.profiles."meridian:warped_forest"]
+biomes = ["minecraft:warped_forest"]
+concentration_min = 0.60
+concentration_max = 1.00
+weights = [5, 40, 10, 35, 10]

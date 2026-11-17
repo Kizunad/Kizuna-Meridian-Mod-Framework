@@ -143,9 +143,14 @@ public final class TerrainQiGenerator {
         return interpolate(range, sample(purpose, request.getWorldSeed(), request.getDimensionId(), request.getBiomeId()));
     }
 
+    /** 这个维度有没有灵气可生成：配置里列出的主维度和额外维度才有。宿主进别的维度前先问这一句。 */
+    public boolean supports(String dimension) {
+        return config.getDimensionId().equals(dimension) || config.getExtraDimensionIdsList().contains(dimension);
+    }
+
     private void requireDimension(String dimension) {
-        // 不把主世界的草木偏好自动套给地狱或其他维度；宿主须安装对应维度配置。
-        if (!config.getDimensionId().equals(dimension)) {
+        // 只认配置里列出的维度（主维度和额外维度）；没列的维度不自动套用这张地形表。
+        if (!supports(dimension)) {
             throw MeridianErrors.invalid(Environment.GENERATION_DIMENSION);
         }
     }

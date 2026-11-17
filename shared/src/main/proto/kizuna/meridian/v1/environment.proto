@@ -46,6 +46,9 @@ message TerrainQiGenerationConfig {
   EnvironmentNumericRange boundary_transmission = 4; // 相邻区域共享的随机传播倍率。
   optional double preference_jitter = 5; // 每种权重独立乘 [1-jitter, 1+jitter)，范围 [0,1)。
   repeated TerrainQiProfile profiles = 6;
+  // 除 dimension_id 以外还接受的维度（如下界）。群系 ID 各维度不重名，所有维度共用同一张地形表；
+  // 不重复、不含 dimension_id 本身。没列出的维度一律拒绝。
+  repeated string extra_dimension_ids = 7;
 }
 
 // 可信世界生成数据，不是客户端请求；宿主只对尚未初始化的区域调用。

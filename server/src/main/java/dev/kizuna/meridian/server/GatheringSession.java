@@ -442,14 +442,32 @@ public final class GatheringSession<C> implements AutoCloseable {
 
     double capture(GatheringChoice selected, double sampleVolumeBlocks) {
         // 一个命中就是一笔接触事件，同一毫秒允许多个命中，旧货物仍可同时在途。
-        double before = read().totalQi();
+        BodySnapshot beforeBody = read();
+        double before = beforeBody.totalQi();
         execute(BodyCommand.newBuilder().setCaptureQi(CaptureQi.newBuilder().setOrganId(selected.getOrganId())
                 .setRecipeId(selected.getRecipe().getId()).setRecipeVersion(selected.getRecipe().getVersion())
                 .setSampleVolumeBlocks(sampleVolumeBlocks)));
         double storedOutput = read().totalQi() - before;
         double efficiency = GatheringChoices.total(selected.getRecipe().getOutput())
                 / GatheringChoices.total(selected.getRecipe().getInput());
+        recordRouted(beforeBody, selected.getRecipe(), storedOutput);
         return storedOutput / efficiency;
+    }
+
+    private void recordRouted(BodySnapshot beforeBody, BodyMessages.OrganRecipe recipe, double storedOutput) {
+        // 配方写了去处的产物不经运输、当场就进了经脉，照样算进入脉统计；按这次实际炼出的量把配方产物等比放大。
+        double recipeOutput = GatheringChoices.total(recipe.getOutput());
+        if (breathing == null || recipe.getOutputRoutesCount() == 0 || storedOutput <= 0 || recipeOutput <= 0) {
+            return;
+        }
+        double scale = storedOutput / recipeOutput;
+        var output = new dev.kizuna.meridian.core.QiInventory(BodyProtobuf.fromInventory(recipe.getOutput())
+                .entries().stream().map(qi -> new dev.kizuna.meridian.core.Qi(qi.attribute(), qi.amount() * scale,
+                        qi.density())).toList());
+        var routed = QiCaptureRouting.of(beforeBody, recipe, output).routed();
+        if (routed.totalQi() > 0) {
+            breathing.recordStored(routed);
+        }
     }
 
     void recordBreathingDelivery(dev.kizuna.meridian.core.QiInventory cargo) {

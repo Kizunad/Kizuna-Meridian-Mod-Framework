@@ -218,6 +218,16 @@ message OrganRecipe {
   QiInventory output = 5; // 数量不得超过输入；差额以无属性游离态释放到环境。
   int64 duration_millis = 6; // 正数模拟毫秒。
   Realm minimum_realm = 7;
+  // 可缺省，只对即时摄入（接触吸纳）起作用：产物里写了去处的那一样不进器官缓存，
+  // 直接记进带这个标签、已经开拓的经脉内腔（按经脉 ID 先后装，一条装不下顺延下一条）。
+  // 没有这样的经脉、或者都装不下的部分，照同样的量和密度算成无属性留在器官缓存里，总量不变。
+  repeated OutputRoute output_routes = 8;
+}
+
+// 一样产物的去处：属性必须是 output 里有的、不是无属性的一样，同一属性只写一次。
+message OutputRoute {
+  string attribute = 1;
+  string meridian_tag = 2;
 }
 
 message OrganProcess {

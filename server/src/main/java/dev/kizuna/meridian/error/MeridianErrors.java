@@ -16,6 +16,8 @@ public final class MeridianErrors {
     public static final String TRAINING_GROWTH_STAGE = "训练成长事务改变了训练成长与版本以外的身体事实";
     public static final String INVALID_QI_CAPTURE = "接触摄入需要有效器官、单种输入配方和正数采样体积";
     public static final String QI_CAPTURE_FACT = "接触摄入回执与环境、身体或配方不一致";
+    public static final String INVALID_OUTPUT_ROUTE =
+            "配方产物的去处要写给产物里有的、不是无属性的属性，同一属性只写一次";
     public static final String INVALID_DEBUG_QI = "真元调试模式、目标或剂量无效";
     public static final String INVALID_DEBUG_QI_SHARES = "真元调试的属性比例无效：属性不能重复，每份须大于 0，合计不超过 1";
     public static final String DEBUG_QI_MISMATCH = "调试回执与实际身体入账不一致";

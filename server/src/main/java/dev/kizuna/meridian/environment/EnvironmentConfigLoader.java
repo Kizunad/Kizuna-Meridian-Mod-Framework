@@ -139,14 +139,23 @@ public final class EnvironmentConfigLoader {
 
     private static void applyGeneration(TomlTable table, EnvironmentQiConfig.Builder config) {
         // 通用范围与地形内容分开覆盖；最终发布仍由同一 Protobuf 校验入口检查。
-        checkKeys(table, "generation.", Set.of("rules_version", "dimension_id", "unclassified_min",
-                "unclassified_max", "boundary_min", "boundary_max", "preference_jitter", "profiles"));
+        checkKeys(table, "generation.", Set.of("rules_version", "dimension_id", "extra_dimension_ids",
+                "unclassified_min", "unclassified_max", "boundary_min", "boundary_max", "preference_jitter",
+                "profiles"));
         var generation = config.getGeneration().toBuilder();
         if (table.contains("rules_version")) {
             generation.setRulesVersion(integer(table, "rules_version", "generation.rules_version"));
         }
         if (table.contains("dimension_id")) {
             generation.setDimensionId(string(table.get("dimension_id"), "generation.dimension_id"));
+        }
+        if (table.contains("extra_dimension_ids")) {
+            // 整张替换：写成空表就是只认主维度。老配置文件没有这个键时沿用随包的清单。
+            TomlArray extras = array(table, "extra_dimension_ids", "generation.extra_dimension_ids");
+            generation.clearExtraDimensionIds();
+            for (int index = 0; index < extras.size(); index++) {
+                generation.addExtraDimensionIds(string(extras.get(index), "generation.extra_dimension_ids"));
+            }
         }
         generation.setUnclassifiedConcentration(range(table, "unclassified_", "generation.",
                 generation.getUnclassifiedConcentration()));

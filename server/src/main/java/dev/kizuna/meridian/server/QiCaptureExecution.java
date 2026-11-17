@@ -32,7 +32,7 @@ final class QiCaptureExecution {
         // 候选身体、环境交换与回执一同交给事务发布，任何一步失败都不修改原账本。
         Context context = context(body, request, definition, source);
         Amounts amounts = amounts(context, request.getSampleVolumeBlocks());
-        BodySnapshot updated = updateBody(context, amounts);
+        BodySnapshot updated = updateBody(context, amounts, QiCaptureRouting.of(body, definition, amounts.output()));
         EnvironmentQiExchange exchange = exchange(body, source, amounts);
         EnvironmentQiSource updatedSource = EnvironmentAbsorption.apply(source, exchange);
         EnvironmentQiReceipt receipt = EnvironmentQiReceipt.newBuilder()
@@ -144,18 +144,27 @@ final class QiCaptureExecution {
         return new Amounts(absorbed, output, released);
     }
 
-    private static BodySnapshot updateBody(Context context, Amounts amounts) {
+    private static BodySnapshot updateBody(Context context, Amounts amounts, QiCaptureRouting.Routing routing) {
         // 生成身体候选与开脉的新摄入证据，已有加工和疲劳不被本次接触覆盖。
+        // 配方写了去处的产物直接记进对应经脉的内腔，其余的进器官缓存，同一笔提交。
         BodySnapshot body = context.body();
         AnatomyState.Organ state = context.state();
         double rawAmount = amounts.absorbed().totalQi();
-        QiInventory buffer = QiAccounting.credit(state.buffer(), amounts.output());
+        QiInventory buffer = QiAccounting.credit(state.buffer(), routing.kept());
         var organ = BodyProtobuf.toOrganState(state).toBuilder().setBuffer(BodyProtobuf.toInventory(buffer)).build();
-        var message = BodyProtobuf.toMessage(body).toBuilder()
+        var candidate = BodyProtobuf.toMessage(body).toBuilder()
                 .setOrganStates(body.organStates().indexOf(state), organ)
                 .putAllAddonProgress(QiCaptureBudget.consume(body, state.id(), rawAmount))
-                .setRevision(body.revision() + 1)
-                .build();
+                .setRevision(body.revision() + 1);
+        for (int index = 0; index < body.meridianStates().size(); index++) {
+            QiInventory cargo = routing.lumen().get(body.meridianStates().get(index).id());
+            if (cargo != null) {
+                QiInventory lumen = QiAccounting.credit(body.meridianStates().get(index).lumenQi(), cargo);
+                candidate.setMeridianStates(index, candidate.getMeridianStates(index).toBuilder()
+                        .setLumenQi(BodyProtobuf.toInventory(lumen)));
+            }
+        }
+        var message = candidate.build();
         BodySnapshot updated = BodyProtobuf.fromMessage(message);
         return OpeningRuntime.recordIntake(updated, state.id(), rawAmount);
     }

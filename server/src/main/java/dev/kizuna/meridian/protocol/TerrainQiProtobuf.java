@@ -29,6 +29,11 @@ public final class TerrainQiProtobuf {
         ProtoWire.validate(config);
         ProtoWire.require(config.getRulesVersion() == 1, Environment.GENERATION_VERSION);
         new DefinitionId(config.getDimensionId());
+        Set<String> dimensions = new HashSet<>(Set.of(config.getDimensionId()));
+        for (String extra : config.getExtraDimensionIdsList()) {
+            new DefinitionId(extra);
+            ProtoWire.require(dimensions.add(extra), Environment.GENERATION_DIMENSION);
+        }
         validateRange(config.getUnclassifiedConcentration());
         validateRange(config.getBoundaryTransmission());
         ProtoWire.require(config.getPreferenceJitter() < 1, Environment.GENERATION_JITTER);

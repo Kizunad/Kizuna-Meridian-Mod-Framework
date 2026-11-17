@@ -12,6 +12,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -19,6 +20,8 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class TerrainQiGenerationTest {
+    private static final String NETHER = "minecraft:the_nether";
+
     @Test
     public void terrainConfigurationTravelsThroughTomlAndProtobuf() {
         // 自定义群系可直接归入已有预设；完整配置须包含地形表并经过协议校验。
@@ -127,11 +130,11 @@ public class TerrainQiGenerationTest {
 
     @Test
     public void invalidGenerationFactsCannotCrossProtocolBoundary() {
-        // 主世界配置不能隐式套用其他维度；无效体积、缺失字段及伪造的初始余额全部拒绝。
+        // 配置里没列的维度不能隐式套用这张地形表；无效体积、缺失字段及伪造的初始余额全部拒绝。
         var generator = new TerrainQiGenerator(EnvironmentConfigLoader.defaults().getGeneration());
         var request = request("minecraft:plains", "r");
         assertThrows(IllegalArgumentException.class, () -> generator.generateRegion(request.toBuilder()
-                .setDimensionId("minecraft:the_nether").build()));
+                .setDimensionId("minecraft:the_end").build()));
         assertThrows(IllegalArgumentException.class, () -> generator.generateRegion(request.toBuilder().setVolumeBlocks(0).build()));
         assertThrows(IllegalArgumentException.class, () -> generator.generateRegion(request.toBuilder()
                 .setBiomeId("minecraft:forest").setVolumeBlocks(Double.MAX_VALUE).build()));
@@ -146,6 +149,51 @@ public class TerrainQiGenerationTest {
         assertThrows(IllegalArgumentException.class, () -> TerrainQiProtobuf.decodeSeed(invalid.toByteArray()));
         assertThrows(IllegalArgumentException.class,
                 () -> MeridianProtocol.decodeRequest(TerrainQiProtobuf.encodeRegionRequest(request)));
+    }
+
+    @Test
+    public void netherIsAnExtraDimensionWithFireHeavyBiomes() {
+        // 随包配置除主世界外还接受下界：下界荒地、玄武岩三角洲、绯红森林以火为主，下界荒地的浓度在 0.40–0.80。
+        // 区域和边界两个入口都认；额外维度的清单能在配置里整张换掉。
+        var defaults = EnvironmentConfigLoader.defaults().getGeneration();
+        assertEquals(List.of(NETHER), defaults.getExtraDimensionIdsList());
+        var generator = new TerrainQiGenerator(defaults);
+        assertTrue(generator.supports("minecraft:overworld") && generator.supports(NETHER));
+        assertTrue(!generator.supports("minecraft:the_end"));
+        for (String biome : List.of("minecraft:nether_wastes", "minecraft:basalt_deltas", "minecraft:crimson_forest")) {
+            for (int index = 0; index < 20; index++) {
+                var weights = generator.generateRegion(nether(biome, "n" + index)).getWeights();
+                double others = Math.max(Math.max(weights.getMetal(), weights.getWood()),
+                        Math.max(weights.getWater(), weights.getEarth()));
+                assertTrue(biome, weights.getFire() > others);
+            }
+        }
+        double wastes = concentration(generator.generateRegion(nether("minecraft:nether_wastes", "w")));
+        assertTrue(wastes >= 0.40 && wastes <= 0.80);
+        generator.generateBoundary(TerrainQiBoundaryRequest.newBuilder().setProtocolVersion(1).setWorldSeed("-42")
+                .setDimensionId(NETHER).setBoundaryId("ab").setFirstSourceId("a").setSecondSourceId("b")
+                .setAreaBlocks(100).setRulesRevision(7).build());
+
+        var overworldOnly = new TerrainQiGenerator(EnvironmentConfigLoader.parse(
+                "[generation]\nextra_dimension_ids = []").getGeneration());
+        assertThrows(IllegalArgumentException.class,
+                () -> overworldOnly.generateRegion(nether("minecraft:nether_wastes", "w")));
+        var withEnd = new TerrainQiGenerator(EnvironmentConfigLoader.parse(
+                "[generation]\nextra_dimension_ids = [\"minecraft:the_end\"]").getGeneration());
+        withEnd.generateRegion(request("minecraft:plains", "r").toBuilder()
+                .setDimensionId("minecraft:the_end").build());
+        for (String invalid : new String[] {
+                "[generation]\nextra_dimension_ids = [\"minecraft:overworld\"]",
+                "[generation]\nextra_dimension_ids = [\"minecraft:the_nether\", \"minecraft:the_nether\"]",
+                "[generation]\nextra_dimension_ids = [3]",
+                "[generation]\nextra_dimension_ids = \"minecraft:the_nether\""
+        }) {
+            assertThrows(invalid, IllegalArgumentException.class, () -> EnvironmentConfigLoader.parse(invalid));
+        }
+    }
+
+    private static TerrainQiRegionRequest nether(String biomeId, String sourceId) {
+        return request(biomeId, sourceId).toBuilder().setDimensionId(NETHER).build();
     }
 
     private static TerrainQiRegionRequest request(String biomeId, String sourceId) {

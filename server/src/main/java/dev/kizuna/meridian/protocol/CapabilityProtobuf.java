@@ -6,10 +6,14 @@ import dev.kizuna.meridian.core.CapabilityModifier;
 import dev.kizuna.meridian.core.DefinitionId;
 import dev.kizuna.meridian.core.OrganProcess;
 import dev.kizuna.meridian.core.OrganRecipe;
+import dev.kizuna.meridian.core.Qi;
 import dev.kizuna.meridian.core.Realm;
 import dev.kizuna.meridian.core.TissueCapabilities;
+import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages;
+
+import java.util.HashSet;
 
 /** 组织能力与器官配方使用同一 protoc 契约，附属 JAR 不自定义平行载荷。 */
 public final class CapabilityProtobuf {
@@ -97,9 +101,22 @@ public final class CapabilityProtobuf {
     public static OrganRecipe fromRecipe(BodyMessages.OrganRecipe recipe) {
         // 相态、属性、器官类型和最低境界均保留类型化含义，不接受任意脚本。
         ProtoWire.validate(recipe);
+        validateRoutes(recipe);
         return new OrganRecipe(new DefinitionId(recipe.getId()), recipe.getVersion(), new DefinitionId(recipe.getOrganKind()),
                 BodyProtobuf.fromInventory(recipe.getInput()), BodyProtobuf.fromInventory(recipe.getOutput()),
                 recipe.getDurationMillis(), Realm.valueOf(recipe.getMinimumRealm().name()));
+    }
+
+    private static void validateRoutes(BodyMessages.OrganRecipe recipe) {
+        // 去处只能写给产物里真有的、不是无属性的那一样；一样只写一次；标签是内容 ID。
+        var routed = new HashSet<String>();
+        for (BodyMessages.OutputRoute route : recipe.getOutputRoutesList()) {
+            new DefinitionId(route.getMeridianTag());
+            boolean produced = recipe.getOutput().getEntriesList().stream()
+                    .anyMatch(entry -> entry.getAttribute().equals(route.getAttribute()));
+            ProtoWire.require(produced && !route.getAttribute().equals(Qi.QiAttribute.NONE.id().value())
+                    && routed.add(route.getAttribute()), MeridianErrors.INVALID_OUTPUT_ROUTE);
+        }
     }
 
     public static BodyMessages.OrganRecipe toRecipe(OrganRecipe recipe) {
