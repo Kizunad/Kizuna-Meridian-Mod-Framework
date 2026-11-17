@@ -38,3 +38,13 @@
 - 未实现接口不写成可编译示例，未发布版本不编造 Maven 坐标或安装产物。
 - 保留用户未提交修改，不强推、不重写历史。只有得到相应授权才提交、推送或发布。
 - 本项目使用 PolyForm Noncommercial 1.0.0。私有反作弊策略不进入本仓库；第三方许可不可被本项目许可覆盖。
+
+## 构建和测试
+
+构建、测试一律走工作区的 `kz`（`~/Code/Kizuna-remote-session/scripts/kz`），不直接运行 `./gradlew`。细则以 `~/Code/Kizuna-remote-session/handoff/codex-worker-rules.md` 为准，动手前先读。
+
+- 单测、构建和服务端 GameTest：`kz test ~/Code/<本仓的 worktree>`
+- 要带上别的仓的 worktree 一起测：每个加一次 `--with ~/Code/<那个仓的 worktree>`
+- 客户端测试：`kz client ~/Code/<本仓的 worktree>` 列出有哪些项，`kz client ~/Code/<本仓的 worktree> <项>` 跑其中一项
+- 要自己写 Gradle 参数时：`kz gradle ~/Code/<本仓的 worktree> -- <参数>`
+- 不提交、不推送；在自己的 worktree（`~/Code/wt-*`）里改，不改主目录。
