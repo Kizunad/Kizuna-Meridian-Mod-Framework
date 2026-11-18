@@ -96,6 +96,15 @@
       ]
     },
     {
+      "id": "mob-inventory",
+      "directory": "Kizuna-Meridian-Mob-Inventory-Addon",
+      "project": "kizuna-meridian-mob-inventory-addon",
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}]},
+      "modules": [
+        {"path": "fabric", "candidate": "mod", "runtime": "mod", "coordinate": "dev.kizuna.meridian.inventory:fabric"}
+      ]
+    },
+    {
       "id": "players-animation",
       "directory": "Kizuna-Players-Animation",
       "project": "kizuna-players-animation",
