@@ -177,7 +177,7 @@
       "id": "human",
       "directory": "Kizuna-Meridian-Human-Addon",
       "project": "kizuna-meridian-human-addon",
-      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PhumanGametestRunDir=build/{name}"]}]},
+      "kz": {"branch": "main", "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/{name}", "arguments": ["-PhumanGametestRunDir=build/{name}"]}], "client": {"guard": {"task": ":fabric:runClientGametest", "arguments": ["-PhumanClienttestRunDir=build/{name}"], "runDirectory": "fabric/build/{name}", "ok": {"screenshots": "fabric/build/{name}/screenshots"}}}},
       "modules": [
         {"path": "server", "candidate": "library", "runtime": "library"},
         {"path": "shared", "candidate": "library", "runtime": "library", "ownProjects": ["fabric"]},
