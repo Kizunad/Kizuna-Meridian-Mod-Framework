@@ -226,6 +226,16 @@
       ]
     },
     {
+      "id": "undead-threatening",
+      "directory": "Kizuna-Meridian-Vanilla-Undead-Threatening",
+      "project": "kizuna-meridian-vanilla-undead-threatening",
+      "kz": {"branch": "main"},
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
       "id": "debug",
       "directory": "Kizuna-Meridian-Debug-Addon",
       "project": "kizuna-meridian-debug-addon",
