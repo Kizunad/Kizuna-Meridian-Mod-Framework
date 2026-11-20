@@ -28,6 +28,10 @@
 
 `BodyActivity.ingested_qi = 15` 声明丹药等非环境账户带来的外来真元，缺省为空。可信附属必须同时提交实际账户变更，外来明细参与总量守恒，仍受库存、容量和在途预约约束；未声明或声明量与账户净增量不符时整笔拒绝。此字段不授权普通客户端生成真元，也不改变环境摄入接口的扣账规则。
 
+`BodyActivity.tissue_fatigue = 16` 按组织增加疲劳点。每笔最多 32 项，每项给出实例中的 `tissue_id` 和有限正数 `points`。重复目标或无效增量在解码时拒绝，未知目标返回 `MODULE_NOT_FOUND`。达到剩余容量时将疲劳写至容量上限。该项只改组织疲劳，可与其他活动字段一次提交，保留原有训练负荷和身体回执语义。
+
+可信伤害命令可携带 `BodyCommand.damage_attachment`。其中的 `tissue_fatigue`、`stop_actions` 和 `progress` 使用身体活动的同名规则。三项均按受击前的身体结算，与伤害、保命或死亡清账共用一个版本。Store 按回执中的原命令和固定伤害结果复算，同一请求重发复用原回执。完全吸收后仍有费用时，宿主将明细转换为一次普通可信活动。
+
 `DamageResolution.meridian_injuries` 使用既有健康接口记录渗漏/断裂，不虚构经脉 HP。`DebugQi.SET_INVENTORY` 允许已授权 OP 精确设置内腔或外壁的数量与密度，仍检查体积和在途预约；全身模式的数量为总量，按扣除在途预约后的可用体积分配，不能把库存单独灌到含在途的总容量。总量检查容许 `1e-8` 体积余量，逐条写入时截到该经脉自身可用体积。带 `shares` 时按比例拆成各属性明细（余下记无属性），每多一份明细，逐条截取的体积再预留 8 ULP。
 
 状态：已实现 Java 25 不可变数据值与构造校验，源码位于 `server/src/main/java/dev/kizuna/meridian/core/`；对外数据交换采用 [Protobuf v1](Protocol-and-Security.md)，源码在 `shared/src/main/proto/`，生成类与核心值之间由服务端的 `BodyProtobuf` 映射。工程分为 `client`、`server` 两个 Java 库子项目和 Fabric 模组子项目 `fabric`；`meridian-core` 是服务端数据层的职责名称，没有独立子项目或已发布依赖坐标。

@@ -6,6 +6,7 @@ import dev.kizuna.meridian.core.DefinitionId;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.error.MeridianErrors.Protocol;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages;
+import dev.kizuna.meridian.server.BodyActivityExecution;
 
 /** 宿主无关的 Protobuf 请求/响应边界；不注册网络通道，也不授予读取权限。 */
 public final class MeridianProtocol {
@@ -165,6 +166,11 @@ public final class MeridianProtocol {
     private static void validateCommand(MeridianMessages.BodyCommand command) {
         // 存在性、有限数和非负 revision 已由公共遍历校验，额外约束实际操作的剂量。
         new BodyId(command.getBodyId());
+        if (command.hasDamageAttachment()) {
+            ProtoWire.require(command.hasDamageBody(), Protocol.MISSING_COMMAND);
+            var plan = BodyActivityExecution.damageActivity(command.getDamageAttachment());
+            BodyActivityExecution.validate(plan);
+        }
         switch (command.getOperationCase()) {
             case FILL_MODULE_TAGS ->
                     dev.kizuna.meridian.server.ModuleTagExecution.validate(command.getFillModuleTags());

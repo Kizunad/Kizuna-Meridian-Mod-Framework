@@ -46,6 +46,7 @@ message TissueCapability {
 message BodyCommand {
   string body_id = 1;
   optional int64 expected_revision = 2;
+  DamageAttachment damage_attachment = 3; // 只允许随可信 damage_body 提交。
   oneof operation {
     SpendLifespan spend_lifespan = 10;
     AdvanceTime advance_time = 11;

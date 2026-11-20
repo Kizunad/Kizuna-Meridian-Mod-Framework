@@ -25,6 +25,15 @@ message BodyActivity {
   // 可缺省。外来真元：这次活动里从身体外面进来的真元（服下的丹药之类），不来自环境账户。
   // 账户变更里多出来的总量必须正好等于它；容量、预约照旧校验，装不下整笔拒绝。
   QiInventory ingested_qi = 15;
+  // 可信活动的组织疲劳增量，以疲劳点计。每块组织至多一项。
+  repeated TissueFatigueIncrease tissue_fatigue = 16;
+}
+message TissueFatigueIncrease { string tissue_id = 1; double points = 2; }
+// 可信伤害同时结算的有限变更，随原命令保存并复算。
+message DamageAttachment {
+  repeated TissueFatigueIncrease tissue_fatigue = 1;
+  repeated string stop_actions = 2;
+  map<string, google.protobuf.Any> progress = 3;
 }
 message QiAccountChange {
   oneof account {

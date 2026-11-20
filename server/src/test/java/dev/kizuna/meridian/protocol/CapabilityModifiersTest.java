@@ -6,6 +6,7 @@ import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.fixture.pb.SampleOpeningMessages.SampleOpeningConditions;
 import dev.kizuna.meridian.protocol.pb.ActivityMessages.BodyActivity;
 import dev.kizuna.meridian.protocol.pb.ActivityMessages.ActivityEffort;
+import dev.kizuna.meridian.protocol.pb.ActivityMessages.TissueFatigueIncrease;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.HealthMessages;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages;
@@ -281,6 +282,68 @@ public class CapabilityModifiersTest {
         var command = command(boosted).setExertTissue(exertion).build();
         assertCommitted(handler(store).handle("host", packet("exert", command)));
         assertEquals(boosted.modifiers(), store.find(boosted.id()).orElseThrow().modifiers());
+    }
+
+    @Test
+    public void tissueFatigueCommitsOnceAndClampsToCapacity() {
+        // 经可信请求对两个组织加不同量，再次收到原包只重放上次回执。
+        var initial = body();
+        var store = new InMemoryBodyStore(List.of(initial), List.of());
+        var handler = handler(store);
+        var activity = BodyActivity.newBuilder()
+                .addTissueFatigue(fatigue(TISSUE.value(), INITIAL_FATIGUE))
+                .addTissueFatigue(fatigue(OTHER_TISSUE, Double.MAX_VALUE))
+                .build();
+        var command = command(initial).setExecuteActivity(activity).build();
+        byte[] request = packet("fatigue", command);
+        byte[] committed = handler.handleActivity(SOURCE, request);
+        assertCommitted(committed);
+        assertArrayEquals(committed, handler.handleActivity(SOURCE, request));
+        var after = store.find(initial.id()).orElseThrow();
+        assertEquals(1, after.revision());
+        assertEquals(INITIAL_FATIGUE, after.tissueStates().getFirst().fatigue(), 0);
+        assertEquals(FATIGUE_CAPACITY, after.tissueStates().getLast().fatigue(), 0);
+    }
+
+    @Test
+    public void invalidFatigueRejectsWholeActivity() {
+        // 首项有效时，第二项重复、未知或增量不合法仍不能留下首项或成功回执。
+        var initial = body();
+        var store = new InMemoryBodyStore(List.of(initial), List.of());
+        var handler = handler(store);
+        var first = fatigue(TISSUE.value(), 1);
+        var missing = BodyActivity.newBuilder()
+                .addTissueFatigue(first)
+                .addTissueFatigue(fatigue("missing", 1))
+                .build();
+        var unknown = command(initial).setExecuteActivity(missing).build();
+        var denied = handler.handleActivity(SOURCE, packet("unknown-tissue", unknown));
+        assertEquals(MeridianMessages.FailureCode.MODULE_NOT_FOUND,
+                MeridianProtocol.decodeResponse(denied).getFailure().getCode());
+        assertEquals(initial, store.find(initial.id()).orElseThrow());
+        assertTrue(store.receipts().isEmpty());
+        for (var invalid : List.of(first, fatigue("", 1), fatigue("test:invalid", 1), fatigue(OTHER_TISSUE, 0),
+                fatigue(OTHER_TISSUE, -1), fatigue(OTHER_TISSUE, Double.NaN),
+                fatigue(OTHER_TISSUE, Double.POSITIVE_INFINITY))) {
+            var activity = BodyActivity.newBuilder()
+                    .addTissueFatigue(first)
+                    .addTissueFatigue(invalid)
+                    .build();
+            var command = command(initial).setExecuteActivity(activity).build();
+            // 直接提交原始字节，使格式非法的明细也能进入接收端边界。
+            byte[] bytes = envelope("invalid-fatigue").setBodyCommand(command).build().toByteArray();
+            assertThrows(IllegalArgumentException.class, () -> handler.handleActivity(SOURCE, bytes));
+            assertEquals(initial, store.find(initial.id()).orElseThrow());
+            assertTrue(store.receipts().isEmpty());
+        }
+    }
+
+    private static TissueFatigueIncrease fatigue(String tissue, double points) {
+        // 按组织构造独立的疲劳点增量。
+        return TissueFatigueIncrease.newBuilder()
+                .setTissueId(tissue)
+                .setPoints(points)
+                .build();
     }
 
     @Test

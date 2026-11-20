@@ -45,7 +45,7 @@ final class BodyHealthExecution {
         if (body.revision() == Long.MAX_VALUE) {
             throw MeridianErrors.rejectHealth(FailureCode.REVISION_EXHAUSTED);
         }
-        var candidate = BodyProtobuf.toMessage(body).toBuilder().setRevision(body.revision() + 1);
+        var candidate = candidate(body, command);
         boolean died = false;
         boolean deathPrevented = false;
 
@@ -144,6 +144,16 @@ final class BodyHealthExecution {
             fact.setDamageResolution(resolution);
         }
         return new Result(updated, fact.build());
+    }
+
+    private static BodyMessages.BodySnapshot.Builder candidate(BodySnapshot body, BodyCommand command) {
+        // 附带变更基于命中前的身体，伤害、保命和死亡清账继续写同一个候选版本。
+        if (command.hasDamageAttachment()) {
+            var plan = BodyActivityExecution.damageActivity(command.getDamageAttachment());
+            var updated = BodyActivityExecution.apply(body, plan, command.getDamageBody().getSourceId());
+            return BodyProtobuf.toMessage(updated).toBuilder();
+        }
+        return BodyProtobuf.toMessage(body).toBuilder().setRevision(body.revision() + 1);
     }
 
     private static void attachModifiers(BodySnapshot before, BodyMessages.BodySnapshot.Builder candidate,

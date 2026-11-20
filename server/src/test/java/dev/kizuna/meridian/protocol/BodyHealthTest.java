@@ -2,6 +2,8 @@ package dev.kizuna.meridian.protocol;
 
 import dev.kizuna.meridian.core.*;
 import dev.kizuna.meridian.protocol.pb.BodyMessages;
+import dev.kizuna.meridian.protocol.pb.ActivityMessages.DamageAttachment;
+import dev.kizuna.meridian.protocol.pb.ActivityMessages.TissueFatigueIncrease;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.HealthTarget;
 import dev.kizuna.meridian.protocol.pb.HealthHostMessages.HealthHostRequest;
 import dev.kizuna.meridian.protocol.pb.HealthHostMessages.HealthHostResponse;
@@ -18,6 +20,69 @@ import static org.junit.Assert.*;
 
 /** 整体回归：附属伤害裁决、独立账户、主动恢复与原子清账共用正式协议。 */
 public class BodyHealthTest {
+    private static final double HIT_FATIGUE = 3;
+
+    @Test
+    public void damageAttachmentCommitsAndReplaysOnce() {
+        // 扣血、释放占用、增加疲劳共享一个版本，重发同一命令只读回执。
+        var initial = body();
+        var store = new InMemoryBodyStore(List.of(initial), List.of());
+        var commands = defaultHandler(store);
+        var progress = com.google.protobuf.Any.pack(com.google.protobuf.StringValue.of("spent"));
+        String progressId = "sample:contact";
+        var cost = fatigueAttachment().toBuilder()
+                .addStopActions("use")
+                .putProgress(progressId, progress)
+                .build();
+        byte[] hit = request("attached", initial.revision(), damage().setDamageAttachment(cost));
+        failure(commands.handle("host", hit), FailureCode.ACCESS_DENIED);
+        byte[] response = commands.handleHealthEffect("host", hit);
+        assertTrue(MeridianProtocol.decodeResponse(response).hasCommandCommitted());
+        var after = store.find(initial.id()).orElseThrow();
+        assertEquals(initial.revision() + 1, after.revision());
+        assertTrue(after.partStates().getFirst().hp() < initial.partStates().getFirst().hp());
+        assertTrue(after.actions().isEmpty());
+        assertEquals(progress, after.addonProgress().get(progressId));
+        assertEquals(initial.tissueStates().getFirst().fatigue() + HIT_FATIGUE,
+                after.tissueStates().getFirst().fatigue(), 0);
+        assertArrayEquals(response, commands.handleHealthEffect("host", hit));
+        assertEquals(after, store.find(initial.id()).orElseThrow());
+    }
+
+    @Test
+    public void storeRejectsOmittedFatigueFromFrozenHit() {
+        // 用相同伤害的原始结果伪造候选，只有复算冻结的疲劳明细才能识别。
+        var initial = body();
+        var plain = new InMemoryBodyStore(List.of(initial), List.of());
+        defaultHandler(plain).handleHealthEffect("host", request("plain", initial.revision(), damage()));
+        var receipt = plain.receipts().getFirst();
+        var changedCommand = receipt.getCommand().toBuilder().setDamageAttachment(fatigueAttachment()).build();
+        var changedReceipt = receipt.toBuilder().setCommand(changedCommand).build();
+        var unchangedFatigue = plain.find(initial.id()).orElseThrow();
+        var fresh = new InMemoryBodyStore(List.of(initial), List.of());
+        var altered = BodyProtobuf.toMessage(unchangedFatigue).toBuilder();
+        var tissue = altered.getTissueStatesBuilder(0);
+        tissue.setFatigue(tissue.getFatigue() + 1);
+        var wrongAmount = BodyProtobuf.fromMessage(altered.build());
+        for (var forged : List.of(unchangedFatigue, wrongAmount)) {
+            assertThrows(IllegalStateException.class, () -> fresh.transact(initial.id(), transaction -> {
+                transaction.stage(forged, changedReceipt);
+                return null;
+            }));
+        }
+        assertEquals(initial, fresh.find(initial.id()).orElseThrow());
+        assertTrue(fresh.receipts().isEmpty());
+    }
+
+    private static DamageAttachment fatigueAttachment() {
+        // 取非人夹具的组织，确保框架契约不依赖内容模板。
+        var increase = TissueFatigueIncrease.newBuilder()
+                .setTissueId("tendril")
+                .setPoints(HIT_FATIGUE)
+                .build();
+        return DamageAttachment.newBuilder().addTissueFatigue(increase).build();
+    }
+
     @Test
     public void deathProtectionAndTemporaryLimitsCommitAtomicallyAndReplay() {
         // 致死伤害与保命下限一次提交；不先死亡清账，也不在重试时重新消费效果。

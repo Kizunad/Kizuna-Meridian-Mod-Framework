@@ -8,14 +8,17 @@ import dev.kizuna.meridian.protocol.pb.BodyMessages;
 import dev.kizuna.meridian.protocol.pb.HealthMessages;
 import dev.kizuna.meridian.protocol.pb.MeridianMessages;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /** 可信活动的最小原子算子集合：资源计划不能携带身体快照或跳过容量、疲劳与守恒。 */
 public final class BodyActivityExecution {
     private static final int MAX_ACCOUNT_CHANGES = 256;
     private static final int MAX_CIRCUIT_CHANGES = 16;
     private static final int MAX_EFFORTS = 32;
+    private static final int MAX_FATIGUE_TARGETS = 32;
     private static final int MAX_COMPLETIONS = 128;
     private static final int MAX_RECIPES = 16;
     private static final double BALANCE_TOLERANCE = 1e-8;
@@ -24,11 +27,22 @@ public final class BodyActivityExecution {
         // 附属只产生计划，权威提交和回执复算均调用同一个执行器。
     }
 
+    public static BodyActivity damageActivity(DamageAttachment attachment) {
+        // 完全吸收时也可把同一组明细交给可信活动入口。
+        return BodyActivity.newBuilder()
+                .addAllTissueFatigue(attachment.getTissueFatigueList())
+                .addAllStopActions(attachment.getStopActionsList())
+                .putAllProgress(attachment.getProgressMap())
+                .build();
+    }
+
     public static void validate(BodyActivity plan) {
         // 限制单笔工作量；具体账户和余额必须在事务内结合身体检查。
+        var fatigue = plan.getTissueFatigueList();
         if (plan.getAccountsCount() > MAX_ACCOUNT_CHANGES || plan.getCircuitsCount() > MAX_CIRCUIT_CHANGES
                 || plan.getEffortsCount() > MAX_EFFORTS || plan.getCompletionsCount() > MAX_COMPLETIONS
                 || plan.getRecipesCount() > MAX_RECIPES
+                || fatigue.size() > MAX_FATIGUE_TARGETS
                 || plan.getStartActionsCount() > BodyActions.MAX_ACTIVE_ACTIONS
                 || plan.getStopActionsCount() > BodyActions.MAX_ACTIVE_ACTIONS
                 || plan.getAddModifiersCount() > CapabilityModifier.MAX_PER_BODY
@@ -36,6 +50,9 @@ public final class BodyActivityExecution {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
         plan.getProgressMap().forEach(AddonProgress::validateEntry);
+        if (!fatigue.isEmpty()) {
+            validateTissueFatigue(fatigue);
+        }
         if (plan.hasDamage() && plan.getDamage().getLethal()) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
@@ -59,6 +76,9 @@ public final class BodyActivityExecution {
 
         // 附属进度与最终身体一起发布，内部各算子的版本递增折合为一次提交。
         var result = BodyProtobuf.toMessage(injured).toBuilder();
+        if (plan.getTissueFatigueCount() > 0) {
+            addTissueFatigue(result, plan.getTissueFatigueList());
+        }
         if (plan.hasRealm()) {
             if (plan.getRealmValue() != result.getRealmValue() + 1) {
                 throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
@@ -68,6 +88,49 @@ public final class BodyActivityExecution {
         result.putAllAddonProgress(plan.getProgressMap());
         result.setRevision(body.revision() + 1);
         return BodyProtobuf.fromMessage(result.build());
+    }
+
+    private static void validateTissueFatigue(List<TissueFatigueIncrease> increases) {
+        // 同一组织只能有一笔明确的正增量，非法数据在建立身体候选前拒绝。
+        var ids = new HashSet<Anatomy.TissueId>();
+        for (var increase : increases) {
+            double points = increase.getPoints();
+            var id = new Anatomy.TissueId(increase.getTissueId());
+            if (!Double.isFinite(points) || points <= 0 || !ids.add(id)) {
+                throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
+            }
+        }
+    }
+
+    private static void addTissueFatigue(BodyMessages.BodySnapshot.Builder body,
+                                         List<TissueFatigueIncrease> increases) {
+        // 按身份匹配实例构型与状态，增量直接落在同一候选的疲劳字段。
+        var pending = new HashMap<String, Double>();
+        increases.forEach(increase -> pending.put(increase.getTissueId(), increase.getPoints()));
+        var capacities = body.getStructure().getTissuesList().stream()
+                .collect(Collectors.toMap(BodyMessages.TissueDefinition::getId,
+                        BodyMessages.TissueDefinition::getFatigueCapacity));
+        for (var state : body.getTissueStatesBuilderList()) {
+            String id = state.getId();
+            Double points = pending.remove(id);
+            if (points == null) {
+                continue;
+            }
+            double limit = capacities.get(id);
+            double fatigue = state.getFatigue();
+            if (points >= limit - fatigue) {
+                state.setFatigue(limit);
+            } else {
+                double increased = fatigue + points;
+                if (increased == fatigue) {
+                    throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
+                }
+                state.setFatigue(increased);
+            }
+        }
+        if (!pending.isEmpty()) {
+            throw MeridianErrors.rejectCapability(MeridianErrors.CapabilityRejectionReason.MODULE_NOT_FOUND);
+        }
     }
 
     private static BodySnapshot applyResources(BodySnapshot body, BodyActivity plan, String callerId) {
