@@ -262,7 +262,19 @@ final class BreathingDriver<C> {
         return profile.getAutomatic().getMinimumStaminaRatio();
     }
 
+    void settleModifierBoundary(BreathingModifiers previous) {
+        // 时间段内的肌肉负担取旧值，边界上接触的粒子始终读此刻的身体。
+        if (active) {
+            step(session.now(), previous);
+        }
+    }
+
     private void step(long now) {
+        // 普通吸呼整段采用当前身体上的膈肌费率。
+        step(now, null);
+    }
+
+    private void step(long now, BreathingModifiers work) {
         // 只处理有新输入保护的最近一个区间；服务器长暂停不补发整段资源。
         double seconds = Math.min(STEP_MILLIS, Math.max(0, now - updatedMillis)) / 1000.0;
         updatedMillis = now;
@@ -311,7 +323,9 @@ final class BreathingDriver<C> {
         // 空气边界和两份做功预算共同截短本次有效时长，不能靠最后一帧透支。
         Anatomy.TissueCapacity respiratory = available(body, profile.getRespiratoryTissueId());
         Anatomy.TissueCapacity attention = available(body, profile.getAttentionTissueId());
-        double respiratoryWatts = Math.min(profile.getRespiratoryWatts(), respiratory.burstWatts());
+        BreathingModifiers intervalFactors = intervalModifiers(body, work);
+        double requestedWatts = profile.getRespiratoryWatts() * intervalFactors.respiratoryWork();
+        double respiratoryWatts = Math.min(requestedWatts, respiratory.burstWatts());
         double attentionWatts = Math.min(profile.getAttentionWatts(), attention.burstWatts());
         if (respiratoryWatts < .001 || respiratory.enduranceJoules() < .001
                 || !automatic && (attentionWatts < .001 || attention.enduranceJoules() < .001)) {
@@ -353,6 +367,13 @@ final class BreathingDriver<C> {
             stop();
             status = "耐力或精力耗尽";
         }
+    }
+
+    private static BreathingModifiers intervalModifiers(BodySnapshot body, BreathingModifiers supplied) {
+        if (supplied != null) {
+            return supplied;
+        }
+        return BreathingModifiers.read(body);
     }
 
     private static ExertTissue load(String id, double watts, double seconds) {
@@ -681,7 +702,8 @@ final class BreathingDriver<C> {
         List<Anatomy.OrganId> organs = profile.getOrgansList().stream()
                 .map(entry -> new Anatomy.OrganId(entry.getOrganId()))
                 .toList();
-        return OrganCapabilities.strongestIntakeMultiplier(body, organs);
+        double organMultiplier = OrganCapabilities.strongestIntakeMultiplier(body, organs);
+        return BreathingModifiers.read(body).effectiveIntake(organMultiplier);
     }
 
     private static double ratio(BodySnapshot body, String id) {

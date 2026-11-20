@@ -93,7 +93,8 @@ final class QiCaptureExecution {
                 .findFirst().orElseThrow(() -> MeridianErrors.rejectIntake(FailureCode.INSUFFICIENT_QI));
         double availableRaw = sourceQi.amount();
         double concentration = environment.totalQi() / source.getSpace().getVolumeBlocks();
-        double sampleMultiplier = OrganCapabilities.intakeMultiplier(context.body(), context.organ().id());
+        double organMultiplier = OrganCapabilities.intakeMultiplier(context.body(), context.organ().id());
+        double sampleMultiplier = BreathingModifiers.read(context.body()).effectiveIntake(organMultiplier);
         double desiredRaw = concentration * sampleVolume * sampleMultiplier;
         if (!Double.isFinite(desiredRaw)) {
             throw MeridianErrors.rejectIntake(FailureCode.NUMERIC_LIMIT);
@@ -101,7 +102,8 @@ final class QiCaptureExecution {
 
         double room = room(context);
         double outputVolumePerInputQi = recipe.output().volume() / recipe.input().totalQi();
-        double budget = QiCaptureBudget.available(context.body(), context.organ().id());
+        double perSecond = context.organ().intake().maxQiPerSecond() * sampleMultiplier;
+        double budget = QiCaptureBudget.available(context.body(), context.organ().id(), perSecond);
         if (budget <= 0) {
             throw MeridianErrors.rejectIntake(FailureCode.CAPACITY_EXCEEDED);
         }

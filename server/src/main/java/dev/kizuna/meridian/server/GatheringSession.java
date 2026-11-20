@@ -121,6 +121,15 @@ public final class GatheringSession<C> implements AutoCloseable {
         expectedRevision = read().revision();
     }
 
+    public void settleBreathingModifierBoundary(BreathingModifiers previous) {
+        // 收功先扣元并撤掉因子，再按旧负担结清到该刻的做功。
+        // 边界上的接触只读最新摄入倍率。
+        synchronizeBodyRevision();
+        if (breathing != null) {
+            breathing.settleModifierBoundary(previous);
+        }
+    }
+
     private void start(GatheringRequest request, BodySnapshot body) {
         // 同一个成功请求重放只读当前进展；旧请求的旧 revision 不能再次启动新一轮。
         if (accepted != null && accepted.getRequestId().equals(request.getRequestId())) {

@@ -4,10 +4,10 @@ import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import dev.kizuna.meridian.core.Anatomy;
 import dev.kizuna.meridian.core.BodySnapshot;
-import dev.kizuna.meridian.core.OrganCapabilities;
 import dev.kizuna.meridian.error.MeridianErrors;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.CaptureBudget;
 import dev.kizuna.meridian.protocol.pb.BodyMessages.CaptureBudgetState;
+import dev.kizuna.meridian.protocol.pb.MeridianMessages.FailureCode;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,11 +22,14 @@ final class QiCaptureBudget {
         // 这里只记当秒已接收剂量，真元仍只存在身体和环境的实际账户。
     }
 
-    static double available(BodySnapshot body, Anatomy.OrganId organId) {
+    static double available(BodySnapshot body, Anatomy.OrganId organId, double perSecond) {
         // 当前器官倍率同时放大采样和每秒上限，同一窗口内的多次命中共用余额。
         CaptureBudget budget = read(body).getOrgansOrDefault(organId.value(), CaptureBudget.getDefaultInstance());
         double consumed = consumed(body, budget);
-        return Math.max(0, OrganCapabilities.intakePerSecond(body, organId) - consumed);
+        if (!Double.isFinite(perSecond)) {
+            throw MeridianErrors.rejectIntake(FailureCode.NUMERIC_LIMIT);
+        }
+        return Math.max(0, perSecond - consumed);
     }
 
     static Map<String, Any> consume(BodySnapshot body, Anatomy.OrganId organId, double amount) {

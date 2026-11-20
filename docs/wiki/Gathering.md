@@ -6,7 +6,7 @@
 
 `BreathingView.absorbed_qi` 是当前连接累计摄入的原始灵气；`stored_qi` 是手动吐纳批次实际到达经脉的累计炼化产物。两者都不是当前余额。加工尚未完成或货物仍在途时不增加 `stored_qi`，后续消耗不回减；重连从新会话开始统计。UI 的「纳入真元」应使用后者，当前余额统一从身体的唯一账户求和。`stored_by_kind` 是 `stored_qi` 按属性与相态分开的明细（同一种类合并为一行，合计等于 `stored_qi`），窗口可以据此分开写游离态与气态各纳入多少。比如 Human 输入 1 元灵气产出 0.2 元真元，不能把前者当作经脉收货量。
 
-`BreathingView.intake_multiplier` 是吐纳器官当前的摄入倍率：由 `OrganCapabilities.strongestIntakeMultiplier` 对 `BreathingProfile.organs` 里每个器官按能力修正曲线求当前倍率，再取最大值。它只供显示，例如药效让肺的摄入 ×1.5 时窗口写「摄入 ×1.50」；实际摄入仍按每个器官自己的修正曲线逐段积分。字段缺省时视为 1，旧客户端读不到也不影响结算。
+`BreathingView.intake_multiplier` 显示参与吐纳的器官中最高的有效摄入倍率。例如单肺器官曲线为 1.5，吐纳效果也为 1.5，该肺此刻的有效倍率为 2.25。每颗接触按接收器官自己的曲线与吐纳效果结算。视图字段缺省时视为 1。
 
 唯一协议源是 `shared/src/main/proto/kizuna/meridian/v1/gathering.proto` 与 `breathing.proto`。`GatheringRequest` 包含版本、请求 ID、身体 ID，以及只读 `inspect`、单轮 `start` 或手动 `breath`。单轮启动传预期身体 revision、器官 ID、配方 ID/版本和连接 ID；手动输入传动作、归一化三维目标与严格递增序号。`aim_z` 省略时为入口平面 0.5，三个轴均校验有限且在 `[0,1]`。没有客户端指定的时间、来源、效率、命中或产出。
 
@@ -54,7 +54,14 @@
 完全无法接收则保留粒子。空气上下限、健康与两项疲劳继续决定能否有效吸呼。
 
 接触额度按身体模拟时钟的整秒窗口计算：每器官当前有效 `max_qi_per_second` 减去本秒已摄入原料。
-多颗接触共用额度，切换吐纳或重登不能重置；下一秒重新给额，不积攒闲置额度。
+多颗接触共用额度。切换吐纳方式、效果改变或重登都保留本秒已摄入量，下一秒重新给额。
+
+可信宿主随身体活动写入 `meridian:breathing_factors`（`BreathingFactors`），再调用
+`settleBreathingModifierBoundary(previous)`。截至切换时刻的膈肌费用取旧值，在该刻接触的粒子取新值。
+默认两个因子均为 1。
+摄入因子与每个器官的摄入曲线相乘，受总倍率上下限约束。接触采样和每秒限额使用同一个乘积，
+窗口显示参与吐纳的器官中有效倍率最高的一侧。呼吸做功因子乘在实际吸呼需要的呼吸组织功率上，
+再按可用爆发功率截断。注意组织独立收费。
 用量保存于身体 `addon_progress["meridian:capture_budget"]`，与身体、环境库存和回执原子提交。
 摄入倍率同时放大采样体积和上限；配方产率不变。器官曲线见[临时能力修正](Organ-Modifiers.md)。
 

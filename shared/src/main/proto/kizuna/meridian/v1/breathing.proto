@@ -33,6 +33,12 @@ message BreathingOrgan {
   double airflow_liters_per_second = 3;
 }
 
+// 可信宿主随身体活动写入 meridian:breathing_factors。两个单位因子表示已收功。
+message BreathingFactors {
+  double intake_multiplier = 1;
+  double respiratory_work_multiplier = 2;
+}
+
 // 鼠标仅提交三维方向目标；数量、时长、粒子命中由宿主决定。
 message BreathControl {
   BreathAction action = 1;
