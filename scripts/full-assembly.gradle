@@ -104,6 +104,30 @@ def duplicatedNestedLibraries = { Set<File> classpathFiles ->
     return ids
 }
 
+// 依赖固定招式的对练仍按物种授卷，出生时的外卷会改变选招和追击。
+List<String> fixedTechniqueSuites = ['villager-fist', 'basic-techniques'].collect { workspace.repository(it).project }
+if (project.path == ':gametest' && fixedTechniqueSuites.contains(rootProject.name)) {
+    tasks.named('runGametest', JavaExec) {
+        doFirst {
+            File defaultConfig = new File(workspace.directory('humanoid-threatening'),
+                    'server/src/main/resources/meridian-humanoid-brain.toml')
+            String defaultText = defaultConfig.getText('UTF-8')
+            def birthChances = defaultText =~ /(?m)^(wandering_chance|true_chance)[ \t]*=[^\r\n]*/
+            if (birthChances.count != 2) {
+                throw new GradleException("生人卷池配置需要游炁和真炁几率：${defaultConfig}")
+            }
+
+            // 从本次装配的默认配置生成夹具，保留物种授卷表和其他设定。
+            String testConfig = birthChances.replaceAll('$1 = 0.0')
+            File runDirectory = loom.runs.getByName('gametest').runDirectory.get().asFile
+            File configDirectory = new File(runDirectory, 'config')
+            configDirectory.mkdirs()
+            new File(configDirectory, defaultConfig.name).setText(testConfig, 'UTF-8')
+            logger.lifecycle("GameTest 生人卷池：游炁、真炁的外卷几率为 0（${configDirectory}）")
+        }
+    }
+}
+
 tasks.withType(JavaExec).configureEach {
     // 开发客户端和 GameTest 与框架共同使用版本目录的 Java 版本，不跟随 Gradle 守护进程版本。
     javaLauncher = javaToolchains.launcherFor {
