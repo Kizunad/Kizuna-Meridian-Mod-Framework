@@ -49,7 +49,9 @@
       "id": "inventory-ui",
       "directory": "Kizuna-Inventory-UI-Framework",
       "project": "kizuna-inventory-ui-framework",
-      "kz": {"branch": "main"},
+      "kz": {"branch": "main",
+        "client": {"demo-smoke": {"task": ":runSmoke", "runDirectory": "build/smoke", "ok": {"log": "KIUI_DEMO_SMOKE_OK"}},
+          "modern-smoke": {"task": ":runModernSmoke", "runDirectory": "build/modern-smoke", "ok": {"log": "KIUI_MODERN_SMOKE_OK"}}}},
       "modules": [
         {"path": "", "candidate": "mod", "runtime": "mod"},
         {"path": "server", "candidate": "mod", "runtime": "mod"}
