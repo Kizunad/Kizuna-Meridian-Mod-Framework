@@ -277,6 +277,21 @@
       ]
     },
     {
+      "id": "piglin-sword",
+      "directory": "Kizuna-Meridian-Piglin-Sword-Addon",
+      "project": "kizuna-meridian-piglin-sword-addon",
+      "kz": {"branch": "main",
+        "gametest": [{"task": ":gametest:runGametest", "runDirectory": "gametest/build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}],
+        "client": {"p0": {"task": ":clienttest:runClientGametest", "arguments": ["-PclienttestRunDir=build/{name}"], "runDirectory": "clienttest/build/{name}", "ok": {"screenshots": "clienttest/build/{name}/screenshots"}}}},
+      "modules": [
+        {"path": "fabric", "candidate": "data-mod", "runtime": "mod"},
+        {"path": "shared"},
+        {"path": "verification"},
+        {"path": "gametest"},
+        {"path": "clienttest"}
+      ]
+    },
+    {
       "id": "door-breaker",
       "directory": "Kizuna-Meridian-Door-Breaker-Addon",
       "project": "kizuna-meridian-door-breaker-addon",
