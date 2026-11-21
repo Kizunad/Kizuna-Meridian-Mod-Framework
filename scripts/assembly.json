@@ -239,6 +239,18 @@
       ]
     },
     {
+      "id": "piglin-threatening",
+      "directory": "Kizuna-Meridian-Vanilla-Piglin-Threatening",
+      "project": "kizuna-meridian-vanilla-piglin-threatening",
+      "kz": {"branch": "main",
+        "gametest": [{"task": ":fabric:runGametest", "runDirectory": "fabric/build/gametest/{name}", "arguments": ["-PgametestRunDir=build/gametest/{name}"]}],
+        "client": {"body": {"task": ":fabric:runClientGametest", "runDirectory": "fabric/build/clienttest/{name}", "arguments": ["-PpiglinClienttestRunDir=build/clienttest/{name}"], "ok": {"screenshots": "fabric/build/clienttest/{name}/screenshots"}}}},
+      "modules": [
+        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "fabric", "candidate": "mod", "runtime": "mod"}
+      ]
+    },
+    {
       "id": "debug",
       "directory": "Kizuna-Meridian-Debug-Addon",
       "project": "kizuna-meridian-debug-addon",
