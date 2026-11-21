@@ -14,7 +14,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** 有界 Protobuf 读写；格式校验与身体业务约束分层执行。 */
-final class ProtoWire {
+public final class ProtoWire {
     /** 契约明确允许省略的单值字段：缺省时跳过，出现时照常校验。其余单值消息与 optional 字段必填。 */
     private static final Set<String> OMITTABLE_FIELDS = Set.of(
             "kizuna.meridian.v1.CommandReceipt.time_advance",
@@ -70,7 +70,7 @@ final class ProtoWire {
         // 协议操作不保存会话或权威状态，工具类无需实例化。
     }
 
-    static <T extends Message> T read(byte[] bytes, Parser<T> parser) {
+    public static <T extends Message> T read(byte[] bytes, Parser<T> parser) {
         // 分配解析对象前限制整个载荷，避免把不受限的网络输入交给生成解析器。
         require(bytes != null && bytes.length > 0 && bytes.length <= MeridianProtocol.MAX_PAYLOAD_BYTES,
                 Protocol.payloadSize(MeridianProtocol.MAX_PAYLOAD_BYTES));
@@ -88,13 +88,13 @@ final class ProtoWire {
         }
     }
 
-    static byte[] write(Message message) {
+    public static byte[] write(Message message) {
         // 发送方也遵守接收方限制，避免本地能构造却无法交换的数据。
         validate(message);
         return message.toByteArray();
     }
 
-    static void validate(Message message) {
+    public static void validate(Message message) {
         // 生成类型不保证业务必填字段；在进入数据映射前检查存在性及资源上限。
         require(message != null, Protocol.NULL_MESSAGE);
         // 生成消息不可变，同一实例的校验结果不会变。编码前、解码后和 toMessage→fromMessage 这类内部往返

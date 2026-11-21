@@ -28,7 +28,7 @@
 | `EnvironmentConfigProtobuf.encode/decode/validate` | 交换、恢复和验证完整的 `EnvironmentQiConfig` |
 | `new EnvironmentQiRules(config)` | 校验配置并建立只读方块系数索引，提供下述纯计算 |
 
-文件路径由宿主选择，例如 `config/meridian-environment.toml`；当前库不注册 Fabric 自动加载入口、不自动创建文件。空文件与省略项沿用默认值；显式给出的文件无法读取、TOML 语法错误、未知键、错误类型或非法数值均报错。文件上限为 256 KiB，重复键由 TOML 解析器拒绝。加载在启动或宿主明确切换规则时执行，不在每个 tick 读文件。
+文件路径由宿主选择，例如 `config/meridian-environment.toml`；当前环境加载器不注册 Fabric 自动加载入口，也不改变既有 `EnvironmentConfigLoader.load(Path)` 的显式文件语义。Framework 的公共 `dev.kizuna.meridian.config.TomlFile` 提供严格 UTF-8、256 KiB 上限、默认资源首次导出、TOML 解析、章节取值和键白名单检查，供后续附属迁移时复用。`readOrExport` 使用创建即失败的写入，竞争创建时读取已经存在的文件；损坏文本、未知键、错误类型和缺失默认资源均抛出带文件名或键路径的错误。加载仍应在启动或宿主明确切换规则时执行，不在每个 tick 读文件。
 
 最小覆盖示例：
 

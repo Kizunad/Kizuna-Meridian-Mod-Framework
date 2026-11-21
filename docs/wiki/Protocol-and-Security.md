@@ -22,6 +22,7 @@
 | `shared/src/main/proto/kizuna/meridian/v1/addon.proto` | 可信附属清单、宿主能力、依赖、模板/配方注册、内容引用及缺包诊断 |
 | `shared/src/main/proto/kizuna/meridian/v1/gathering.proto` / `breathing.proto` | 聚气查询、单轮启动、手动吸呼、可信生物呼吸能力及只读投影；详见[聚气编排](Gathering.md) |
 | `dev.kizuna.meridian.protocol.pb.BodyMessages` / `MeridianMessages` / `EnvironmentMessages` / `AddonMessages` | protoc 生成的 Java 类型，不手改、不提交生成目录 |
+| `ProtoWire` | 对外公开的有界 Protobuf `read`、`write`、`validate` 入口；继续执行未知字段、大小、深度和业务必填校验 |
 | `BodyProtobuf` | 核心模板/快照与生成类型双向转换、独立二进制编解码 |
 | `MeridianProtocol` | 请求/响应二进制编解码、版本与方向校验 |
 | `HealthMessages` / `HealthProtobuf` / `server.BodyDamageHandler` | protoc 生成健康消息、有界编解码与纯伤害计算装配接口 |
@@ -40,6 +41,8 @@
 | `server.BodyCommandAccess<C>` / `BodySecurityPolicy<C>` / `BodyAuditSink<C>` | 意图授权与可信调用者、私有检查、提交后只读审计 |
 
 生成消息由两端分别构建；表中的手写编解码器、校验和处理器位于 `server/src/main/java/`，客户端通过生成消息表达请求与读取响应。
+
+`server` 模块公开 `dev.kizuna.meridian.protocol.ProtoWire` 给其他服务端附属复用。`read` 先限制载荷再调用指定 parser，`write` 和 `validate` 共用同一套描述符校验；公开类只扩大可见性，不改变现有协议入口的行为。调用方仍需选择正确的消息 parser，并在业务边界执行自己的身份和授权检查。
 
 Protobuf 插件固定 `0.9.6`，`protoc` 与 `protobuf-java` 固定 `4.36.2`，与 Inventory UI / Botany 当前工具链对齐。Java 目标为 17。Gradle 自动下载编译器，无需安装系统级 protoc：
 

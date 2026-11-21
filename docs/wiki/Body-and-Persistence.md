@@ -79,7 +79,9 @@
 
 ## 保存职责
 
-已有 `BodySnapshot` 与 `CommandReceipt` 的 Protobuf 编解码、`BodyTransactionStore` 原子提交接口及 `InMemoryBodyStore` 参考实现。时间回执还保存所采用的计划、实际游标、死亡标记与释放明细。恢复时一起加载已保存的环境余额，不能重放历史释放；内存适配提供三参数构造器接收该余额。编解码和内存适配不会写文件；正式保存后端仍需实现。保存目标为：
+已有 `BodySnapshot` 与 `CommandReceipt` 的 Protobuf 编解码、`BodyTransactionStore` 原子提交接口及 `InMemoryBodyStore` 参考实现。Framework 另提供 `dev.kizuna.meridian.persistence.DurableStateFile` 作为宿主文件后端的公共底层工具。它先完整同步同目录临时文件，再执行原子替换和目录同步；写入器失败时旧文件保持不变，失败后清理临时文件。文件内容保持调用方提供的纯载荷，例如 gzip NBT，版本号由调用方写入 NBT 根键。它不提供读取、版本转换或 Protobuf、NBT、身体字段解释，也不替代宿主的事务提交、备份和恢复策略。
+
+时间回执还保存所采用的计划、实际游标、死亡标记与释放明细。恢复时一起加载已保存的环境余额，不能重放历史释放；内存适配提供三参数构造器接收该余额。编解码和内存适配不会写文件；正式保存后端仍需实现。保存目标为：
 
 1. 核心产生完整、可校验的身体快照，包含身份、存档版本、模板/内容版本、revision、实例状态及时间游标。
 2. Fabric 适配写入该世界的服务器存储；Bong 适配使用自己的持久化系统。客户端文件不能覆盖服务器存档。
