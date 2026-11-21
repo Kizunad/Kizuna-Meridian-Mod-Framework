@@ -36,6 +36,8 @@ message DamageBody {
   // - 身体里已有同 ID、同来源的修正就换成新的（再挨一下是续期，不叠乘）；同 ID 但来源不同则拒绝。
   // - 这一下致死时不留修正。
   repeated CapabilityModifier add_modifiers = 8;
+  // 可缺省，[0, 1]：本击受保护的伤害份额；缺省表示保持原伤害行为，具体分层由伤害策略处理。
+  optional double protected_damage_share = 9;
 }
 
 // 只有本次伤害被策略判为致死时，才在同一事务中将这些账户恢复至指定下限。

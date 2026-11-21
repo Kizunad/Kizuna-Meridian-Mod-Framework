@@ -42,6 +42,7 @@ public class DamageAttachmentsTest {
     private static final long LONGER_MILLIS = 9_000;
     private static final double NUMB_PEAK = 0.3;
     private static final double ORGAN_SHARE = 0.6;
+    private static final double PROTECTED_DAMAGE_SHARE = 0.6;
     private static final double HIT_HP = 5;
     private static final double LETHAL_HP = 1_000;
     private static final double TOLERANCE = 1e-9;
@@ -64,6 +65,33 @@ public class DamageAttachmentsTest {
         assertEquals(ORGAN_SHARE, seen.get().getOrganShare(), 0);
         assertThrows(IllegalArgumentException.class, () -> request("over", 2, damage().setOrganShare(1.5)));
         assertThrows(IllegalArgumentException.class, () -> request("nan", 2, damage().setOrganShare(Double.NaN)));
+    }
+
+    @Test
+    public void protectedDamageShareIsOptionalAndReachesTheDamagePolicyUnchanged() {
+        // 缺省不改变旧调用；显式份额由宿主计算，框架只校验并原样传递。
+        BodySnapshot initial = body();
+        var seen = new AtomicReference<DamageBody>();
+        var store = new InMemoryBodyStore(List.of(initial), List.of());
+        var handler = handler(store, payload -> {
+            seen.set(HealthProtobuf.decodeContext(payload).getDamage());
+            return resolution(false /* lethal */);
+        });
+        committed(handler.handleHealthEffect("host", request("protected-default", 0, damage())));
+        assertFalse(seen.get().hasProtectedDamageShare());
+        committed(handler.handleHealthEffect("host", request("protected-zero", 1,
+                damage().setProtectedDamageShare(0))));
+        assertTrue(seen.get().hasProtectedDamageShare());
+        assertEquals(0, seen.get().getProtectedDamageShare(), 0);
+        committed(handler.handleHealthEffect("host", request("protected-share", 2,
+                damage().setProtectedDamageShare(PROTECTED_DAMAGE_SHARE))));
+        assertEquals(PROTECTED_DAMAGE_SHARE, seen.get().getProtectedDamageShare(), 0);
+        assertThrows(IllegalArgumentException.class, () -> request("protected-over", 3,
+                damage().setProtectedDamageShare(1.5)));
+        assertThrows(IllegalArgumentException.class, () -> request("protected-negative", 3,
+                damage().setProtectedDamageShare(-0.1)));
+        assertThrows(IllegalArgumentException.class, () -> request("protected-nan", 3,
+                damage().setProtectedDamageShare(Double.NaN)));
     }
 
     @Test

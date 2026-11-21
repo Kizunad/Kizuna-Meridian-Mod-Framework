@@ -31,6 +31,7 @@ public final class ProtoWire {
             "kizuna.meridian.v1.DamageBody.hit",
             "kizuna.meridian.v1.DamageBody.death_protection",
             "kizuna.meridian.v1.DamageBody.organ_share",
+            "kizuna.meridian.v1.DamageBody.protected_damage_share",
             "kizuna.meridian.v1.HealthHostResponse.health",
             "kizuna.meridian.v1.DamageIntegrationPlan.death_protection",
             "kizuna.meridian.v1.BodySnapshot.opening_task",
@@ -60,6 +61,8 @@ public final class ProtoWire {
     private static final String ANY_VALUE = "google.protobuf.Any.value";
     /** 只有能力曲线振幅允许负数；其他资源和剂量继续要求非负。 */
     private static final String SIGNED_CURVE_VALUE = "kizuna.meridian.v1.CurvePoint.value";
+    /** 保护份额是伤害策略的可选输入，协议边界限定为 0 到 1。 */
+    private static final String PROTECTED_DAMAGE_SHARE = "kizuna.meridian.v1.DamageBody.protected_damage_share";
     /** 每种消息类型的规则只从描述符推导一次；描述符在进程内唯一且不可变，可跨线程共享。 */
     private static final Map<Descriptors.Descriptor, MessageRules> RULES = new ConcurrentHashMap<>();
     /** 每个线程记住最近几条校验通过的消息实例，见 {@link #validate(Message)}。 */
@@ -232,6 +235,9 @@ public final class ProtoWire {
             double maximum = Double.MAX_VALUE;
             if (name.equals(SIGNED_CURVE_VALUE)) {
                 minimum = -1;
+                maximum = 1;
+            }
+            if (name.equals(PROTECTED_DAMAGE_SHARE)) {
                 maximum = 1;
             }
             String invalidValue = switch (field.getJavaType()) {
