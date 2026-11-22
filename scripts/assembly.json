@@ -184,9 +184,9 @@
         "reborn": {"task": ":fabric:runClientGametest", "arguments": ["-PhumanClienttestRunDir=build/{name}", "-PhumanTestReborn"], "runDirectory": "fabric/build/{name}", "originSelection": true, "ok": {"screenshots": "fabric/build/{name}/screenshots"}}
       }},
       "modules": [
-        {"path": "server", "candidate": "library", "runtime": "library"},
+        {"path": "server", "candidate": "library", "runtime": "library", "coordinate": "dev.kizuna.meridian.human:server"},
         {"path": "shared", "candidate": "library", "runtime": "library", "ownProjects": ["fabric"]},
-        {"path": "client", "candidate": "library"},
+        {"path": "client", "candidate": "library", "coordinate": "dev.kizuna.meridian.human:client"},
         {"path": "fabric", "candidate": "mod", "runtime": "mod"}
       ]
     },
