@@ -49,6 +49,16 @@ public final class TomlFileTest {
     }
 
     @Test
+    public void utf8SignatureOnlyAtStartIsIgnored() throws Exception {
+        // 旧版记事本加在文件头的签名可以读取，值里的同一字符属于配置。
+        Path file = temporaryFolder.newFile("signature.toml").toPath();
+        String value = "内\uFEFF文";
+        Files.writeString(file, "\uFEFFvalue = \"" + value + "\"");
+        assertEquals(value, TomlFile.readAndParse(file).getString("value"));
+        assertThrows(IllegalArgumentException.class, () -> TomlFile.parse("\uFEFF", file.toString()));
+    }
+
+    @Test
     public void parseUsesCallerProvidedByteLimit() throws Exception {
         // 自定义上限同时放宽内存文本解析，默认入口仍保持默认限制。
         int customMaxBytes = TomlFile.DEFAULT_MAX_BYTES + 32;

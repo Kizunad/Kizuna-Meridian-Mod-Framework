@@ -22,8 +22,41 @@ import java.util.Set;
 public final class TomlFile {
     public static final int DEFAULT_MAX_BYTES = 262_144;
 
-    private TomlFile() {
-        // TOML 读取不持有配置状态，调用方在解析后构造自己的不可变配置。
+    private final String source;
+
+    public TomlFile(String source) {
+        // 一个配置的各层共享来源名，嵌套校验也能指出对应文件。
+        this.source = Objects.requireNonNull(source);
+    }
+
+    public TomlTable parse(String text) {
+        // 内存中的配置与外部文件使用同一语法和长度限制。
+        return parse(text, source);
+    }
+
+    public TomlTable table(TomlTable parent, String key, String path) {
+        // 嵌套表以完整键路径报告缺项。
+        return table(parent, key, source, path);
+    }
+
+    public int positiveInteger(TomlTable table, String key, String path) {
+        // 配置中的正整数字段须在 int32 范围内。
+        return positiveInteger(table, key, source, path);
+    }
+
+    public double finiteNumber(TomlTable table, String key, String path) {
+        // 整数和小数都可以表示有限系数。
+        return finiteNumber(table, key, source, path);
+    }
+
+    public void checkKeys(TomlTable table, Set<String> allowed, String prefix) {
+        // 拼错的键与语法错误都标明配置来源。
+        checkKeys(table, allowed, source, prefix);
+    }
+
+    public IllegalArgumentException invalid(String detail) {
+        // 业务规则可在同一来源下报告额外的取值约束。
+        return invalid(source, detail);
     }
 
     public static String readOrExport(Path path, Class<?> resourceOwner, String resourceName) {
@@ -67,7 +100,7 @@ public final class TomlFile {
         // 限制实际读取字节数，再拒绝非法 UTF-8。
         Objects.requireNonNull(path, "TOML 配置路径不能为空");
         checkLimit(maxBytes);
-        byte[] bytes = readLimited(Files.newInputStream(path), maxBytes);
+        byte[] bytes = readLimited(Files.newInputStream(path), maxBytes, path.toString());
         return decode(path.toString(), bytes);
     }
 
@@ -121,7 +154,15 @@ public final class TomlFile {
         if (bytes.length > maxBytes) {
             throw invalid(fileName, "文本超过 " + maxBytes + " 字节上限", null);
         }
-        TomlParseResult parsed = Toml.parse(text);
+        // 只跳过文件开头的一个 UTF-8 签名，字符串里的同一字符仍是正文。
+        String content = text;
+        if (text.startsWith("\uFEFF")) {
+            content = text.substring(1);
+            if (content.isBlank()) {
+                throw invalid(fileName, "文本不能为空", null);
+            }
+        }
+        TomlParseResult parsed = Toml.parse(content);
         if (parsed.hasErrors()) {
             throw invalid(fileName, "解析失败：" + parsed.errors().get(0), null);
         }
@@ -172,7 +213,7 @@ public final class TomlFile {
 
     private static IllegalArgumentException invalid(String fileName, String detail, Throwable cause) {
         // 保留 I/O 原因链，消息中统一包含配置来源。
-        String message = "TOML 文件 " + fileName + "：" + detail;
+        String message = fileName + "：" + detail;
         if (cause == null) {
             return new IllegalArgumentException(message);
         }
@@ -185,18 +226,18 @@ public final class TomlFile {
             if (input == null) {
                 throw invalid(resourceName, "缺少默认资源");
             }
-            return decode(resourceName, readLimited(input, maxBytes));
+            return decode(resourceName, readLimited(input, maxBytes, resourceName));
         } catch (IOException failure) {
             throw invalid(resourceName, "读取默认资源失败", failure);
         }
     }
 
-    private static byte[] readLimited(InputStream input, int maxBytes) throws IOException {
+    private static byte[] readLimited(InputStream input, int maxBytes, String sourceName) throws IOException {
         // 多读一个字节即可检测超限，不将任意大的文件载入内存。
         try (InputStream source = input) {
             byte[] bytes = source.readNBytes(maxBytes + 1);
             if (bytes.length > maxBytes) {
-                throw new IOException("TOML 文件超过大小上限");
+                throw new IOException("TOML 文件 " + sourceName + " 超过大小上限");
             }
             return bytes;
         }

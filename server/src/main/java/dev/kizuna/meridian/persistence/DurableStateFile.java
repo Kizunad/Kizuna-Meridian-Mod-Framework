@@ -47,9 +47,11 @@ public final class DurableStateFile {
         Files.createDirectories(directory);
         syncDirectory(directory.getParent(), directorySync);
         Path temporary = target.resolveSibling(target.getFileName() + ".tmp");
+        // 打开成功后才接管临时文件；路径被目录占用时，保留该目录及原始错误。
+        var output = new BufferedOutputStream(Files.newOutputStream(temporary, StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING));
         try {
-            try (BufferedOutputStream output = new BufferedOutputStream(Files.newOutputStream(temporary,
-                    StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING))) {
+            try (output) {
                 writer.write(output);
             }
             force(temporary, StandardOpenOption.WRITE);

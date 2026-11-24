@@ -42,7 +42,7 @@
 
 生成消息由两端分别构建；表中的手写编解码器、校验和处理器位于 `server/src/main/java/`，客户端通过生成消息表达请求与读取响应。
 
-`server` 模块公开 `dev.kizuna.meridian.protocol.ProtoWire` 给其他服务端附属复用。`read` 先限制载荷再调用指定 parser，`write` 和 `validate` 共用同一套描述符校验；公开类只扩大可见性，不改变现有协议入口的行为。调用方仍需选择正确的消息 parser，并在业务边界执行自己的身份和授权检查。
+`server` 模块公开 `dev.kizuna.meridian.protocol.ProtoWire` 给其他服务端附属复用。`read` 先限制载荷再调用指定 parser，`write` 和 `validate` 共用同一套描述符校验；框架 v1 的必填规则由契约字段表定义。附属消息显式声明的 proto3 `optional` 字段可缺省，出现时仍校验取值。调用方仍需选择正确的消息 parser，并在业务边界执行自己的身份和授权检查。
 
 Protobuf 插件固定 `0.9.6`，`protoc` 与 `protobuf-java` 固定 `4.36.2`，与 Inventory UI / Botany 当前工具链对齐。Java 目标为 17。Gradle 自动下载编译器，无需安装系统级 protoc：
 

@@ -248,8 +248,12 @@ public final class ProtoWire {
                 case LONG -> Protocol.negativeLong(name);
                 default -> Protocol.unsupportedFieldType(name);
             };
+            // 框架 v1 沿用已发布的必填表。附属用 proto3 optional 显式声明可以缺省的字段。
+            boolean addonOptional = field.toProto().getProto3Optional()
+                    && !field.getFile().getPackage().equals("kizuna.meridian.v1");
+            boolean omittable = addonOptional || OMITTABLE_FIELDS.contains(name);
             return new FieldRule(field, field.getJavaType(), field.isRepeated(),
-                    field.getRealContainingOneof() != null, OMITTABLE_FIELDS.contains(name),
+                    field.getRealContainingOneof() != null, omittable,
                     name.equals(WHOLE_BODY_DEBUG_TARGET), field.hasPresence(), name.equals(ZERO_ENUM_ALLOWED),
                     name.equals(ANY_VALUE), minimum, maximum,
                     Protocol.listTooLong(name), Protocol.missingField(name), invalidValue, Protocol.invalidText(name));

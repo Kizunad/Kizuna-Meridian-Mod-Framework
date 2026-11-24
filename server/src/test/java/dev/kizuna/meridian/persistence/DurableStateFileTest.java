@@ -67,6 +67,19 @@ public final class DurableStateFileTest {
     }
 
     @Test
+    public void fileSyncFailurePreservesCommittedPayload() throws Exception {
+        // 写入器关流后移走临时文件，模拟 force 无法打开它；平台只可跳过目录同步。
+        Path target = temporaryFolder.newFile("state.dat").toPath();
+        Files.writeString(target, "旧状态");
+        Path temporary = fixedTemporaryPath(target);
+        assertThrows(IOException.class, () -> DurableStateFile.write(target, output -> {
+            output.close();
+            Files.delete(temporary);
+        }, DurableStateFile.DirectorySync.UNSUPPORTED));
+        assertEquals("旧状态", Files.readString(target));
+    }
+
+    @Test
     public void committedFileKeepsDefaultPosixPermissions() throws Exception {
         // 固定同目录临时文件沿用创建文件的权限，避免原子替换后意外变成 600。
         Path directory = temporaryFolder.getRoot().toPath();
