@@ -32,6 +32,14 @@ def jarStore = providers.gradleProperty('kizuna.store')
         .map { String value -> new JsonSlurper().parse(new File(value), 'UTF-8') }
         .getOrNull()
 
+// 部分仓单独升版时，按键表里实际构建的版本找 JAR；直接从源码装配时沿用清单版本。
+manifest.repositories.each { repository ->
+    String version = jarStore?.versions?.get(repository.id)
+    if (version != null) {
+        repository.version = version
+    }
+}
+
 def artifactOf = { String id, String modulePath, boolean development ->
     // 产物名为「根工程名[-模块]-版本」，模组和纯 Java 库都在 build/libs。26.2 不重映射，开发运行与安装用同一个 JAR，
     // 第三个参数（是否取开发 JAR）已不影响结果，保留只为各仓迁移前的调用不报错。

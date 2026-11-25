@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
     group = 'dev.kizuna.meridian'
-    version = '0.1.0-SNAPSHOT'
+    version = '0.1.0'
 }
 
 // client、server 是共用协议的纯 Java 两端库；fabric 是 Loom 模组工程，配置在自己的构建脚本里。

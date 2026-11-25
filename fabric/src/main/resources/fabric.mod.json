@@ -3,7 +3,13 @@
   "id": "meridian_framework",
   "version": "${version}",
   "name": "Kizuna's Meridian Mod Framework",
-  "description": "Meridian 公共 Minecraft 接线：统一 /meridian 指令注册点",
+  "contact": {
+    "homepage": "https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework",
+    "sources": "https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework",
+    "issues": "https://github.com/Kizunad/Kizuna-Meridian-Mod-Framework/issues"
+  },
+  "icon": "assets/meridian_framework/icon.png",
+  "description": "Tracks body parts, organs and meridians and makes them available through the /meridian command.\n记录身体部位、器官和经脉，可通过 /meridian 指令查看。",
   "authors": ["Kizunad"],
   "license": "PolyForm-Noncommercial-1.0.0",
   "environment": "*",
