@@ -9,11 +9,16 @@ import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.HashSet;
+import java.util.ServiceLoader;
 
 import static dev.kizuna.meridian.core.CapabilityCurves.Multipliers;
 
 /** 组织自身的能力与做功规则；不决定具体武器伤害、移速或世界动作。 */
 public final class TissueCapabilities {
+    private static final List<TissueTraits> TRAITS = ServiceLoader.load(TissueTraits.class).stream()
+            .map(ServiceLoader.Provider::get)
+            .sorted(java.util.Comparator.comparing(TissueTraits::progressKey))
+            .toList();
     private enum LoadKind { NORMAL, TRAINING }
 
     private TissueCapabilities() {
@@ -45,7 +50,13 @@ public final class TissueCapabilities {
     public static double enduranceMultiplier(BodySnapshot body, Anatomy.TissueId tissueId) {
         // 需要分别解释 HP 与疲劳的内容规则可只读取耐力曲线倍率，避免重复乘伤势。
         CapabilityCurves.Context curves = CapabilityCurves.context(body.modifiers());
-        return curves.current(tissueId, body.settledAt().elapsedMillis()).endurance();
+        var current = curves.current(tissueId, body.settledAt().elapsedMillis());
+        for (var tissue : body.structure().tissues()) {
+            if (tissue.id().equals(tissueId)) {
+                return withTraits(body, tissue, current).endurance();
+            }
+        }
+        return current.endurance();
     }
 
     public static double tempoMultiplierAt(BodySnapshot body, Anatomy.TissueId tissueId, long elapsedMillis) {
@@ -87,7 +98,8 @@ public final class TissueCapabilities {
         double partHealthRatio = body.partState(definition.partId()).hp()
                 / body.partDefinition(definition.partId()).maxHp();
         double healthRatio = StrictMath.min(1, StrictMath.min(tissueHealthRatio, partHealthRatio));
-        return availableCapacity(body.vitality, definition, state, healthRatio, multipliers);
+        var effective = withTraits(body.original, definition, multipliers);
+        return availableCapacity(body.vitality, definition, state, healthRatio, effective);
     }
 
     private static Anatomy.TissueCapacity available(BodySnapshot body, Anatomy.TissueId tissueId,
@@ -102,7 +114,31 @@ public final class TissueCapabilities {
 
         // 2. 伤势取组织和部位较低完好率，疲劳耗尽时余量为零。
         double healthRatio = healthRatio(body, tissueDefinition, tissueState);
-        return availableCapacity(body.vitality(), tissueDefinition, tissueState, healthRatio, modifiers);
+        var effective = withTraits(body, tissueDefinition, modifiers);
+        return availableCapacity(body.vitality(), tissueDefinition, tissueState, healthRatio, effective);
+    }
+
+    private static Multipliers withTraits(BodySnapshot body, Anatomy.TissueDefinition tissue, Multipliers curves) {
+        // 同一活动和时间推进都读已提交的特质；每个来源只影响它声明的组织。
+        double curveEndurance = curves.endurance();
+        double curveBurst = curves.burst();
+        double endurance = curveEndurance;
+        double burst = curveBurst;
+        for (var source : TRAITS) {
+            var progress = body.addonProgress().get(source.progressKey());
+            if (progress != null) {
+                var factors = source.factors(progress, tissue);
+                endurance *= factors.endurance();
+                burst *= factors.burst();
+            }
+        }
+        if (burst == curveBurst && endurance == curveEndurance) {
+            return curves;
+        }
+        if (!Double.isFinite(endurance) || endurance <= 0 || !Double.isFinite(burst) || burst <= 0) {
+            throw MeridianErrors.rejectTransport(TransportRejectionReason.NUMERIC_LIMIT);
+        }
+        return new Multipliers(curves.strength(), burst, endurance, curves.tempo());
     }
 
     private static Anatomy.TissueCapacity availableCapacity(VitalityState vitality,
