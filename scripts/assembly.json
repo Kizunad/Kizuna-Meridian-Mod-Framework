@@ -14,6 +14,17 @@
       ]
     },
     {
+      "id": "currency",
+      "directory": "Kizuna-Meridian-Currency-Addon",
+      "project": "kizuna-meridian-currency-addon",
+      "kz": {"branch": "main",
+        "gametest": [{"task": ":runGametest", "runDirectory": "build/{name}", "arguments": ["-PgametestRunDir=build/{name}"]}],
+        "client": {"money": {"task": ":runClientGametest", "runDirectory": "build/{name}", "arguments": ["-PclienttestRunDir=build/{name}"], "ok": {"screenshots": "build/{name}/screenshots"}}}},
+      "modules": [
+        {"path": "", "candidate": "mod", "runtime": "mod", "coordinate": "dev.kizuna.meridian.currency:kizuna-meridian-currency-addon"}
+      ]
+    },
+    {
       "id": "qi-variants",
       "directory": "Kizuna-Meridian-Qi-Variants-Addon",
       "project": "kizuna-meridian-qi-variants-addon",
