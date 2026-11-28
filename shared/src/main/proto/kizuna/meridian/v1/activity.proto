@@ -57,3 +57,21 @@ message ActivityEffort {
 message CompleteMeridian { string meridian_id = 1; double added_volume = 2; }
 message ActivityRecipe { string organ_id = 1; OrganRecipe recipe = 2; }
 message ActivityAction { string instance_id = 1; ActionDefinition definition = 2; }
+
+// 同号的供受双方与目标内腔在首次导出时固定；每行保留来源，以便原路退回。
+message LumenExport {
+  string operation_id = 1;
+  string donor = 2;
+  uint64 donor_revision = 3;
+  string recipient = 4;
+  uint64 recipient_revision = 5;
+  string target = 6;
+  repeated LumenShare shares = 7;
+}
+message LumenShare {
+  string source = 1;
+  QiInventory debited = 2;
+  QiInventory pending = 3;
+  QiInventory credited = 4;
+  QiInventory returned = 5;
+}

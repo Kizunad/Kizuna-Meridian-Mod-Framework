@@ -567,6 +567,7 @@ public final class MeridianErrors {
 
     /** 宿主读取、变更与事务参考实现的诊断文案。 */
     public static final class Host {
+        public static final String INVALID_EXPORT = "导出凭据、库存分配或身体版本不匹配";
         public static final String ENVIRONMENT_SOURCE_REQUIRED = "必须提供可信环境来源选择器";
         public static final String INTAKE_STAGE_MISMATCH = "摄入候选身体或环境交换与原始状态不一致";
         public static final String DUPLICATE_SOURCE = "环境来源身份重复";

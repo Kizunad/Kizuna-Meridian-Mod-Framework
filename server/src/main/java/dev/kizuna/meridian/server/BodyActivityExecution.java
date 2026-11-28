@@ -49,7 +49,7 @@ public final class BodyActivityExecution {
                 || plan.getRemoveModifiersCount() > CapabilityModifier.MAX_PER_BODY) {
             throw MeridianErrors.invalid(MeridianErrors.INVALID_ACTIVITY);
         }
-        plan.getProgressMap().forEach(AddonProgress::validateEntry);
+        plan.getProgressMap().forEach(AddonProgress::validateWrite);
         if (!fatigue.isEmpty()) {
             validateTissueFatigue(fatigue);
         }

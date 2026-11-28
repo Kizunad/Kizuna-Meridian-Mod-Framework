@@ -5,6 +5,7 @@ import dev.kizuna.meridian.core.BodySnapshot;
 import dev.kizuna.meridian.core.BodyTimeAdvancement;
 import dev.kizuna.meridian.core.BodyActions;
 import dev.kizuna.meridian.protocol.ActionProtobuf;
+import dev.kizuna.meridian.protocol.pb.ActivityMessages.LumenExport;
 import dev.kizuna.meridian.core.QiInventory;
 import dev.kizuna.meridian.core.QiTransport;
 import dev.kizuna.meridian.core.QiAccounting;
@@ -120,6 +121,22 @@ public final class InMemoryBodyStore implements BodyTransactionStore, BodySnapsh
     public synchronized QiInventory environmentQi() {
         // 普通时间命令的默认释放账户；摄入事务的损耗直接进入选定来源，不重复入这里。
         return environmentQi;
+    }
+
+    public synchronized LumenExport recordExport(LumenExport record) {
+        // 导出只替换供方这一具身体；已存命令回执和环境释放账沿用原来的发布边界。
+        if (transactionOpen) {
+            throw MeridianErrors.inconsistent(Host.NESTED_TRANSACTION);
+        }
+        var id = new BodyId(record.getDonor());
+        var original = bodies.get(id);
+        if (original == null) {
+            throw MeridianErrors.invalid(Host.INVALID_EXPORT);
+        }
+        var next = BodyExports.apply(original.snapshot(), record);
+        var saved = BodyExports.find(next, java.util.UUID.fromString(record.getOperationId())).orElseThrow();
+        bodies.put(id, new StoredBody(next, original.receipts()));
+        return saved;
     }
 
     /** 可信宿主将没有区域归属的外部释放记入默认账户；调用方负责去重和持久化。 */

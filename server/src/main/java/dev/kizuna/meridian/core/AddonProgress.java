@@ -8,6 +8,7 @@ import java.util.Map;
 
 /** 附属自行解释的持久进度；框架只负责有界保存与原子替换。 */
 public final class AddonProgress {
+    public static final String EXPORT_PREFIX = "meridian:export/";
     private AddonProgress() {
         // 无独立账本，所有进度随身体一起保存。
     }
@@ -31,7 +32,7 @@ public final class AddonProgress {
 
     public static BodySnapshot replace(BodySnapshot body, String id, Any progress) {
         // 只改指定附属的一项进度与 revision，保持资源、时间和生命状态完全一致。
-        validateEntry(id, progress);
+        validateWrite(id, progress);
         if (body.revision() == Long.MAX_VALUE) {
             throw MeridianErrors.invalid(MeridianErrors.Protocol.COMMIT_REVISION);
         }
@@ -41,5 +42,13 @@ public final class AddonProgress {
                 body.partStates(), body.tissueStates(), body.organStates(), body.meridianStates(), body.transits(),
                 body.vitality(), body.settledAt(), body.revision() + 1, body.actions(), body.openingTask(),
                 updated, body.modifiers());
+    }
+
+    public static void validateWrite(String id, Any payload) {
+        // 身体导出凭据只可由实际扣退库存的宿主入口建立或更新。
+        validateEntry(id, payload);
+        if (id.startsWith(EXPORT_PREFIX)) {
+            throw MeridianErrors.invalid(MeridianErrors.Host.INVALID_EXPORT);
+        }
     }
 }
